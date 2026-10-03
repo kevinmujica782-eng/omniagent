@@ -23,7 +23,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 
 ---
 
-## 4. Estado del desarrollo (actualizado el 1 oct 2026)
+## 4. Estado del desarrollo (actualizado el 2 oct 2026)
 
 ### Versiones y decisiones fijadas
 - Next.js 16 (App Router, `src/proxy.ts` en lugar de middleware), React 19, Tailwind 4, TypeScript estricto.
@@ -47,7 +47,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 | 2. Finanzas | Hecha (v2) | Conector tipo Plaid (sandbox con 4 instituciones ficticias y adaptador de Plaid real), sync con cursor, análisis con Claude de 3 meses (salida estructurada + respaldo por reglas), gastos hormiga, suscripciones inactivas, recomendaciones accionables, presupuestos, buscador de movimientos, chat con preguntas sugeridas, cron diario, 11 herramientas, **estados de cuenta PDF/CSV** (vista previa, corrección de columnas/fechas/signos, sin duplicados, deshacer) | OCR de estados de cuenta escaneados, leer los PDF en un proceso aparte con límite de memoria, webhooks de Plaid, proveedor para Latinoamérica (p. ej. Belvo), alertas push de presupuesto |
 | 3. Trámites | Hecha (v3) | Conector de correo con contrato Gmail/Outlook (`MailProvider`, bandeja sandbox con 10 correos), clasificación con reglas + Claude, trámites sugeridos con fechas sin choques, confirmación de un toque, lectura de PDF con IA y llenado (AcroForm y planos), "Mis datos" cifrados, calendario conectado + feed ICS privado con alarmas, `.ics` por evento, recordatorios en la app, respuesta con el PDF adjunto previa aprobación, cron, 13 herramientas | OAuth real de Gmail (Google APIs) y Outlook (Microsoft Graph), OCR de escaneados, firma dibujada, envío a portales (`SUBMIT_FORM`), push (FCM) |
 | 4. Compras | Hecha (v4) | Seguir productos, boletos, vuelos y hoteles por enlace o búsqueda; lector de precios (JSON-LD, microdata, meta y lectura con Claude validada); rastreador que respeta robots.txt, se identifica como OmniAgentBot y bloquea SSRF; 9 tiendas sandbox `.test`; agente en segundo plano con cron (reserva atómica, reintentos, pausa); bajadas frente a la mediana de 30 días; alertas redactadas por Claude y validadas cifra por cifra; hoja de pago Permitir/Denegar con precio reconfirmado, límites y cobro idempotente (pagos simulados); pedidos; 9 herramientas | Medios de pago reales (Stripe SetupIntent/Elements), compra real con API de comercios o afiliados, API de vuelos y boletos (Amadeus, Duffel, Ticketmaster), push, comparar entre tiendas |
-| 5. Dashboard, pagos y producción | Hecha (v5) | Panel de Inicio (lo pendiente, ritmo de gasto, módulos, ahorro, agentes, actividad, plan) en claro/oscuro con pestañas en el teléfono; planes Gratis/Pro que habilitan las funciones autónomas (validadas en servidor, 402 `plan_limit`, hoja de Pro, cambios de plan que retiman o pausan agentes); Stripe completo (Checkout es-419, sync al volver, webhooks idempotentes, past_due, portal); errores estables con requestId, logs JSON con redacción, `/api/health`, límites de tasa, CSP/HSTS, revisión de configuración; eliminar cuenta; 58 pruebas unitarias (Vitest); Docker, docker-compose con programador, GitHub Actions (CI y migraciones), `npm run db:cron` y `docs/DEPLOY.md` | SDK de RevenueCat en la app, notificaciones push, íconos y splash, ficha de Play Store (política de privacidad, Data safety), Stripe Tax si aplica |
+| 5. Dashboard, pagos y producción | Hecha (v5) | Panel de Inicio (lo pendiente, ritmo de gasto, módulos, ahorro, agentes, actividad, plan) en claro/oscuro con pestañas en el teléfono; planes Gratis/Pro que habilitan las funciones autónomas (validadas en servidor, 402 `plan_limit`, hoja de Pro, cambios de plan que retiman o pausan agentes); Stripe completo (Checkout es-419, sync al volver, webhooks idempotentes, past_due, portal); errores estables con requestId, logs JSON con redacción, `/api/health`, límites de tasa, CSP/HSTS, revisión de configuración; eliminar cuenta; 58 pruebas unitarias (Vitest); Docker, docker-compose con programador, GitHub Actions (CI y migraciones), `npm run db:cron` y `docs/DEPLOY.md` | Configurar RevenueCat y la suscripción en Play Console, notificaciones push, Stripe Tax si aplica (íconos, splash, plugin de RevenueCat, política de privacidad, página para borrar la cuenta y borrador de la ficha: hechos el 2 oct) |
 | Devoluciones (extra) | Hecha (v6) | Pedidos de compras con OmniAgent, correos de tiendas y paqueterías, a mano y de ejemplo; retrasos con reclamo automático; reclamo por daño, producto equivocado, distinto al anuncio o arrepentimiento; envío por correo con aprobación o texto listo para marketplaces; seguimientos aprobados y escalamiento; lectura de respuestas; reembolso confirmado en Finanzas; pantalla Devoluciones, tarjetas del chat e Inicio; cron; 5 herramientas (41 en total); 92 pruebas unitarias (con las de la pantalla de Pro) | Leer respuestas ambiguas con Claude (validado), fotos en el reclamo, API de paqueterías, aviso del fin del plazo para devolver |
 
 ### Decisiones del módulo financiero (fase 2)
@@ -139,6 +139,26 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 - **Honestidad:** filas, precio y resumen salen de `PLANS`. No promete "ilimitado" (Pro tiene límites) ni "Gmail" (la bandeja real aún no está conectada). Permitir o Denegar aparece en los dos planes porque existe en los dos.
 - **Pago:** `purchasePro()` usa Stripe Checkout en la web y Google Play con RevenueCat en Android (plugin `@revenuecat/purchases-capacitor`, llave `NEXT_PUBLIC_REVENUECAT_ANDROID_KEY`, `appUserID` = id de Supabase). En Android muestra el precio de Google Play y espera a que el webhook active Pro.
 
+### Producción (publicada el 2 oct 2026)
+- **Web y API:** https://omniagent-app.netlify.app. Es el proyecto `omniagent-app` de Netlify (Node 24, `@netlify/plugin-nextjs`, `netlify.toml`). Se publica desde GitHub Actions con el workflow «Publicar en Netlify», que usa el `proxy_path` de *deploy-site* del MCP de Netlify; también se puede conectar el repositorio desde Netlify.
+- **Base de datos:** proyecto `omniagent` de Supabase (`nhrporwspcvnmabjaqta`, us-east-1).
+  - La app entra con el rol `omniagent_app` (BYPASSRLS, miembro de `postgres`) por el pooler `aws-0-us-east-1`.
+  - Las tablas se crearon con `prisma db push`, usando `DB_BOOTSTRAP=1` en la compilación. Después se aplicaron la seguridad (RLS, triggers de `auth.users`, bucket y Realtime) y los crons de pg_cron con Vault.
+- **Código:** repositorio privado `kevinmujica782-eng/omniagent` con estos workflows:
+  - CI con tipos, Vitest y build, que pasó con dependencias reales por primera vez.
+  - «Publicar en Netlify».
+  - «Simular compilación de Netlify».
+  - «App de Android», que entrega el `.aab` y el `.apk` firmados en *Artifacts* y en la rama `builds`.
+  - «Migrar base de datos», que solo corre a mano.
+- **Android:** paquete `com.omniagent.app`, versión 1.0.0 y API objetivo 36.
+  - La llave de subida está en `mobile/keystore/omniagent-upload.p12` (PKCS12 cifrado). Su contraseña no está en el repositorio: va como secreto `ANDROID_KEYSTORE_PASSWORD` o como campo del workflow.
+  - Los íconos y la pantalla de carga salen de `mobile/assets/`, y los gráficos de la tienda de `mobile/store/`.
+- **Agregado para Google Play:** páginas públicas `/privacidad`, `/terminos` y `/eliminar-cuenta`, con contacto kevinmujica782@gmail.com; botón «Reportar» en las respuestas de la IA (tabla `content_reports`); lo simulado marcado como «Demo»; «Continuar con Google» solo con `NEXT_PUBLIC_GOOGLE_AUTH=on`.
+- **Pendiente del dueño** (guía completa en `docs/GOOGLE_PLAY.md`):
+  - En Supabase Auth: Site URL, Redirect URLs y desactivar «Confirm email» hasta tener SMTP propio.
+  - En Netlify: `ANTHROPIC_API_KEY` y `SUPABASE_SECRET_KEY`, y luego volver a publicar.
+  - En Google Play: cuenta de desarrollador (US$25), ficha, contenido de la app, prueba cerrada con 12 testers durante 14 días y solicitud de producción.
+
 ### Cómo retomar
 1. `npm install` (Node 22+; sube el `package-lock.json`), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`...).
 2. Configurar `.env.local` y correr las migraciones:
@@ -149,8 +169,8 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 
    Después, `npm run db:security` y `npm test`. Para los agentes en segundo plano: `CRON_SECRET` y `npm run db:cron`, o los crons de Vercel.
 3. El detalle completo está en `README.md` (puesta en marcha, módulos, Inicio y planes, arquitectura, endpoints y hoja de ruta). El despliegue a producción y la lista de Google Play están en `docs/DEPLOY.md`.
-4. Las cinco fases, Devoluciones y los estados de cuenta en PDF/CSV están hechos. Lo siguiente, sin orden fijo:
-   - SDK de RevenueCat en Android y ficha de Play Store (política de privacidad, Data safety).
+4. Las cinco fases, Devoluciones y los estados de cuenta en PDF/CSV están hechos, y la web está publicada (ver «Producción»). Lo siguiente, sin orden fijo:
+   - Terminar la publicación en Google Play (`docs/GOOGLE_PLAY.md`) y activar los cobros con RevenueCat.
    - Notificaciones push.
    - Integraciones reales: Gmail, Outlook y medios de pago.
    - Estados de cuenta: OCR de los escaneados y leer los PDF en un proceso aparte con límite de memoria.

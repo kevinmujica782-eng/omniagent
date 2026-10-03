@@ -2,6 +2,8 @@
 
 Agente personal con IA para web y Android. **Omni se encarga; tú solo apruebas.**
 
+> **En línea:** https://omniagent-app.netlify.app (Netlify + Supabase). Cómo se publicó y cómo volver a publicar: [`docs/DEPLOY.md`](docs/DEPLOY.md#producción-actual-netlify--supabase). Pasos para Google Play: [`docs/GOOGLE_PLAY.md`](docs/GOOGLE_PLAY.md).
+
 Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendaciones de ahorro), encuentra en tu correo los trámites pendientes (permisos, citas, reembolsos, facturas), llena los formularios PDF con tus datos, los agenda en tu calendario, vigila precios de productos, boletos, vuelos y hoteles para avisarte cuando bajan de verdad y sigue tus pedidos hasta que llegan: si uno se atrasa o llega mal, prepara el reclamo, insiste si la tienda no responde y confirma cuando vuelve tu dinero. Todo lo que gasta dinero, envía algo o cancela un servicio pasa por una **boleta de aprobación**: Omni propone, tú apruebas o rechazas, y solo entonces el servidor lo ejecuta.
 
 ---
