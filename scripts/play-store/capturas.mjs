@@ -4,7 +4,7 @@
 //      banco de prueba, bandeja de prueba con trámites, pedidos, productos vigilados con una bajada de precio y un chat.
 //   2. Entra por la web como un teléfono Android (360 × 640 a 3x = 1080 × 1920 px, 9:16) y guarda las capturas.
 // Variables: APP_URL, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, REVIEW_EMAIL, REVIEW_PASSWORD y OUT_DIR.
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 
@@ -96,9 +96,43 @@ async function settle(page) {
 
 /**
  * «Powered by Netlify» lo agrega el hosting en el plan gratis (no es parte de la app) y tapa el menú de abajo.
- * Se apaga en Netlify: Project configuration → General → Powered by Netlify badge. Aquí solo se oculta en la
- * captura, por si sigue activo: se esconde su contenedor fijo más cercano.
+ * Se apaga en Netlify: Project configuration → General → Powered by Netlify badge. Mientras siga activo, el
+ * navegador de las capturas quita del HTML los scripts que agrega Netlify (no los de Next.js) y deja anotado
+ * qué quitó en diagnostico.txt.
  */
+const stripped = [];
+async function stripHostingBadge(context) {
+  await context.route("**/*", async (route) => {
+    const request = route.request();
+    const url = request.url();
+    if (/\/\.netlify\/.*badge/i.test(url)) return route.abort();
+    if (request.resourceType() !== "document") return route.continue();
+    // Sin seguir redirecciones aquí: el navegador las sigue y la página nueva vuelve a pasar por este filtro.
+    const response = await route.fetch({ maxRedirects: 0 });
+    if (response.status() >= 300 && response.status() < 400) return route.fulfill({ response });
+    const html = await response.text();
+    const body = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (tag) => {
+      if (/__next_f|self\.__next/.test(tag) || !/netlify/i.test(tag)) return tag;
+      stripped.push(`${new URL(url).pathname}: ${tag.slice(0, 300).replace(/\s+/g, " ")}`);
+      return "";
+    });
+    const headers = { ...response.headers() };
+    delete headers["content-length"];
+    delete headers["content-encoding"];
+    await route.fulfill({ response, body, headers });
+  });
+}
+
+/** Para el diagnóstico: qué hay suelto en <body> además de la app. */
+async function describeBody(page) {
+  return page.evaluate(() =>
+    [...document.body.children].map((el) => {
+      const style = getComputedStyle(el);
+      return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""} pos=${style.position} shadow=${Boolean(el.shadowRoot)} texto="${(el.textContent ?? "").trim().slice(0, 40)}"`;
+    }),
+  );
+}
+
 async function hideHostingBadge(page) {
   const badge = page.getByText(/Powered by\s*Netlify/i).first();
   if (!(await badge.isVisible().catch(() => false))) return "no está";
@@ -144,6 +178,7 @@ async function screenshots(conversationId) {
       timezoneId: "America/Caracas",
       colorScheme: "light",
     });
+    await stripHostingBadge(context);
     const page = await context.newPage();
     await page.goto(`${APP_URL}/login?next=%2Finicio`, { waitUntil: "load" });
     await page.fill('input[name="email"]', EMAIL);
@@ -159,14 +194,19 @@ async function screenshots(conversationId) {
       ["05-tramites", "/tramites"],
       ["06-aprobaciones", "/aprobaciones"],
     ];
+    const notes = [];
     for (const [name, path] of screens) {
       await page.goto(`${APP_URL}${path}`, { waitUntil: "load", timeout: 60_000 });
       await settle(page);
       if (path.startsWith("/chat")) await scrollToTop(page);
       const badge = await hideHostingBadge(page);
+      if (name === "01-inicio") notes.push("Hijos de <body> en /inicio:", ...(await describeBody(page)));
       await page.screenshot({ path: join(OUT_DIR, `${name}.png`) });
-      console.log(`Captura ${name}.png (${path}) · insignia de Netlify: ${badge}`);
+      notes.push(`Captura ${name}.png (${path}) · insignia en la página: ${badge}`);
+      console.log(notes[notes.length - 1]);
     }
+    notes.push("Scripts de Netlify quitados del HTML:", ...(stripped.length ? stripped : ["(ninguno)"]));
+    await writeFile(join(OUT_DIR, "diagnostico.txt"), `${notes.join("\n")}\n`);
   } finally {
     await browser.close();
   }
