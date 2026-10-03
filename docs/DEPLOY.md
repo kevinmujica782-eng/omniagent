@@ -77,7 +77,7 @@ La app publicada vive en **https://omniagent-app.netlify.app**:
     - Pon `DB_BOOTSTRAP=1` en Netlify durante una publicación; `db push` aplica los cambios que no borran datos.
     - O pasa a migraciones: crea `prisma/migrations/0_init` con `prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script` y márcala como aplicada con `prisma migrate resolve --applied 0_init`.
 - **Tareas programadas:** las mismas de `npm run db:cron`, ya creadas en Supabase con pg_cron y pg_net. La URL y el `CRON_SECRET` están en Vault.
-- **Código y CI:** repositorio privado `kevinmujica782-eng/omniagent`.
+- **Código y CI:** repositorio `kevinmujica782-eng/omniagent`, público en GitHub: no guardes secretos en el código ni los pases como entradas de un workflow.
   - **CI:** revisa tipos, corre las pruebas y compila en cada push.
   - **Publicar en Netlify:** sube el código a Netlify y lo compila allá. Pide el `proxy_path` que entrega la herramienta *deploy-site* del MCP de Netlify; ese valor vence pronto. Para publicar sin ese paso, conecta el repositorio desde Netlify (*Project configuration → Build & deploy → Link repository*) y cada push a `main` se publica solo.
   - **Simular compilación de Netlify:** repite la instalación y la compilación en GitHub y deja los errores como anotaciones.

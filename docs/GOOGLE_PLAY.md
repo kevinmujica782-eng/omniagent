@@ -19,7 +19,8 @@ Guía para pasar de la web publicada a la app en la tienda. La web ya está en *
    - «Eliminar cuenta», que Google Play exige, no necesita variables: la base la resuelve con la función `public.delete_auth_user` (creada el 3 oct 2026; solo la puede ejecutar el rol de la app).
 
    Las variables nuevas se aplican al volver a publicar la web. Después, corre el workflow «Probar producción» en GitHub: crea una cuenta, habla con Omni, elimina la cuenta y comprueba que ya no puede entrar.
-3. **Prueba la web:** crea una cuenta, habla con Omni, sube un estado de cuenta y prueba «Reportar» y «Eliminar cuenta».
+3. **Apaga la insignia «Powered by Netlify»:** Netlify la agrega a los proyectos gratis creados desde el 19 de agosto de 2026 (script `/.netlify/scripts/hud`) y tapa el menú de abajo de la app, también dentro de Android. Se apaga en *Project configuration → General → Powered by Netlify badge*, sin volver a publicar.
+4. **Prueba la web:** crea una cuenta, habla con Omni, sube un estado de cuenta y prueba «Reportar» y «Eliminar cuenta».
 
 ## 2. Cuenta de desarrollador
 

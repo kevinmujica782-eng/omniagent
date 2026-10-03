@@ -145,19 +145,23 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
   - La app entra con el rol `omniagent_app` (BYPASSRLS, miembro de `postgres`) por el pooler `aws-0-us-east-1`.
   - Las tablas se crearon con `prisma db push`, usando `DB_BOOTSTRAP=1` en la compilación. Después se aplicaron la seguridad (RLS, triggers de `auth.users`, bucket y Realtime) y los crons de pg_cron con Vault.
   - Las cuentas nuevas nacen con el correo confirmado (trigger `on_auth_user_autoconfirm`, 3 oct 2026), porque el correo de prueba de Supabase solo llega a los miembros del equipo. Con SMTP propio (Resend): poner *Site URL* y *Redirect URLs* en Supabase Auth y quitar el trigger.
-- **Código:** repositorio privado `kevinmujica782-eng/omniagent` con estos workflows:
+- **Código:** repositorio `kevinmujica782-eng/omniagent`, **público** en GitHub desde al menos el 3 oct 2026 (no tiene secretos dentro; los logs y las entradas de los workflows se pueden ver), con estos workflows:
   - CI con tipos, Vitest y build, que pasó con dependencias reales por primera vez.
   - «Publicar en Netlify».
   - «Simular compilación de Netlify».
   - «App de Android», que entrega el `.aab` y el `.apk` firmados en *Artifacts* y en la rama `builds`.
   - «Migrar base de datos», que solo corre a mano.
-  - «Probar producción»: crea una cuenta de prueba, le escribe a Omni por la API y anota la respuesta. Cada corrida deja una cuenta `kevinmujica782+prueba-<run>@gmail.com` que hay que borrar con SQL.
+  - «Probar producción»: crea una cuenta de prueba, le escribe a Omni por la API, elimina la cuenta con «Eliminar cuenta» y comprueba que ya no puede entrar.
+  - «Capturas para Google Play»: crea una cuenta con datos de prueba, toma 6 capturas de 1080 × 1920 (sin la insignia de Netlify) y las deja en la rama `play-store`. La contraseña sale cifrada con una llave pública que se da al correrlo.
 - **IA:** `ANTHROPIC_API_KEY` está en Netlify desde el 3 oct 2026, como secreta y solo para producción. Ese día, «Probar producción» registró una cuenta sin correo y Omni respondió en menos de 2 s con Haiku 4.5; un mensaje simple costó menos de un centavo.
 - **Android:** paquete `com.omniagent.app`, versión 1.0.0 y API objetivo 36.
   - La llave de subida está en `mobile/keystore/omniagent-upload.p12` (PKCS12 cifrado). Su contraseña no está en el repositorio: va como secreto `ANDROID_KEYSTORE_PASSWORD` o como campo del workflow.
   - Los íconos y la pantalla de carga salen de `mobile/assets/`, y los gráficos de la tienda de `mobile/store/`.
 - **Agregado para Google Play:** páginas públicas `/privacidad`, `/terminos` y `/eliminar-cuenta`, con contacto kevinmujica782@gmail.com; botón «Reportar» en las respuestas de la IA (tabla `content_reports`); lo simulado marcado como «Demo»; «Continuar con Google» solo con `NEXT_PUBLIC_GOOGLE_AUTH=on`.
+- **Listo para Google Play (3 oct 2026):** `.aab` 1.0.0 (versionCode 4, API 36) firmado con la llave de subida; cuenta de revisión `kevinmujica782+revisor@gmail.com` con banco, correo, compras y pedidos de prueba (su contraseña se le dio al dueño en el chat); capturas en la rama `play-store`; «Eliminar cuenta» sin `SUPABASE_SECRET_KEY` (función `public.delete_auth_user`, ya creada en producción). Las cuentas `+prueba-…` viejas ya se borraron.
+- **Por revisar en la IA:** en una corrida de prueba, el informe de Finanzas dijo «ingresaste $14.555 en promedio» (era el total de 3 meses) y el chat llamó a Delivery el mayor gasto cuando Vivienda es mayor. Conviene darle al modelo los promedios mensuales ya calculados y pedirle que no los recalcule.
 - **Pendiente del dueño** (guía completa en `docs/GOOGLE_PLAY.md`):
+  - En Netlify: apagar la insignia «Powered by Netlify» (tapa el menú de abajo de la app) y publicar la corrección de «Eliminar cuenta», idealmente conectando el repositorio para que cada push a `main` se publique solo.
   - En Google Play: cuenta de desarrollador (US$25), ficha, contenido de la app, prueba cerrada con 12 testers durante 14 días y solicitud de producción.
 
 ### Cómo retomar
