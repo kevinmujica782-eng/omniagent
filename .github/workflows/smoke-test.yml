@@ -1,0 +1,61 @@
+# Prueba de producción: crea una cuenta de prueba (el correo queda confirmado al crearla), le escribe a Omni por la
+# API y deja el resultado como anotación. La cuenta de prueba (kevinmujica782+prueba-<run>@gmail.com) se borra
+# después con SQL en Supabase:  delete from auth.users where email like 'kevinmujica782+prueba-%@gmail.com';
+name: Probar producción
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "URL de la web"
+        required: true
+        default: "https://omniagent-app.netlify.app"
+      message:
+        description: "Mensaje para Omni"
+        required: true
+        default: "Hola Omni, ¿qué puedes hacer por mí? Responde en una sola frase."
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Registro y chat
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      APP_URL: ${{ inputs.app_url }}
+      MESSAGE: ${{ inputs.message }}
+      # Datos públicos (también van en el navegador de cada usuario).
+      SUPABASE_URL: https://nhrporwspcvnmabjaqta.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_enY-kKg99Zn0MdGoM8JjlQ_iVniEvdG
+    steps:
+      - name: Salud de la web
+        run: |
+          health=$(curl -sS --max-time 30 "$APP_URL/api/health" || true)
+          echo "::notice title=Salud::${health}"
+
+      - name: Crear cuenta y hablar con Omni
+        run: |
+          set -u
+          email="kevinmujica782+prueba-${GITHUB_RUN_ID}@gmail.com"
+          password="$(openssl rand -hex 16)"
+
+          code=$(curl -sS --max-time 30 -X POST "$SUPABASE_URL/auth/v1/signup" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg e "$email" --arg p "$password" '{email:$e, password:$p, data:{full_name:"Prueba automática"}}')" \
+            -o signup.json -w "%{http_code}")
+          token=$(jq -r '.access_token // empty' signup.json)
+          [ -n "$token" ] && echo "::add-mask::$token"
+          echo "::notice title=Registro::HTTP ${code} · sesión: $([ -n "$token" ] && echo sí || echo no) · confirmado: $(jq -r '.user.email_confirmed_at // .email_confirmed_at // "no"' signup.json) · usuario: $(jq -r '.user.id // .id // "?"' signup.json) · error: $(jq -r '.error_code // .msg // "ninguno"' signup.json)"
+          if [ -z "$token" ]; then exit 1; fi
+
+          read -r chat_code chat_time < <(curl -sS --max-time 90 -X POST "$APP_URL/api/v1/agent/chat" \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg m "$MESSAGE" '{message:$m}')" \
+            -o chat.json -w "%{http_code} %{time_total}")
+          reply=$(jq -r '[.. | objects | select(.role? == "assistant") | .text? // empty] | first // empty' chat.json 2>/dev/null || true)
+          if [ -z "$reply" ]; then reply=$(head -c 1500 chat.json | tr '\n' ' '); fi
+          reply=$(printf '%s' "$reply" | head -c 1500 | sed -e 's/%/%25/g' -e 's/\r//g' | tr '\n' ' ')
+          echo "::notice title=Chat (HTTP ${chat_code}, ${chat_time}s)::${reply}"
+          [ "$chat_code" = "200" ]
