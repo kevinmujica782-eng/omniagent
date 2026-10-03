@@ -10,17 +10,16 @@ Guía para pasar de la web publicada a la app en la tienda. La web ya está en *
 
 ## 1. Antes de subir nada: que la web funcione completa
 
-1. **Supabase → Authentication → URL Configuration.**
-   - *Site URL:* `https://omniagent-app.netlify.app`
-   - *Redirect URLs:* agrega `https://omniagent-app.netlify.app/**`
-2. **Supabase → Authentication → Sign In / Providers → Email.** Desactiva **Confirm email** mientras no configures un servicio de correo propio. El correo que trae Supabase solo envía a los miembros de tu equipo, así que tus testers no recibirían el correo de confirmación.
-   - Más adelante, configura uno propio en *Authentication → Emails → SMTP Settings* (Resend o Brevo tienen plan gratis) y vuelve a activar la confirmación.
-3. **Netlify → omniagent-app → Project configuration → Environment variables.** Agrega dos variables:
+1. **Registro sin correo de confirmación (ya está hecho).** El correo que trae Supabase solo envía a los miembros de tu equipo, así que tus testers nunca recibirían el correo de confirmación. Por eso la base de datos confirma el correo al crear la cuenta y la persona entra de una vez (trigger `on_auth_user_autoconfirm` sobre `auth.users`, en `prisma/sql/supabase-setup.sql`).
+   - Cuando configures un correo propio en *Authentication → Emails → SMTP Settings* (Resend o Brevo tienen plan gratis):
+     - En *Authentication → URL Configuration*, pon *Site URL* `https://omniagent-app.netlify.app` y agrega `https://omniagent-app.netlify.app/**` en *Redirect URLs*.
+     - Quita el trigger para volver a pedir confirmación: `drop trigger if exists on_auth_user_autoconfirm on auth.users;`
+2. **Netlify → omniagent-app → Project configuration → Environment variables.** Agrega dos variables:
    - `ANTHROPIC_API_KEY`: tu llave de https://console.anthropic.com (API Keys). Necesita saldo. Sin ella, el chat de Omni no responde.
    - `SUPABASE_SECRET_KEY`: en Supabase, *Project Settings → API Keys*, la llave secreta (`sb_secret_…`). Sin ella, «Eliminar cuenta» no funciona, y Google Play lo exige.
 
    Las variables nuevas se aplican al volver a publicar la web.
-4. **Prueba la web:** crea una cuenta, habla con Omni, sube un estado de cuenta y prueba «Reportar» y «Eliminar cuenta».
+3. **Prueba la web:** crea una cuenta, habla con Omni, sube un estado de cuenta y prueba «Reportar» y «Eliminar cuenta».
 
 ## 2. Cuenta de desarrollador
 

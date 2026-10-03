@@ -84,6 +84,31 @@ revoke execute on function public.handle_new_user() from public, anon, authentic
 revoke execute on function public.handle_updated_user() from public, anon, authenticated;
 revoke execute on function public.handle_deleted_user() from public, anon, authenticated;
 
+-- Correo confirmado al crear la cuenta, mientras no haya SMTP propio. El correo de prueba de
+-- Supabase solo llega a los miembros del equipo: sin esto, nadie más podría confirmar su cuenta.
+-- Supabase Auth recarga el usuario después de insertarlo y, si ya está confirmado, no envía el
+-- correo y devuelve la sesión de una vez. Equivale a desactivar «Confirm email» en el panel.
+-- Con SMTP propio (Resend), quítalo:  drop trigger if exists on_auth_user_autoconfirm on auth.users;
+-- SECURITY INVOKER: solo cambia NEW y no necesita los privilegios del dueño.
+create or replace function public.handle_autoconfirm_user()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if new.email is not null and new.email_confirmed_at is null then
+    new.email_confirmed_at := now();
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_autoconfirm on auth.users;
+create trigger on_auth_user_autoconfirm
+  before insert on auth.users
+  for each row execute function public.handle_autoconfirm_user();
+
 -- ─── 2. RLS en todas las tablas de public (denegar por defecto) ────────
 
 do $$

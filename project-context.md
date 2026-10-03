@@ -144,6 +144,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 - **Base de datos:** proyecto `omniagent` de Supabase (`nhrporwspcvnmabjaqta`, us-east-1).
   - La app entra con el rol `omniagent_app` (BYPASSRLS, miembro de `postgres`) por el pooler `aws-0-us-east-1`.
   - Las tablas se crearon con `prisma db push`, usando `DB_BOOTSTRAP=1` en la compilación. Después se aplicaron la seguridad (RLS, triggers de `auth.users`, bucket y Realtime) y los crons de pg_cron con Vault.
+  - Las cuentas nuevas nacen con el correo confirmado (trigger `on_auth_user_autoconfirm`, 3 oct 2026), porque el correo de prueba de Supabase solo llega a los miembros del equipo. Con SMTP propio (Resend): poner *Site URL* y *Redirect URLs* en Supabase Auth y quitar el trigger.
 - **Código:** repositorio privado `kevinmujica782-eng/omniagent` con estos workflows:
   - CI con tipos, Vitest y build, que pasó con dependencias reales por primera vez.
   - «Publicar en Netlify».
@@ -155,7 +156,6 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
   - Los íconos y la pantalla de carga salen de `mobile/assets/`, y los gráficos de la tienda de `mobile/store/`.
 - **Agregado para Google Play:** páginas públicas `/privacidad`, `/terminos` y `/eliminar-cuenta`, con contacto kevinmujica782@gmail.com; botón «Reportar» en las respuestas de la IA (tabla `content_reports`); lo simulado marcado como «Demo»; «Continuar con Google» solo con `NEXT_PUBLIC_GOOGLE_AUTH=on`.
 - **Pendiente del dueño** (guía completa en `docs/GOOGLE_PLAY.md`):
-  - En Supabase Auth: Site URL, Redirect URLs y desactivar «Confirm email» hasta tener SMTP propio.
   - En Netlify: `ANTHROPIC_API_KEY` y `SUPABASE_SECRET_KEY`, y luego volver a publicar.
   - En Google Play: cuenta de desarrollador (US$25), ficha, contenido de la app, prueba cerrada con 12 testers durante 14 días y solicitud de producción.
 
