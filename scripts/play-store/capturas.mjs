@@ -74,8 +74,12 @@ async function seed(token) {
     const result = await api(token, "POST", "/concierge/items", { url });
     if (result?.item?.id) tracked.push(result.item.id);
   }
-  // Una oferta relámpago en la tienda de prueba: crea la alerta y la compra que espera aprobación.
-  if (tracked[0]) await api(token, "POST", `/concierge/items/${tracked[0]}/simulate-drop`);
+  // Una oferta relámpago en la tienda de prueba crea la alerta; después Omni prepara la compra (no cobra nada),
+  // que queda en Aprobaciones para Permitir o Denegar.
+  if (tracked[0]) {
+    await api(token, "POST", `/concierge/items/${tracked[0]}/simulate-drop`);
+    await api(token, "POST", `/concierge/items/${tracked[0]}/checkout`, {});
+  }
 
   const chat = await api(token, "POST", "/agent/chat", {
     message: "¿En qué gasto más cada mes y qué suscripciones podría cancelar para ahorrar?",
@@ -88,6 +92,40 @@ async function settle(page) {
   // Realtime deja una conexión abierta: networkidle puede no llegar nunca, así que tiene tope.
   await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => undefined);
   await page.waitForTimeout(2_500);
+}
+
+/**
+ * «Powered by Netlify» lo agrega el hosting en el plan gratis (no es parte de la app) y tapa el menú de abajo.
+ * Se apaga en Netlify: Project configuration → General → Powered by Netlify badge. Aquí solo se oculta en la
+ * captura, por si sigue activo: se esconde su contenedor fijo más cercano.
+ */
+async function hideHostingBadge(page) {
+  const badge = page.getByText(/Powered by\s*Netlify/i).first();
+  if (!(await badge.isVisible().catch(() => false))) return "no está";
+  return badge.evaluate((node) => {
+    for (let el = node; el; ) {
+      if (getComputedStyle(el).position === "fixed") {
+        el.style.setProperty("display", "none", "important");
+        return "oculto";
+      }
+      const root = el.getRootNode();
+      el = el.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+    }
+    node.style.setProperty("display", "none", "important");
+    return "oculto (solo el texto)";
+  });
+}
+
+/** El chat abre al final de la conversación; para la captura, desde la pregunta. */
+async function scrollToTop(page) {
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll("*")) {
+      const { overflowY } = getComputedStyle(el);
+      if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight) el.scrollTop = 0;
+    }
+    window.scrollTo(0, 0);
+  });
+  await page.waitForTimeout(500);
 }
 
 async function screenshots(conversationId) {
@@ -124,8 +162,10 @@ async function screenshots(conversationId) {
     for (const [name, path] of screens) {
       await page.goto(`${APP_URL}${path}`, { waitUntil: "load", timeout: 60_000 });
       await settle(page);
+      if (path.startsWith("/chat")) await scrollToTop(page);
+      const badge = await hideHostingBadge(page);
       await page.screenshot({ path: join(OUT_DIR, `${name}.png`) });
-      console.log(`Captura ${name}.png (${path})`);
+      console.log(`Captura ${name}.png (${path}) · insignia de Netlify: ${badge}`);
     }
   } finally {
     await browser.close();
