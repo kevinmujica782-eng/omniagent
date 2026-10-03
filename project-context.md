@@ -151,12 +151,15 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
   - «Simular compilación de Netlify».
   - «App de Android», que entrega el `.aab` y el `.apk` firmados en *Artifacts* y en la rama `builds`.
   - «Migrar base de datos», que solo corre a mano.
+  - «Probar producción»: crea una cuenta de prueba, le escribe a Omni por la API y anota la respuesta. Cada corrida deja una cuenta `kevinmujica782+prueba-<run>@gmail.com` que hay que borrar con SQL.
+- **IA:** `ANTHROPIC_API_KEY` está en Netlify desde el 3 oct 2026, como secreta y solo para producción. Ese día, «Probar producción» registró una cuenta sin correo y Omni respondió en menos de 2 s con Haiku 4.5; un mensaje simple costó menos de un centavo.
 - **Android:** paquete `com.omniagent.app`, versión 1.0.0 y API objetivo 36.
   - La llave de subida está en `mobile/keystore/omniagent-upload.p12` (PKCS12 cifrado). Su contraseña no está en el repositorio: va como secreto `ANDROID_KEYSTORE_PASSWORD` o como campo del workflow.
   - Los íconos y la pantalla de carga salen de `mobile/assets/`, y los gráficos de la tienda de `mobile/store/`.
 - **Agregado para Google Play:** páginas públicas `/privacidad`, `/terminos` y `/eliminar-cuenta`, con contacto kevinmujica782@gmail.com; botón «Reportar» en las respuestas de la IA (tabla `content_reports`); lo simulado marcado como «Demo»; «Continuar con Google» solo con `NEXT_PUBLIC_GOOGLE_AUTH=on`.
 - **Pendiente del dueño** (guía completa en `docs/GOOGLE_PLAY.md`):
-  - En Netlify: `ANTHROPIC_API_KEY` y `SUPABASE_SECRET_KEY`, y luego volver a publicar.
+  - En Netlify: `SUPABASE_SECRET_KEY` (la usa «Eliminar cuenta», que Google Play exige), y luego volver a publicar.
+  - Borrar las cuentas de prueba: `delete from auth.users where email like 'kevinmujica782+prueba-%@gmail.com';` en el SQL Editor de Supabase.
   - En Google Play: cuenta de desarrollador (US$25), ficha, contenido de la app, prueba cerrada con 12 testers durante 14 días y solicitud de producción.
 
 ### Cómo retomar

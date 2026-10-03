@@ -14,11 +14,11 @@ Guía para pasar de la web publicada a la app en la tienda. La web ya está en *
    - Cuando configures un correo propio en *Authentication → Emails → SMTP Settings* (Resend o Brevo tienen plan gratis):
      - En *Authentication → URL Configuration*, pon *Site URL* `https://omniagent-app.netlify.app` y agrega `https://omniagent-app.netlify.app/**` en *Redirect URLs*.
      - Quita el trigger para volver a pedir confirmación: `drop trigger if exists on_auth_user_autoconfirm on auth.users;`
-2. **Netlify → omniagent-app → Project configuration → Environment variables.** Agrega dos variables:
-   - `ANTHROPIC_API_KEY`: tu llave de https://console.anthropic.com (API Keys). Necesita saldo. Sin ella, el chat de Omni no responde.
-   - `SUPABASE_SECRET_KEY`: en Supabase, *Project Settings → API Keys*, la llave secreta (`sb_secret_…`). Sin ella, «Eliminar cuenta» no funciona, y Google Play lo exige.
+2. **Netlify → omniagent-app → Project configuration → Environment variables.**
+   - `ANTHROPIC_API_KEY` (ya está, desde el 3 oct 2026): la llave de la consola de Anthropic (*Settings → API keys*). Necesita saldo; sin ella, el chat de Omni no responde.
+   - `SUPABASE_SECRET_KEY` (falta): en Supabase, *Project Settings → API Keys*, la llave secreta (`sb_secret_…`). Sin ella, «Eliminar cuenta» no funciona, y Google Play lo exige.
 
-   Las variables nuevas se aplican al volver a publicar la web.
+   Las variables nuevas se aplican al volver a publicar la web. Después, corre el workflow «Probar producción» en GitHub para comprobar el registro y el chat.
 3. **Prueba la web:** crea una cuenta, habla con Omni, sube un estado de cuenta y prueba «Reportar» y «Eliminar cuenta».
 
 ## 2. Cuenta de desarrollador
