@@ -1,0 +1,61 @@
+# Repite en GitHub los pasos de Netlify (instalar y compilar con Node 22) para ver los errores completos: Netlify solo
+# muestra el detalle de su log en su panel. Deja el final de cada paso como anotación.
+name: Simular compilación de Netlify
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simulate:
+    name: Node ${{ matrix.node }} ${{ matrix.node_env && format('NODE_ENV={0}', matrix.node_env) || '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - node: "22"
+            node_env: ""
+          - node: "22"
+            node_env: "production"
+    env:
+      NETLIFY: "true"
+      CI: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_APP_URL: https://omniagent-app.netlify.app
+      NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Instalar dependencias como Netlify
+        env:
+          NODE_ENV: ${{ matrix.node_env }}
+        run: |
+          node -v; npm -v
+          set +e
+          npm install 2>&1 | tee "$RUNNER_TEMP/step.log"
+          code=${PIPESTATUS[0]}
+          set -e
+          summary=$(tail -n 70 "$RUNNER_TEMP/step.log" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+          if [ "$code" -ne 0 ]; then echo "::error title=npm install::${summary}"; exit "$code"; fi
+          echo "::notice title=npm install::${summary}"
+
+      - name: Compilar como Netlify
+        env:
+          NODE_ENV: ${{ matrix.node_env }}
+        run: |
+          set +e
+          node scripts/netlify-build.mjs 2>&1 | tee "$RUNNER_TEMP/step.log"
+          code=${PIPESTATUS[0]}
+          set -e
+          summary=$(tail -n 70 "$RUNNER_TEMP/step.log" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+          if [ "$code" -ne 0 ]; then echo "::error title=build::${summary}"; exit "$code"; fi
+          echo "::notice title=build::${summary}"
