@@ -1,0 +1,99 @@
+# Capturas de teléfono (1080 × 1920) para la ficha de Google Play y cuenta de revisión con datos de ejemplo
+# (Play Console → Contenido de la app → Acceso a la app). Ver scripts/play-store/capturas.mjs.
+# Las capturas quedan en la rama play-store y en los Artifacts de la corrida.
+# El repositorio es público: la contraseña de la cuenta de revisión nunca sale en claro. Se cifra con la llave
+# pública del campo public_key (RSA en PEM, codificado en base64; OAEP con SHA-256) y queda en revisor.enc.
+# Para leerla:  base64 -d revisor.enc | openssl pkeyutl -decrypt -inkey privada.pem \
+#                 -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256
+name: Capturas para Google Play
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "URL de la web"
+        required: true
+        default: "https://omniagent-app.netlify.app"
+      review_email:
+        description: "Correo de la cuenta de revisión (debe ser nueva)"
+        required: true
+        default: "kevinmujica782+revisor@gmail.com"
+      public_key:
+        description: "Llave pública RSA (PEM en base64) para cifrar la contraseña"
+        required: true
+
+concurrency:
+  group: play-store
+  cancel-in-progress: false
+
+permissions:
+  # Escribe solo la rama play-store con las capturas.
+  contents: write
+
+jobs:
+  capturas:
+    name: Cuenta de revisión y capturas
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_URL: ${{ inputs.app_url }}
+      REVIEW_EMAIL: ${{ inputs.review_email }}
+      # Datos públicos (también van en el navegador de cada usuario).
+      SUPABASE_URL: https://nhrporwspcvnmabjaqta.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_enY-kKg99Zn0MdGoM8JjlQ_iVniEvdG
+      OUT_DIR: ${{ github.workspace }}/capturas
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Contraseña de la cuenta de revisión (cifrada)
+        env:
+          PUBLIC_KEY_B64: ${{ inputs.public_key }}
+        run: |
+          password="Revisor-$(openssl rand -hex 5)"
+          echo "::add-mask::$password"
+          echo "REVIEW_PASSWORD=$password" >> "$GITHUB_ENV"
+          mkdir -p "$OUT_DIR"
+          printf '%s' "$PUBLIC_KEY_B64" | base64 -d > "$RUNNER_TEMP/clave.pem"
+          printf '%s' "$password" | openssl pkeyutl -encrypt -pubin -inkey "$RUNNER_TEMP/clave.pem" \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 | base64 -w0 > "$OUT_DIR/revisor.enc"
+          echo "::notice title=Contraseña cifrada::$(cat "$OUT_DIR/revisor.enc")"
+
+      - name: Playwright con el Chrome del runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw"
+          cp scripts/play-store/capturas.mjs "$RUNNER_TEMP/pw/"
+          cd "$RUNNER_TEMP/pw"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund playwright-core@1
+          google-chrome --version
+
+      - name: Cuenta, datos de ejemplo y capturas
+        run: node "$RUNNER_TEMP/pw/capturas.mjs"
+
+      - name: Guardar en Artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: capturas-google-play-${{ github.run_number }}
+          path: capturas/
+          if-no-files-found: warn
+
+      - name: Dejar las capturas en la rama play-store
+        if: always()
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          [ -d capturas ] || exit 0
+          cd capturas
+          git init -q -b play-store
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf 'Capturas de teléfono para Google Play (1080 x 1920) y contraseña cifrada de la cuenta de revisión. Corrida %s.\n' "$RUN_NUMBER" > LEEME.txt
+          git add -A
+          git commit -q -m "Capturas para Google Play (corrida $RUN_NUMBER)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" play-store

@@ -16,9 +16,9 @@ Guía para pasar de la web publicada a la app en la tienda. La web ya está en *
      - Quita el trigger para volver a pedir confirmación: `drop trigger if exists on_auth_user_autoconfirm on auth.users;`
 2. **Netlify → omniagent-app → Project configuration → Environment variables.**
    - `ANTHROPIC_API_KEY` (ya está, desde el 3 oct 2026): la llave de la consola de Anthropic (*Settings → API keys*). Necesita saldo; sin ella, el chat de Omni no responde.
-   - `SUPABASE_SECRET_KEY` (falta): en Supabase, *Project Settings → API Keys*, la llave secreta (`sb_secret_…`). Sin ella, «Eliminar cuenta» no funciona, y Google Play lo exige.
+   - «Eliminar cuenta», que Google Play exige, no necesita variables: la base la resuelve con la función `public.delete_auth_user` (creada el 3 oct 2026; solo la puede ejecutar el rol de la app).
 
-   Las variables nuevas se aplican al volver a publicar la web. Después, corre el workflow «Probar producción» en GitHub para comprobar el registro y el chat.
+   Las variables nuevas se aplican al volver a publicar la web. Después, corre el workflow «Probar producción» en GitHub: crea una cuenta, habla con Omni, elimina la cuenta y comprueba que ya no puede entrar.
 3. **Prueba la web:** crea una cuenta, habla con Omni, sube un estado de cuenta y prueba «Reportar» y «Eliminar cuenta».
 
 ## 2. Cuenta de desarrollador
@@ -77,7 +77,7 @@ Guía para pasar de la web publicada a la app en la tienda. La web ya está en *
 | --- | --- |
 | Ícono de 512 × 512 | `mobile/store/play-icon-512.png` |
 | Imagen destacada de 1024 × 500 | `mobile/store/feature-graphic-1024x500.png` |
-| Capturas de teléfono (mínimo 2) | Instala el `.apk`, entra con una cuenta de prueba y toma capturas de Inicio, Finanzas, el chat y Compras |
+| Capturas de teléfono (mínimo 2) | Rama `play-store`: 1080 × 1920 de Inicio, Finanzas, el chat, Compras, Trámites y Aprobaciones. Las genera el workflow «Capturas para Google Play» con la cuenta de revisión |
 
 **Datos de contacto:** el correo `kevinmujica782@gmail.com` y el sitio `https://omniagent-app.netlify.app`.
 
@@ -86,7 +86,7 @@ Guía para pasar de la web publicada a la app en la tienda. La web ya está en *
 | Sección | Qué poner |
 | --- | --- |
 | Política de privacidad | `https://omniagent-app.netlify.app/privacidad` |
-| Acceso a la app | «Toda o parte de la funcionalidad está restringida». Crea una cuenta de prueba en la app y escribe aquí su correo y contraseña para los revisores. |
+| Acceso a la app | «Toda o parte de la funcionalidad está restringida». Usa la cuenta de revisión `kevinmujica782+revisor@gmail.com` (ya tiene banco, correo, compras y pedidos de prueba): escribe su correo y contraseña para los revisores. |
 | Anuncios | No contiene anuncios |
 | Clasificación del contenido | Categoría utilidad o productividad. Responde «no» a violencia, sexo, drogas y apuestas. Si preguntan por contenido generado con IA, responde que sí: tiene un chat con IA y botón para reportar. |
 | Público objetivo | Solo mayores de 18 años |
