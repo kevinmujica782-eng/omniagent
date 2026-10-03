@@ -87,7 +87,7 @@ Guía para pasar de la web publicada a la app en la tienda. La web ya está en *
 | Sección | Qué poner |
 | --- | --- |
 | Política de privacidad | `https://omniagent-app.netlify.app/privacidad` |
-| Acceso a la app | «Toda o parte de la funcionalidad está restringida». Usa la cuenta de revisión `kevinmujica782+revisor@gmail.com` (ya tiene banco, correo, compras y pedidos de prueba): escribe su correo y contraseña para los revisores. |
+| Acceso a la app | «Toda o parte de la funcionalidad está restringida». Da un correo y una contraseña para los revisores: crea una cuenta desde la app y carga los datos de ejemplo, o usa `kevinmujica782+revisor@gmail.com` (ya tiene banco, correo, precios, una compra por aprobar y pedidos) poniéndole tu contraseña en el SQL Editor de Supabase: `update auth.users set encrypted_password = extensions.crypt('TU-CONTRASEÑA', extensions.gen_salt('bf')) where email = 'kevinmujica782+revisor@gmail.com';` |
 | Anuncios | No contiene anuncios |
 | Clasificación del contenido | Categoría utilidad o productividad. Responde «no» a violencia, sexo, drogas y apuestas. Si preguntan por contenido generado con IA, responde que sí: tiene un chat con IA y botón para reportar. |
 | Público objetivo | Solo mayores de 18 años |
