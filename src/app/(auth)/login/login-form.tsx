@@ -9,6 +9,9 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup";
 
+// Entrar con Google solo cuando el proveedor está activo en Supabase (Authentication → Sign In / Providers).
+const GOOGLE_ENABLED = process.env.NEXT_PUBLIC_GOOGLE_AUTH === "on";
+
 const INPUT =
   "w-full rounded-xl border border-line-strong bg-surface px-3.5 py-2.5 text-[15px] text-ink outline-none transition-colors placeholder:text-muted focus:border-primary";
 
@@ -157,12 +160,16 @@ export function LoginForm({ next, initialError }: { next: string; initialError: 
         </button>
       </form>
 
-      <div className="my-5 flex items-center gap-3 text-xs text-muted">
-        <span className="h-px flex-1 bg-line" />o<span className="h-px flex-1 bg-line" />
-      </div>
-      <button type="button" onClick={withGoogle} disabled={busy} className={cn(buttonClass("secondary"), "w-full")}>
-        Continuar con Google
-      </button>
+      {GOOGLE_ENABLED ? (
+        <>
+          <div className="my-5 flex items-center gap-3 text-xs text-muted">
+            <span className="h-px flex-1 bg-line" />o<span className="h-px flex-1 bg-line" />
+          </div>
+          <button type="button" onClick={withGoogle} disabled={busy} className={cn(buttonClass("secondary"), "w-full")}>
+            Continuar con Google
+          </button>
+        </>
+      ) : null}
     </div>
   );
 }
