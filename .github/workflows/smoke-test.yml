@@ -50,12 +50,17 @@ jobs:
           echo "::notice title=Registro::HTTP ${code} · sesión: $([ -n "$token" ] && echo sí || echo no) · confirmado: $(jq -r '.user.email_confirmed_at // .email_confirmed_at // "no"' signup.json) · usuario: $(jq -r '.user.id // .id // "?"' signup.json) · error: $(jq -r '.error_code // .msg // "ninguno"' signup.json)"
           if [ -z "$token" ]; then exit 1; fi
 
-          read -r chat_code chat_time < <(curl -sS --max-time 90 -X POST "$APP_URL/api/v1/agent/chat" \
+          # -w no termina en salto de línea: nada de `read` aquí (con bash -e cortaría el paso).
+          out=$(curl -sS --max-time 90 -X POST "$APP_URL/api/v1/agent/chat" \
             -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
             -d "$(jq -n --arg m "$MESSAGE" '{message:$m}')" \
-            -o chat.json -w "%{http_code} %{time_total}")
+            -o chat.json -w "%{http_code} %{time_total}" || true)
+          chat_code=${out%% *}
+          chat_time=${out##* }
           reply=$(jq -r '[.. | objects | select(.role? == "assistant") | .text? // empty] | first // empty' chat.json 2>/dev/null || true)
-          if [ -z "$reply" ]; then reply=$(head -c 1500 chat.json | tr '\n' ' '); fi
-          reply=$(printf '%s' "$reply" | head -c 1500 | sed -e 's/%/%25/g' -e 's/\r//g' | tr '\n' ' ')
-          echo "::notice title=Chat (HTTP ${chat_code}, ${chat_time}s)::${reply}"
+          if [ -z "$reply" ] && [ -f chat.json ]; then reply=$(head -c 1500 chat.json | tr '\n' ' '); fi
+          reply=${reply:0:1500}
+          reply=$(printf '%s' "$reply" | sed -e 's/%/%25/g' -e 's/\r//g' | tr '\n' ' ')
+          # Sin comas en el título: separan los parámetros de la anotación.
+          echo "::notice title=Chat::HTTP ${chat_code} en ${chat_time} s · ${reply}"
           [ "$chat_code" = "200" ]
