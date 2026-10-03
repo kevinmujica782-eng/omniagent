@@ -5,5 +5,6 @@
   publish = ".next"
 
 [build.environment]
-  NODE_VERSION = "22"
+  # Node 24 trae npm 11: el npm 10 de Node 22 falla al resolver estas dependencias ("reading 'edgesOut'").
+  NODE_VERSION = "24"
   NEXT_TELEMETRY_DISABLED = "1"

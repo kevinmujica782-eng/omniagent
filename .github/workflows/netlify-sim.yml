@@ -1,4 +1,4 @@
-# Repite en GitHub los pasos de Netlify (instalar y compilar con Node 22) para ver los errores completos: Netlify solo
+# Repite en GitHub los pasos de Netlify (instalar y compilar con la versión de Node de netlify.toml) para ver los errores completos: Netlify solo
 # muestra el detalle de su log en su panel. Deja el final de cada paso como anotación.
 name: Simular compilación de Netlify
 
@@ -17,10 +17,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - node: "22"
+          - node: "24"
             node_env: ""
-          - node: "22"
-            node_env: "production"
     env:
       NETLIFY: "true"
       CI: "true"
