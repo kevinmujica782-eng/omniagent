@@ -63,6 +63,8 @@ async function api(token, method, path, body) {
 /** Datos de ejemplo: todo sale de las conexiones de prueba (marcadas «Demo» en la app); no se mueve dinero real. */
 async function seed(token) {
   await api(token, "POST", "/finance/demo-bank");
+  // El informe de Omni de los últimos 3 meses (como al tocar «Analizar mis finanzas» después de conectar el banco).
+  await api(token, "POST", "/finance/analysis?origen=conexion");
   await api(token, "POST", "/procedures/mailboxes", { flavor: "gmail", withDemoData: true });
   await api(token, "POST", "/returns/examples");
 
