@@ -39,4 +39,11 @@ jobs:
           PROXY_PATH: ${{ inputs.proxy_path }}
         run: |
           echo "::add-mask::$PROXY_PATH"
-          npx -y @netlify/mcp@latest --site-id "$SITE_ID" --proxy-path "$PROXY_PATH"
+          set +e
+          npx -y @netlify/mcp@latest --site-id "$SITE_ID" --proxy-path "$PROXY_PATH" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
+          code=${PIPESTATUS[0]}
+          set -e
+          # Las últimas líneas también como anotación, para leerlas sin abrir el log completo.
+          summary=$(tail -n 60 "$RUNNER_TEMP/deploy.log" | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"} {print}')
+          if [ "$code" -ne 0 ]; then echo "::error title=Netlify::${summary}"; exit "$code"; fi
+          echo "::notice title=Netlify::${summary}"
