@@ -1,0 +1,88 @@
+# Integración continua: tipos, pruebas unitarias y compilación de producción en cada cambio;
+# en main, además, se comprueba que la imagen de Docker compila y arranca.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  # Valores de relleno: compilar no se conecta a nada, pero Next.js incrusta las variables NEXT_PUBLIC_*.
+  NEXT_PUBLIC_APP_URL: https://omniagent.example
+  NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+
+jobs:
+  check:
+    name: Tipos, pruebas y compilación
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package*.json
+
+      # Con package-lock.json en el repositorio (recomendado), instalación exacta con npm ci.
+      - name: Instalar dependencias (también genera el cliente de Prisma)
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            echo "::warning::No hay package-lock.json: corre npm install en local y súbelo para builds reproducibles."
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Revisar tipos
+        run: npm run typecheck
+
+      - name: Pruebas unitarias
+        run: npm test
+
+      - name: Compilar para producción
+        run: npm run build
+
+  docker:
+    name: Imagen de Docker
+    needs: check
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compilar la imagen
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_APP_URL="$NEXT_PUBLIC_APP_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_URL="$NEXT_PUBLIC_SUPABASE_URL" \
+            --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="$NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" \
+            --build-arg APP_VERSION="${GITHUB_SHA::7}" \
+            -t omniagent:ci .
+
+      - name: Arranca y responde en /api/health
+        run: |
+          docker run -d --name omniagent -p 3000:3000 \
+            -e DATABASE_URL=postgresql://nadie:nada@127.0.0.1:1/ninguna \
+            omniagent:ci
+          # Sin base de datos, la salud debe responder 503 "degraded" enseguida (no quedarse colgada).
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /tmp/health.json -w '%{http_code}' http://127.0.0.1:3000/api/health || true)
+            if [ "$code" = "503" ] || [ "$code" = "200" ]; then break; fi
+            sleep 2
+          done
+          cat /tmp/health.json; echo
+          docker logs omniagent 2>&1 | tail -20
+          grep -q '"status":"degraded"' /tmp/health.json

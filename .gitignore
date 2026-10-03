@@ -1,3 +1,18 @@
+# ── OmniAgent ──
+src/generated
+.env
+.env*.local
+next-env.d.ts
+.DS_Store
+android/app/build
+android/.gradle
+# Llaves de firma de Android: nunca en el repositorio
+*.jks
+*.keystore
+keystore.properties
+dist/
+
+# ── Plantilla de Node (GitHub) ──
 # Logs
 logs
 *.log

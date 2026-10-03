@@ -1,0 +1,55 @@
+# Migraciones de la base de producción: `prisma migrate deploy` aplica solo las migraciones ya revisadas y
+# guardadas en prisma/migrations; después va la seguridad de Supabase (RLS, triggers y bucket; es idempotente).
+# Configura el secreto DIRECT_URL (session pooler 5432 o conexión directa) en el entorno "production" de GitHub
+# y, si quieres aprobar cada migración a mano, añade revisores obligatorios a ese entorno.
+name: Migrar base de datos
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - prisma/migrations/**
+      - prisma/sql/supabase-setup.sql
+
+concurrency:
+  group: migrate-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    name: prisma migrate deploy
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      DIRECT_URL: ${{ secrets.DIRECT_URL }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Revisar que exista DIRECT_URL
+        run: |
+          if [ -z "$DIRECT_URL" ]; then
+            echo "::error::Falta el secreto DIRECT_URL en el entorno production."
+            exit 1
+          fi
+
+      - name: Instalar dependencias
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      - name: Estado antes de migrar
+        run: npx prisma migrate status || true
+
+      - name: Aplicar migraciones
+        run: npx prisma migrate deploy
+
+      - name: Seguridad de Supabase (RLS en tablas nuevas, triggers y bucket)
+        run: npm run db:security

@@ -1,0 +1,1333 @@
+// OmniAgent: esquema relacional (PostgreSQL en Supabase) con Prisma 7.
+// Convenciones: tablas y columnas en snake_case, ids UUID, dinero en Decimal(14,2), fechas timestamptz.
+// profiles.id = auth.users.id (el alta la hace un trigger; ver prisma/sql/supabase-setup.sql).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+
+  @@map("plan")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  EXPIRED
+  INCOMPLETE
+
+  @@map("subscription_status")
+}
+
+enum BillingProvider {
+  STRIPE
+  REVENUECAT
+
+  @@map("billing_provider")
+}
+
+enum IntegrationProvider {
+  GOOGLE
+  MICROSOFT
+  BANK_AGGREGATOR
+  BANK_DEMO
+  MAIL_DEMO // bandeja y calendario de prueba (sandbox con el contrato de Gmail/Outlook)
+
+  @@map("integration_provider")
+}
+
+enum ConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  ERROR
+
+  @@map("connection_status")
+}
+
+enum AgentModule {
+  GENERAL
+  FINANCE
+  PROCEDURES
+  CONCIERGE
+  GOALS
+
+  @@map("agent_module")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  TOOL
+
+  @@map("message_role")
+}
+
+enum ActionType {
+  CANCEL_SUBSCRIPTION
+  SEND_EMAIL
+  CREATE_CALENDAR_EVENT
+  SUBMIT_FORM
+  PURCHASE
+
+  @@map("action_type")
+}
+
+enum ActionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
+  FAILED
+  EXPIRED
+
+  @@map("action_status")
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  CREDIT_CARD
+  WALLET
+  OTHER
+
+  @@map("account_type")
+}
+
+enum TransactionDirection {
+  DEBIT
+  CREDIT
+
+  @@map("transaction_direction")
+}
+
+enum ChargeCadence {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+
+  @@map("charge_cadence")
+}
+
+enum RecurringStatus {
+  ACTIVE
+  UNUSED_SUSPECTED
+  CANCELLATION_REQUESTED
+  CANCELED
+
+  @@map("recurring_status")
+}
+
+enum SuggestionType {
+  ANT_EXPENSE
+  UNUSED_SUBSCRIPTION
+  PRICE_DROP
+  TASK_DUE
+  GOAL_TIP
+  GENERAL
+
+  @@map("suggestion_type")
+}
+
+enum SuggestionStatus {
+  NEW
+  ACCEPTED
+  DISMISSED
+
+  @@map("suggestion_status")
+}
+
+enum ImportStatus {
+  UPLOADED
+  PROCESSING
+  PARSED
+  FAILED
+
+  @@map("import_status")
+}
+
+enum TaskType {
+  FORM_FILL
+  EMAIL
+  APPOINTMENT
+  REMINDER
+  DOCUMENT
+  OTHER
+
+  @@map("task_type")
+}
+
+enum TaskStatus {
+  SUGGESTED // detectado (p. ej. en un correo), espera la confirmación de un toque
+  PENDING
+  IN_PROGRESS
+  WAITING_USER
+  DONE
+  CANCELED
+
+  @@map("task_status")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+
+  @@map("task_priority")
+}
+
+enum DocumentKind {
+  FORM_TEMPLATE
+  FILLED_FORM
+  STATEMENT
+  RECEIPT
+  OTHER
+
+  @@map("document_kind")
+}
+
+enum MailCategory {
+  FORM // formulario o permiso por llenar
+  APPOINTMENT // cita con fecha y hora
+  REIMBURSEMENT // reembolso o reclamo
+  BILL // factura o pago con vencimiento
+  DEADLINE // trámite con fecha límite (renovaciones, devoluciones...)
+  EVENT // evento o reunión
+  INFO // informativo, sin acción
+  PROMO // publicidad
+
+  @@map("mail_category")
+}
+
+enum CalendarEventKind {
+  EVENT // cita o evento
+  DEADLINE // fecha límite de un trámite (todo el día)
+  FOCUS // bloque sugerido para hacer el trámite
+
+  @@map("calendar_event_kind")
+}
+
+enum SyncStatus {
+  LOCAL_ONLY
+  PENDING
+  SYNCED
+  ERROR
+
+  @@map("sync_status")
+}
+
+enum WatchKind {
+  PRODUCT
+  FLIGHT
+  EVENT_TICKET
+  HOTEL
+  OTHER
+
+  @@map("watch_kind")
+}
+
+enum WatchStatus {
+  ACTIVE
+  PAUSED
+  PURCHASED
+  ARCHIVED
+
+  @@map("watch_status")
+}
+
+enum PriceAlertStatus {
+  NEW // sin ver
+  SEEN
+  ACTED // el usuario preparó la compra desde la alerta
+  DISMISSED
+  EXPIRED
+
+  @@map("price_alert_status")
+}
+
+enum OrderStatus {
+  PLACED // pago autorizado (simulado) y pedido confirmado
+  FAILED // pago rechazado
+  CANCELED
+
+  @@map("order_status")
+}
+
+enum GoalCategory {
+  SAVINGS
+  HEALTH
+  FAMILY
+  HOME
+  TRAVEL
+  CAREER
+  OTHER
+
+  @@map("goal_category")
+}
+
+enum GoalStatus {
+  ACTIVE
+  PAUSED
+  ACHIEVED
+  ABANDONED
+
+  @@map("goal_status")
+}
+
+enum NotificationType {
+  PRICE_DROP
+  ACTION_REQUIRED
+  INSIGHT
+  REMINDER
+  SYSTEM
+
+  @@map("notification_type")
+}
+
+enum RecommendationKind {
+  CANCEL_SUBSCRIPTION
+  REDUCE_ANT_EXPENSES
+  CATEGORY_BUDGET
+  AVOID_FEES
+  NEGOTIATE_BILL
+  SAVINGS_GOAL
+  OTHER
+
+  @@map("recommendation_kind")
+}
+
+enum RecommendationStatus {
+  NEW
+  ACCEPTED
+  DISMISSED
+  DONE
+  EXPIRED
+
+  @@map("recommendation_status")
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+
+  @@map("difficulty")
+}
+
+enum AnalysisSource {
+  AI
+  RULES
+
+  @@map("analysis_source")
+}
+
+enum AnalysisTrigger {
+  MANUAL
+  CONNECTION
+  SCHEDULED
+  CHAT
+
+  @@map("analysis_trigger")
+}
+
+enum ShipmentStatus {
+  ORDERED // pedido confirmado, sin aviso de envío
+  SHIPPED // en camino
+  DELIVERED // entregado
+  CANCELED // cancelado por la tienda o por el usuario
+
+  @@map("shipment_status")
+}
+
+enum OrderSource {
+  OMNIAGENT // comprado con la hoja de pago de OmniAgent
+  EMAIL // detectado en un correo de la tienda o de la paquetería
+  MANUAL // agregado por el usuario (en Devoluciones o en el chat)
+  EXAMPLE // pedido de ejemplo en tiendas de prueba (.test)
+
+  @@map("order_source")
+}
+
+enum ReturnReason {
+  LATE // no llegó en la fecha prometida
+  NOT_RECEIVED // figura entregado o se perdió, y no llegó
+  DAMAGED // llegó dañado o no funciona
+  WRONG_ITEM // otro producto, talla o color
+  NOT_AS_DESCRIBED // no es como lo anunciaban
+  CHANGED_MIND // ya no lo quiere (si la tienda acepta devoluciones)
+
+  @@map("return_reason")
+}
+
+enum ReturnCaseStatus {
+  DRAFT // Omni lo preparó: espera tu aprobación o que lo envíes tú
+  SENT // enviado a la tienda, esperando respuesta
+  ANSWERED // la tienda respondió y falta un paso tuyo (enviar el paquete, mandar fotos)
+  RESOLVED // reembolso, cambio, saldo a favor o el pedido llegó
+  REJECTED // la tienda lo rechazó
+  CLOSED // lo cerraste tú
+
+  @@map("return_case_status")
+}
+
+enum ReturnOutcome {
+  REFUND
+  REPLACEMENT
+  STORE_CREDIT
+  ARRIVED
+
+  @@map("return_outcome")
+}
+
+enum ReturnChannel {
+  EMAIL // Omni lo envía desde tu correo conectado, con tu aprobación
+  MANUAL // lo envías tú (portal, chat o teléfono de la tienda) con el texto que prepara Omni
+
+  @@map("return_channel")
+}
+
+// ───────────────────────── Usuarios y planes ─────────────────────────
+
+model Profile {
+  id                  String   @id @db.Uuid // = auth.users.id
+  email               String?
+  fullName            String?  @map("full_name")
+  avatarUrl           String?  @map("avatar_url")
+  locale              String   @default("es")
+  timezone            String   @default("UTC")
+  currency            String   @default("USD") @db.Char(3)
+  stripeCustomerId    String?  @unique @map("stripe_customer_id")
+  onboardingCompleted Boolean  @default(false) @map("onboarding_completed")
+  preferences         Json     @default("{}")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subscriptions     Subscription[]
+  connections       IntegrationConnection[]
+  usageLogs         AiUsageLog[]
+  conversations     Conversation[]
+  messages          Message[]
+  actions           AgentAction[]
+  financialAccounts FinancialAccount[]
+  transactions      Transaction[]
+  recurringCharges  RecurringCharge[]
+  suggestions       Suggestion[]
+  statementImports  StatementImport[]
+  tasks             Task[]
+  documents         UserDocument[]
+  calendarEvents    CalendarEvent[]
+  watchlist         WatchlistItem[]
+  goals             Goal[]
+  notifications     AppNotification[]
+  auditLogs         AuditLog[]
+  analyses          FinancialAnalysis[]
+  recommendations   SavingsRecommendation[]
+  budgets           CategoryBudget[]
+  mailMessages      MailMessage[]
+  personalFields    PersonalField[]
+  calendarFeed      CalendarFeed?
+  priceAlerts       PriceAlert[]
+  orders            PurchaseOrder[]
+  trackedOrders     TrackedOrder[]
+  returnCases       ReturnCase[]
+  contentReports    ContentReport[]
+
+  @@map("profiles")
+}
+
+/// Suscripción de pago unificada: Stripe (web) y RevenueCat (Google Play).
+model Subscription {
+  id                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                 String             @map("user_id") @db.Uuid
+  provider               BillingProvider
+  plan                   Plan               @default(PRO)
+  status                 SubscriptionStatus
+  productId              String?            @map("product_id")
+  providerCustomerId     String?            @map("provider_customer_id")
+  providerSubscriptionId String             @map("provider_subscription_id")
+  currentPeriodEnd       DateTime?          @map("current_period_end") @db.Timestamptz(6)
+  cancelAtPeriodEnd      Boolean            @default(false) @map("cancel_at_period_end")
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime           @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerSubscriptionId])
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+/// Registro idempotente de webhooks (Stripe y RevenueCat reintentan).
+model BillingEvent {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider    BillingProvider
+  eventId     String          @map("event_id")
+  type        String
+  userId      String?         @map("user_id") @db.Uuid
+  payload     Json
+  processedAt DateTime?       @map("processed_at") @db.Timestamptz(6)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([provider, eventId])
+  @@map("billing_events")
+}
+
+// ───────────────────── Conexiones e IA ─────────────────────
+
+/// Tokens de terceros (Google, Microsoft, agregador bancario). Siempre cifrados con AES-256-GCM.
+model IntegrationConnection {
+  id                    String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                String              @map("user_id") @db.Uuid
+  provider              IntegrationProvider
+  externalAccountId     String?             @map("external_account_id")
+  displayName           String?             @map("display_name")
+  scopes                String[]            @default([])
+  accessTokenEncrypted  String?             @map("access_token_encrypted")
+  refreshTokenEncrypted String?             @map("refresh_token_encrypted")
+  tokenExpiresAt        DateTime?           @map("token_expires_at") @db.Timestamptz(6)
+  status                ConnectionStatus    @default(ACTIVE)
+  lastSyncedAt          DateTime?           @map("last_synced_at") @db.Timestamptz(6)
+  metadata              Json                @default("{}")
+  createdAt             DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user              Profile            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  financialAccounts FinancialAccount[]
+  calendarEvents    CalendarEvent[]
+  mailMessages      MailMessage[]
+
+  @@unique([userId, provider, externalAccountId])
+  @@map("integration_connections")
+}
+
+/// Consumo de IA por turno de conversación (sirve para cuotas del plan y costos).
+model AiUsageLog {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String      @map("user_id") @db.Uuid
+  conversationId  String?     @map("conversation_id") @db.Uuid
+  module          AgentModule @default(GENERAL)
+  kind            String      @default("chat") // chat | analysis
+  model           String
+  inputTokens     Int         @default(0) @map("input_tokens")
+  outputTokens    Int         @default(0) @map("output_tokens")
+  cacheReadTokens Int         @default(0) @map("cache_read_tokens")
+  toolCalls       Int         @default(0) @map("tool_calls")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user         Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("ai_usage_logs")
+}
+
+model Conversation {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  module    AgentModule @default(GENERAL)
+  title     String?
+  archived  Boolean     @default(false)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user      Profile             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  actions   AgentAction[]
+  usageLogs AiUsageLog[]
+  analyses  FinancialAnalysis[]
+
+  @@index([userId, updatedAt(sort: Desc)])
+  @@map("conversations")
+}
+
+/// content guarda lo que ve la UI: { text, cards[] }. Los mensajes TOOL registran cada llamada a herramienta.
+model Message {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  role           MessageRole
+  text           String?
+  content        Json        @default("{}")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  conversation Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reports      ContentReport[]
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+/// Respuesta de la IA reportada por quien la recibió (ofensiva, peligrosa, incorrecta...). Google Play exige que se pueda
+/// reportar sin salir de la app; el desarrollador las revisa en esta tabla. Una por persona y mensaje.
+model ContentReport {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  messageId String?  @map("message_id") @db.Uuid
+  /// offensive | dangerous | sexual | wrong | privacy | other
+  reason    String
+  comment   String?
+  /// Texto de la respuesta al momento del reporte (hasta 2,000 caracteres), por si después se borra la conversación.
+  excerpt   String
+  /// open | reviewed
+  status    String   @default("open")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user    Profile  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  message Message? @relation(fields: [messageId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, messageId])
+  @@index([status, createdAt])
+  @@map("content_reports")
+}
+
+/// Todo lo que gasta, envía o cancela pasa por aquí: el agente propone, el usuario aprueba y el servidor ejecuta.
+model AgentAction {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  conversationId String?      @map("conversation_id") @db.Uuid
+  module         AgentModule
+  type           ActionType
+  status         ActionStatus @default(PENDING)
+  title          String
+  summary        String?
+  payload        Json         @default("{}")
+  amount         Decimal?     @db.Decimal(14, 2)
+  currency       String?      @db.Char(3)
+  result         Json?
+  errorMessage   String?      @map("error_message")
+  expiresAt      DateTime?    @map("expires_at") @db.Timestamptz(6)
+  decidedAt      DateTime?    @map("decided_at") @db.Timestamptz(6)
+  executedAt     DateTime?    @map("executed_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user         Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  order        PurchaseOrder?
+  returnCases  ReturnCase[]
+
+  @@index([userId, status, createdAt(sort: Desc)])
+  @@map("agent_actions")
+}
+
+// ───────────────────── Módulo financiero ─────────────────────
+
+model FinancialAccount {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String      @map("user_id") @db.Uuid
+  connectionId    String?     @map("connection_id") @db.Uuid
+  institutionName String      @map("institution_name")
+  name            String
+  type            AccountType @default(CHECKING)
+  subtype         String?
+  mask            String?     @db.VarChar(4)
+  currency        String      @default("USD") @db.Char(3)
+  currentBalance  Decimal?    @map("current_balance") @db.Decimal(14, 2)
+  creditLimit     Decimal?    @map("credit_limit") @db.Decimal(14, 2)
+  isSimulated     Boolean     @default(false) @map("is_simulated")
+  externalId      String?     @map("external_id")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user             Profile                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection       IntegrationConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  transactions     Transaction[]
+  /// Estados de cuenta importados (solo cuentas manuales, sin connectionId).
+  statementImports StatementImport[]
+
+  @@unique([userId, externalId])
+  @@map("financial_accounts")
+}
+
+/// amount siempre positivo; direction indica si sale (DEBIT) o entra (CREDIT).
+model Transaction {
+  id                String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String               @map("user_id") @db.Uuid
+  accountId         String               @map("account_id") @db.Uuid
+  externalId        String?              @map("external_id")
+  postedAt          DateTime             @map("posted_at") @db.Timestamptz(6)
+  amount            Decimal              @db.Decimal(14, 2)
+  direction         TransactionDirection
+  currency          String               @default("USD") @db.Char(3)
+  merchantName      String?              @map("merchant_name")
+  description       String
+  category          String?
+  subcategory       String?
+  pending           Boolean              @default(false)
+  recurringChargeId String?              @map("recurring_charge_id") @db.Uuid
+  /// Estado de cuenta del que salió el movimiento; al deshacer la importación se borra con ella.
+  statementImportId String?              @map("statement_import_id") @db.Uuid
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user            Profile          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account         FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  recurringCharge RecurringCharge? @relation(fields: [recurringChargeId], references: [id], onDelete: SetNull)
+  statementImport StatementImport? @relation(fields: [statementImportId], references: [id], onDelete: Cascade)
+
+  @@unique([accountId, externalId])
+  @@index([userId, postedAt(sort: Desc)])
+  @@index([userId, merchantName])
+  @@index([statementImportId])
+  @@map("transactions")
+}
+
+/// Suscripciones y cargos recurrentes detectados en los movimientos.
+model RecurringCharge {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String          @map("user_id") @db.Uuid
+  merchantName    String          @map("merchant_name")
+  category        String?
+  subcategory     String?
+  amount          Decimal         @db.Decimal(14, 2)
+  currency        String          @default("USD") @db.Char(3)
+  cadence         ChargeCadence
+  status          RecurringStatus @default(ACTIVE)
+  firstSeenAt     DateTime?       @map("first_seen_at") @db.Timestamptz(6)
+  lastChargedAt   DateTime?       @map("last_charged_at") @db.Timestamptz(6)
+  nextExpectedAt  DateTime?       @map("next_expected_at") @db.Timestamptz(6)
+  lastUsedAt      DateTime?       @map("last_used_at") @db.Timestamptz(6)
+  usageSource     String?         @map("usage_source") // signal | user
+  cancellationUrl String?         @map("cancellation_url")
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user         Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([userId, merchantName, cadence])
+  @@index([userId, status])
+  @@map("recurring_charges")
+}
+
+/// "Ideas": sugerencias proactivas del agente (ahorro, trámites por vencer, bajadas de precio...).
+model Suggestion {
+  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String           @map("user_id") @db.Uuid
+  module                  AgentModule
+  type                    SuggestionType
+  status                  SuggestionStatus @default(NEW)
+  title                   String
+  body                    String
+  prompt                  String
+  estimatedMonthlySavings Decimal?         @map("estimated_monthly_savings") @db.Decimal(14, 2)
+  currency                String?          @db.Char(3)
+  dedupeKey               String           @map("dedupe_key")
+  expiresAt               DateTime?        @map("expires_at") @db.Timestamptz(6)
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, status, createdAt(sort: Desc)])
+  @@map("suggestions")
+}
+
+/// Estados de cuenta subidos (PDF/CSV) para análisis cuando no hay agregador bancario.
+/// El archivo no se guarda: se lee al subirlo y solo quedan los movimientos (storagePath queda en null).
+model StatementImport {
+  id           String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String       @map("user_id") @db.Uuid
+  accountId    String?      @map("account_id") @db.Uuid
+  storagePath  String?      @map("storage_path")
+  fileName     String       @map("file_name")
+  status       ImportStatus @default(UPLOADED)
+  periodStart  DateTime?    @map("period_start") @db.Date
+  periodEnd    DateTime?    @map("period_end") @db.Date
+  rowsImported Int          @default(0) @map("rows_imported")
+  error        String?
+  createdAt    DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user         Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account      FinancialAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([accountId])
+  @@map("statement_imports")
+}
+
+/// Informe de ahorro de los últimos 3 meses: métricas calculadas + redacción de Claude (o reglas si la IA no está disponible).
+model FinancialAnalysis {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String          @map("user_id") @db.Uuid
+  conversationId      String?         @map("conversation_id") @db.Uuid
+  trigger             AnalysisTrigger @default(MANUAL)
+  source              AnalysisSource
+  model               String?
+  periodStart         DateTime        @map("period_start") @db.Date
+  periodEnd           DateTime        @map("period_end") @db.Date
+  currency            String          @db.Char(3)
+  health              String // buena | estable | en_riesgo
+  headline            String
+  summary             String
+  chatMessage         String          @map("chat_message")
+  keyPoints           String[]        @default([]) @map("key_points")
+  suggestedQuestions  String[]        @default([]) @map("suggested_questions")
+  totalMonthlySavings Decimal         @default(0) @map("total_monthly_savings") @db.Decimal(14, 2)
+  metrics             Json // snapshot enviado al modelo (auditable)
+  inputTokens         Int             @default(0) @map("input_tokens")
+  outputTokens        Int             @default(0) @map("output_tokens")
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user            Profile                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversation    Conversation?           @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  recommendations SavingsRecommendation[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("financial_analyses")
+}
+
+/// Recomendación de ahorro accionable (cancelar, presupuesto, meta, recordatorio).
+model SavingsRecommendation {
+  id                      String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId                  String               @map("user_id") @db.Uuid
+  analysisId              String               @map("analysis_id") @db.Uuid
+  kind                    RecommendationKind
+  status                  RecommendationStatus @default(NEW)
+  difficulty              Difficulty           @default(EASY)
+  priority                Int                  @default(0)
+  title                   String
+  detail                  String
+  estimatedMonthlySavings Decimal              @default(0) @map("estimated_monthly_savings") @db.Decimal(14, 2)
+  currency                String               @db.Char(3)
+  targetType              String?              @map("target_type") // recurring_charge | category | merchant
+  targetId                String?              @map("target_id")
+  targetLabel             String?              @map("target_label")
+  suggestedAmount         Decimal?             @map("suggested_amount") @db.Decimal(14, 2)
+  result                  Json?
+  decidedAt               DateTime?            @map("decided_at") @db.Timestamptz(6)
+  createdAt               DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt               DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     Profile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  analysis FinancialAnalysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([analysisId])
+  @@map("savings_recommendations")
+}
+
+/// Presupuesto mensual por categoría (creado por el usuario, el agente o una recomendación).
+model CategoryBudget {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  category     String
+  monthlyLimit Decimal  @map("monthly_limit") @db.Decimal(14, 2)
+  currency     String   @default("USD") @db.Char(3)
+  alertAtPct   Int      @default(80) @map("alert_at_pct")
+  source       String   @default("user") // user | agent | recommendation
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("category_budgets")
+}
+
+// ───────────────────── Trámites y productividad ─────────────────────
+
+model Task {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String       @map("user_id") @db.Uuid
+  type          TaskType     @default(OTHER)
+  status        TaskStatus   @default(PENDING)
+  priority      TaskPriority @default(MEDIUM)
+  title         String
+  notes         String?
+  dueAt         DateTime?    @map("due_at") @db.Timestamptz(6)
+  /// Cuándo hacerlo: bloque sugerido antes de la fecha límite, sin chocar con el calendario.
+  plannedAt     DateTime?    @map("planned_at") @db.Timestamptz(6)
+  remindAt      DateTime?    @map("remind_at") @db.Timestamptz(6)
+  /// Cuándo se entregó el recordatorio (evita avisos duplicados).
+  remindedAt    DateTime?    @map("reminded_at") @db.Timestamptz(6)
+  confirmedAt   DateTime?    @map("confirmed_at") @db.Timestamptz(6)
+  completedAt   DateTime?    @map("completed_at") @db.Timestamptz(6)
+  mailMessageId String?      @map("mail_message_id") @db.Uuid
+  source        String       @default("user") // user | agent | email
+  /// Plan sugerido (pasos, evento, respuesta) y datos detectados.
+  metadata      Json         @default("{}")
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user           Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mailMessage    MailMessage?    @relation(fields: [mailMessageId], references: [id], onDelete: SetNull)
+  documents      UserDocument[]
+  calendarEvents CalendarEvent[]
+
+  @@unique([userId, mailMessageId])
+  @@index([userId, status, dueAt])
+  @@index([status, remindAt])
+  @@map("tasks")
+}
+
+/// Documentos (PDF de formularios, copias rellenadas). El binario vive en Supabase Storage
+/// (bucket privado "documents", ruta {userId}/...) o, sin Storage configurado, en document_blobs.
+model UserDocument {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String       @map("user_id") @db.Uuid
+  taskId        String?      @map("task_id") @db.Uuid
+  parentId      String?      @map("parent_id") @db.Uuid // copia rellenada → formulario original
+  kind          DocumentKind @default(OTHER)
+  fileName      String       @map("file_name")
+  mimeType      String       @map("mime_type")
+  sizeBytes     Int          @default(0) @map("size_bytes")
+  source        String       @default("upload") // upload | email | generated
+  storageDriver String       @default("database") @map("storage_driver") // database | supabase
+  storagePath   String       @map("storage_path")
+  /// Formulario: campos detectados y valores sugeridos. Copia rellenada: valores usados (sin firma).
+  extractedData Json?        @map("extracted_data")
+  extractedAt   DateTime?    @map("extracted_at") @db.Timestamptz(6)
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user           Profile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task           Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  parent         UserDocument?   @relation("FilledCopies", fields: [parentId], references: [id], onDelete: SetNull)
+  copies         UserDocument[]  @relation("FilledCopies")
+  blob           DocumentBlob?
+  mailAttachment MailAttachment?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("documents")
+}
+
+/// Binario de documentos pequeños cuando no hay Supabase Storage configurado. Sin acceso desde el cliente.
+model DocumentBlob {
+  documentId String   @id @map("document_id") @db.Uuid
+  bytes      Bytes
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  document UserDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_blobs")
+}
+
+model CalendarEvent {
+  id              String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String            @map("user_id") @db.Uuid
+  taskId          String?           @map("task_id") @db.Uuid
+  connectionId    String?           @map("connection_id") @db.Uuid
+  kind            CalendarEventKind @default(EVENT)
+  title           String
+  description     String?
+  location        String?
+  startsAt        DateTime          @map("starts_at") @db.Timestamptz(6)
+  endsAt          DateTime?         @map("ends_at") @db.Timestamptz(6)
+  allDay          Boolean           @default(false) @map("all_day")
+  reminderMinutes Int[]             @default([30]) @map("reminder_minutes")
+  status          String            @default("confirmed") // confirmed | cancelled
+  /// Versión del evento para el feed ICS (sube con cada cambio).
+  sequence        Int               @default(0)
+  externalEventId String?           @map("external_event_id")
+  syncStatus      SyncStatus        @default(LOCAL_ONLY) @map("sync_status")
+  syncError       String?           @map("sync_error")
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user       Profile                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  task       Task?                  @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  connection IntegrationConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, startsAt])
+  @@map("calendar_events")
+}
+
+// ───────────────────── Correo (trámites detectados) ─────────────────────
+
+/// Correos sincronizados de la bandeja (solo lo necesario para detectar trámites) y su clasificación.
+model MailMessage {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  connectionId   String          @map("connection_id") @db.Uuid
+  externalId     String          @map("external_id")
+  threadId       String?         @map("thread_id")
+  folder         String          @default("inbox") // inbox | sent
+  fromName       String?         @map("from_name")
+  fromEmail      String          @map("from_email")
+  toEmails       String[]        @default([]) @map("to_emails")
+  subject        String
+  snippet        String          @default("")
+  bodyText       String          @default("") @map("body_text")
+  receivedAt     DateTime        @map("received_at") @db.Timestamptz(6)
+  isRead         Boolean         @default(false) @map("is_read")
+  labels         String[]        @default([])
+  // Clasificación: reglas o Claude
+  category       MailCategory?
+  importance     Int             @default(0) // 0 baja · 1 media · 2 alta
+  triageSource   AnalysisSource? @map("triage_source")
+  triagedAt      DateTime?       @map("triaged_at") @db.Timestamptz(6)
+  summary        String?
+  actionRequired Boolean         @default(false) @map("action_required")
+  dueAt          DateTime?       @map("due_at") @db.Timestamptz(6)
+  eventStartsAt  DateTime?       @map("event_starts_at") @db.Timestamptz(6)
+  eventEndsAt    DateTime?       @map("event_ends_at") @db.Timestamptz(6)
+  eventLocation  String?         @map("event_location")
+  /// Montos, referencias y otros datos detectados.
+  extracted      Json            @default("{}")
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        Profile               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  connection  IntegrationConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  attachments MailAttachment[]
+  tasks       Task[]
+
+  @@unique([connectionId, externalId])
+  @@index([userId, folder, receivedAt(sort: Desc)])
+  @@map("mail_messages")
+}
+
+model MailAttachment {
+  id         String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String  @map("user_id") @db.Uuid
+  messageId  String  @map("message_id") @db.Uuid
+  externalId String  @map("external_id")
+  fileName   String  @map("file_name")
+  mimeType   String  @map("mime_type")
+  sizeBytes  Int     @default(0) @map("size_bytes")
+  /// Documento guardado al descargar el adjunto (PDF de un formulario).
+  documentId String? @unique @map("document_id") @db.Uuid
+
+  message  MailMessage   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  document UserDocument? @relation(fields: [documentId], references: [id], onDelete: SetNull)
+
+  @@unique([messageId, externalId])
+  @@map("mail_attachments")
+}
+
+/// "Mis datos para formularios": valores cifrados (AES-256-GCM) por persona del hogar.
+model PersonalField {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String   @map("user_id") @db.Uuid
+  person         String   @default("yo") // "yo" o el nombre de un familiar
+  relation       String? // hija, hijo, pareja...
+  fieldKey       String   @map("field_key") // full_name, phone, school, grade...
+  label          String
+  valueEncrypted String   @map("value_encrypted")
+  source         String   @default("user") // user | form
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, person, fieldKey])
+  @@map("personal_fields")
+}
+
+/// Suscripción ICS al calendario de OmniAgent (Google, Apple, Outlook). Token {id}.{secreto}.
+model CalendarFeed {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @unique @map("user_id") @db.Uuid
+  secretHash      String    @map("secret_hash")
+  secretEncrypted String    @map("secret_encrypted")
+  lastAccessedAt  DateTime? @map("last_accessed_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("calendar_feeds")
+}
+
+// ───────────────────── Compras autónomas (concierge) ─────────────────────
+
+model WatchlistItem {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String      @map("user_id") @db.Uuid
+  kind              WatchKind   @default(PRODUCT)
+  status            WatchStatus @default(ACTIVE)
+  title             String
+  url               String?
+  merchant          String?
+  currency          String      @default("USD") @db.Char(3)
+  currentPrice      Decimal?    @map("current_price") @db.Decimal(14, 2)
+  targetPrice       Decimal?    @map("target_price") @db.Decimal(14, 2)
+  lowestPrice       Decimal?    @map("lowest_price") @db.Decimal(14, 2)
+  dropAlertPct      Int         @default(15) @map("drop_alert_pct")
+  checkEveryMinutes Int         @default(1440) @map("check_every_minutes")
+  lastCheckedAt     DateTime?   @map("last_checked_at") @db.Timestamptz(6)
+  nextCheckAt       DateTime?   @map("next_check_at") @db.Timestamptz(6)
+  /// De dónde sale el precio: sandbox (tienda de prueba .test), web (página pública) o manual.
+  source            String      @default("manual")
+  inStock           Boolean?    @map("in_stock")
+  /// Revisiones fallidas seguidas (se reintenta con espera creciente y se pausa al llegar a 8).
+  failCount         Int         @default(0) @map("fail_count")
+  lastError         String?     @map("last_error")
+  metadata          Json        @default("{}")
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pricePoints PricePoint[]
+  alerts      PriceAlert[]
+  orders      PurchaseOrder[]
+
+  @@index([userId, status])
+  @@index([status, nextCheckAt])
+  @@map("watchlist_items")
+}
+
+model PricePoint {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemId    String   @map("item_id") @db.Uuid
+  price     Decimal  @db.Decimal(14, 2)
+  currency  String   @db.Char(3)
+  inStock   Boolean? @map("in_stock")
+  source    String   @default("worker")
+  checkedAt DateTime @default(now()) @map("checked_at") @db.Timestamptz(6)
+
+  item WatchlistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, checkedAt(sort: Desc)])
+  @@map("price_points")
+}
+
+/// Alerta inteligente: una bajada drástica (o el precio objetivo) con el resumen de Omni y la compra rápida.
+model PriceAlert {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String           @map("user_id") @db.Uuid
+  itemId         String           @map("item_id") @db.Uuid
+  status         PriceAlertStatus @default(NEW)
+  price          Decimal          @db.Decimal(14, 2)
+  previousPrice  Decimal?         @map("previous_price") @db.Decimal(14, 2)
+  /// Precio de referencia: la mediana de los últimos 30 días (así un "descuento" tras subir el precio no cuenta).
+  referencePrice Decimal?         @map("reference_price") @db.Decimal(14, 2)
+  currency       String           @db.Char(3)
+  dropPct        Int?             @map("drop_pct")
+  /// DROP (bajada drástica), TARGET (llegó al objetivo), LOWEST (mínimo desde que se sigue)
+  reasons        String[]         @default([])
+  headline       String
+  summary        String
+  /// Opinión de Omni: buy (buen momento) o wait (conviene esperar).
+  verdict        String?
+  source         AnalysisSource   @default(RULES)
+  /// Compra preparada desde la alerta (agent_actions).
+  actionId       String?          @map("action_id") @db.Uuid
+  expiresAt      DateTime?        @map("expires_at") @db.Timestamptz(6)
+  seenAt         DateTime?        @map("seen_at") @db.Timestamptz(6)
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item WatchlistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt(sort: Desc)])
+  @@index([itemId, createdAt(sort: Desc)])
+  @@map("price_alerts")
+}
+
+/// Pedido creado al Permitir una compra en la hoja de pago. Hoy el cobro es simulado (sandbox).
+model PurchaseOrder {
+  id              String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String      @map("user_id") @db.Uuid
+  itemId          String?     @map("item_id") @db.Uuid
+  actionId        String      @unique @map("action_id") @db.Uuid
+  status          OrderStatus
+  kind            WatchKind   @default(PRODUCT)
+  title           String
+  merchant        String?
+  quantity        Int         @default(1)
+  unitPrice       Decimal     @map("unit_price") @db.Decimal(14, 2)
+  shipping        Decimal     @default(0) @db.Decimal(14, 2)
+  tax             Decimal     @default(0) @db.Decimal(14, 2)
+  total           Decimal     @db.Decimal(14, 2)
+  currency        String      @db.Char(3)
+  paymentProvider String      @default("sandbox") @map("payment_provider")
+  /// "Visa de prueba •••• 4242": nunca se guarda el número completo de una tarjeta.
+  paymentLabel    String      @map("payment_label")
+  paymentRef      String?     @map("payment_ref")
+  orderNumber     String?     @map("order_number")
+  failureReason   String?     @map("failure_reason")
+  /// Entrega, boletos y recibo.
+  details         Json        @default("{}")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user     Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item     WatchlistItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  action   AgentAction    @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  tracking TrackedOrder?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("purchase_orders")
+}
+
+// ───────────────────── Metas ─────────────────────
+
+model Goal {
+  id                  String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String       @map("user_id") @db.Uuid
+  category            GoalCategory @default(OTHER)
+  status              GoalStatus   @default(ACTIVE)
+  title               String
+  description         String?
+  targetAmount        Decimal?     @map("target_amount") @db.Decimal(14, 2)
+  currentAmount       Decimal      @default(0) @map("current_amount") @db.Decimal(14, 2)
+  monthlyContribution Decimal?     @map("monthly_contribution") @db.Decimal(14, 2)
+  currency            String       @default("USD") @db.Char(3)
+  targetDate          DateTime?    @map("target_date") @db.Date
+  plan                Json         @default("[]") // pasos del plan propuesto por el agente
+  createdAt           DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@map("goals")
+}
+
+// ───────────────────── Transversales ─────────────────────
+
+model AppNotification {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  type      NotificationType
+  title     String
+  body      String?
+  href      String?
+  data      Json             @default("{}")
+  readAt    DateTime?        @map("read_at") @db.Timestamptz(6)
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+/// Contadores de límite de tasa por ventana fija (solo servidor: RLS sin políticas).
+model RateLimit {
+  key         String
+  windowStart DateTime @map("window_start") @db.Timestamptz(6)
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+  @@map("rate_limits")
+}
+
+model AuditLog {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  actor     String // user | agent | system | webhook
+  action    String
+  entity    String?
+  entityId  String?  @map("entity_id")
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user Profile? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// ───────────────────── Pedidos y devoluciones ─────────────────────
+
+/// Pedido que Omni sigue hasta que llega: comprado con OmniAgent, detectado en el correo o agregado a mano.
+model TrackedOrder {
+  id               String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String         @map("user_id") @db.Uuid
+  source           OrderSource
+  /// Llave de origen para no duplicar: "mail:SMX-88213", "example:audifonos"… (null en los agregados a mano).
+  sourceKey        String?        @map("source_key")
+  purchaseOrderId  String?        @unique @map("purchase_order_id") @db.Uuid
+  merchant         String
+  /// Dominio de la tienda ("sonidomax.test"): sirve para reconocer sus correos y respuestas.
+  merchantDomain   String?        @map("merchant_domain")
+  /// A dónde reclamar por correo, si la tienda atiende así.
+  supportEmail     String?        @map("support_email")
+  orderNumber      String?        @map("order_number")
+  title            String
+  total            Decimal?       @db.Decimal(14, 2)
+  currency         String         @default("USD") @db.Char(3)
+  status           ShipmentStatus @default(ORDERED)
+  orderedAt        DateTime       @map("ordered_at") @db.Timestamptz(6)
+  /// Último momento del día prometido (fin del día, hora local).
+  expectedBy       DateTime?      @map("expected_by") @db.Timestamptz(6)
+  deliveredAt      DateTime?      @map("delivered_at") @db.Timestamptz(6)
+  /// Días para devolver desde la entrega (política de la tienda; null si no se conoce).
+  returnWindowDays Int?           @map("return_window_days")
+  carrier          String?
+  trackingNumber   String?        @map("tracking_number")
+  /// Aviso de retraso ya enviado (se reclama de forma atómica: nunca se avisa dos veces).
+  lateNotifiedAt   DateTime?      @map("late_notified_at") @db.Timestamptz(6)
+  /// Correos de los que salió, última estimación de la paquetería y otros datos.
+  meta             Json           @default("{}")
+  /// "No le hagas seguimiento": deja de contar para retrasos y avisos.
+  dismissedAt      DateTime?      @map("dismissed_at") @db.Timestamptz(6)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user          Profile        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  cases         ReturnCase[]
+
+  @@unique([userId, sourceKey])
+  @@index([userId, status])
+  @@index([userId, orderedAt(sort: Desc)])
+  @@map("tracked_orders")
+}
+
+/// Reclamo o devolución de un pedido: qué pasó, el mensaje a la tienda, sus respuestas y el resultado.
+model ReturnCase {
+  id               String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String           @map("user_id") @db.Uuid
+  orderId          String           @map("order_id") @db.Uuid
+  reason           ReturnReason
+  status           ReturnCaseStatus @default(DRAFT)
+  channel          ReturnChannel
+  /// Lo que pide el usuario: reembolso, cambio, saldo a favor o que el pedido llegue.
+  desired          ReturnOutcome    @default(REFUND)
+  details          String?
+  /// Mensaje preparado para la tienda.
+  subject          String
+  body             String
+  sendTo           String?          @map("send_to")
+  /// Propuesta de envío vigente (agent_actions): el reclamo o el último seguimiento.
+  actionId         String?          @map("action_id") @db.Uuid
+  sentAt           DateTime?        @map("sent_at") @db.Timestamptz(6)
+  followUps        Int              @default(0) @map("follow_ups")
+  /// Cuándo toca insistir si la tienda no responde (días hábiles).
+  followUpAt       DateTime?        @map("follow_up_at") @db.Timestamptz(6)
+  repliedAt        DateTime?        @map("replied_at") @db.Timestamptz(6)
+  /// Lo que falta del lado del usuario ("Deja el paquete en EnvíosYa") y hasta cuándo.
+  nextStep         String?          @map("next_step")
+  nextStepBy       DateTime?        @map("next_step_by") @db.Timestamptz(6)
+  outcome          ReturnOutcome?
+  /// Monto que se reclama y el que la tienda confirmó.
+  amount           Decimal?         @db.Decimal(14, 2)
+  refundAmount     Decimal?         @map("refund_amount") @db.Decimal(14, 2)
+  currency         String           @default("USD") @db.Char(3)
+  /// El dinero ya se vio en tus cuentas (movimiento a favor en Finanzas) o lo confirmaste tú.
+  refundReceivedAt DateTime?        @map("refund_received_at") @db.Timestamptz(6)
+  resolvedAt       DateTime?        @map("resolved_at") @db.Timestamptz(6)
+  /// Historial: preparado, enviado, seguimientos, respuestas y reembolso (con ids de correos y acciones).
+  events           Json             @default("[]")
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user   Profile      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  order  TrackedOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  action AgentAction? @relation(fields: [actionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([status, followUpAt])
+  @@map("return_cases")
+}

@@ -1,0 +1,22 @@
+# Contexto de la imagen: solo lo necesario para instalar y compilar (ver Dockerfile).
+node_modules
+.next
+out
+.git
+.github
+.env
+.env.*
+!.env.example
+src/generated
+*.tsbuildinfo
+next-env.d.ts
+android
+mobile
+tests
+docs
+coverage
+Dockerfile
+docker-compose.yml
+deploy
+*.md
+.DS_Store

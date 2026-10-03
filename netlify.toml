@@ -1,0 +1,9 @@
+# Netlify compila Next.js con su adaptador oficial (se detecta solo). Las variables de entorno se configuran en
+# Netlify (Project configuration → Environment variables); ver docs/DEPLOY.md.
+[build]
+  command = "node scripts/netlify-build.mjs"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"

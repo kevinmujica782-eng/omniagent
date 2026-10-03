@@ -1,0 +1,11 @@
+{
+  "name": "OmniAgent",
+  "short_name": "Omni",
+  "description": "Tu agente personal para finanzas, trámites y compras.",
+  "lang": "es",
+  "start_url": "/inicio",
+  "display": "standalone",
+  "background_color": "#F2F4F1",
+  "theme_color": "#1E5B47",
+  "icons": [{ "src": "/brand/omni-mark.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

@@ -1,0 +1,43 @@
+# OmniAgent autoalojado: la app (imagen de producción) y un programador que llama a las tareas periódicas.
+# La base de datos, el inicio de sesión y los archivos siguen en Supabase. Guía: docs/DEPLOY.md.
+#
+#   cp .env.example .env        # complétalo: Supabase, DATABASE_URL, Anthropic, Stripe, CRON_SECRET...
+#   npm run db:deploy && npm run db:security    # migraciones (una vez por versión nueva)
+#   docker compose up -d --build
+#
+# Pon delante un proxy con HTTPS (Caddy, Nginx, Traefik o el balanceador de tu nube) apuntando al puerto 3000.
+name: omniagent
+
+services:
+  web:
+    build:
+      context: .
+      args:
+        # Se incrustan al compilar (ver Dockerfile): si cambian, vuelve a compilar con --build.
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?Define NEXT_PUBLIC_APP_URL en .env}
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Define NEXT_PUBLIC_SUPABASE_URL en .env}
+        NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:?Define NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY en .env}
+        CSP_MODE: ${CSP_MODE:-enforce}
+        APP_VERSION: ${APP_VERSION:-local}
+    image: omniagent:${APP_VERSION:-local}
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      LOG_FORMAT: json
+    ports:
+      - "${PORT:-3000}:3000"
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+  # Hace lo que Vercel Cron hace en Vercel: compras y trámites cada hora, finanzas una vez al día.
+  scheduler:
+    image: alpine:3
+    depends_on:
+      - web
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?Define CRON_SECRET en .env}
+      APP_INTERNAL_URL: http://web:3000
+    volumes:
+      - ./deploy/scheduler.sh:/scheduler.sh:ro
+    command: ["sh", "/scheduler.sh"]
+    restart: unless-stopped

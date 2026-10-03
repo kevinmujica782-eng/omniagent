@@ -1,0 +1,27 @@
+import type { Metadata } from "next";
+import { AccountView } from "@/components/views/account-view";
+import { ensureProfile, requireUser } from "@/lib/auth";
+import { billingOverview } from "@/modules/billing/overview";
+
+export const metadata: Metadata = { title: "Cuenta" };
+
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+export default async function AccountPage({ searchParams }: { searchParams: SearchParams }) {
+  const user = await requireUser();
+  const params = await searchParams;
+  const notice = params.checkout === "success" ? "success" : params.checkout === "cancel" ? "cancel" : null;
+  const sessionId = typeof params.session_id === "string" ? params.session_id : null;
+
+  const profile = await ensureProfile(user);
+  const billing = await billingOverview(user.userId);
+
+  return (
+    <AccountView
+      profile={{ name: profile.fullName, email: profile.email, timezone: profile.timezone, currency: profile.currency }}
+      billing={billing}
+      notice={notice}
+      checkoutSessionId={sessionId}
+    />
+  );
+}

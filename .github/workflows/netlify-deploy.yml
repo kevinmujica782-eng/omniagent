@@ -1,0 +1,42 @@
+# Publica la web en Netlify sin conectar el repositorio desde Netlify: sube el código y Netlify lo compila en su
+# propio sistema (netlify.toml). El proxy_path lo entrega la herramienta deploy-site del MCP de Netlify y vence
+# pronto: pide uno nuevo para cada publicación.
+name: Publicar en Netlify
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_id:
+        description: "ID del proyecto de Netlify"
+        required: true
+        default: "00d0338c-3967-4da0-824d-c1c023327283"
+      proxy_path:
+        description: "proxy-path de deploy-site (Netlify MCP)"
+        required: true
+
+concurrency:
+  group: netlify-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Subir y compilar en Netlify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Publicar
+        env:
+          SITE_ID: ${{ inputs.site_id }}
+          PROXY_PATH: ${{ inputs.proxy_path }}
+        run: |
+          echo "::add-mask::$PROXY_PATH"
+          npx -y @netlify/mcp@latest --site-id "$SITE_ID" --proxy-path "$PROXY_PATH"

@@ -1,0 +1,337 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   OmniAgent · tokens de diseño
+   Verde pino como color de marca, ámbar como acento ("órbita" de Omni).
+   Los componentes solo usan estos tokens: el modo oscuro sale gratis.
+   ───────────────────────────────────────────────────────────── */
+/* Claro (por defecto). El tema lo elige el usuario en Cuenta → Apariencia: "Sistema" sigue al teléfono;
+   "Claro" u "Oscuro" lo fijan con data-theme en <html> (cookie omni-theme, sin parpadeo porque lo pone el servidor). */
+:root {
+  --canvas: #f2f4f1;
+  --surface: #ffffff;
+  --surface-2: #f7f9f6;
+  --ink: #13201b;
+  --muted: #5c6a63;
+  --line: #dce3de;
+  --line-strong: #c3cdc6;
+  --primary: #1e5b47;
+  --primary-hover: #174a3a;
+  --primary-soft: #e3efe9;
+  --on-primary: #ffffff;
+  --attention: #9a5b0b;
+  --attention-soft: #fbefd9;
+  --danger: #a23a2e;
+  --danger-soft: #f8e6e3;
+  --on-danger: #ffffff;
+  --orbit: #e9b45e;
+  /* Tarjeta principal del Inicio: verde pino con texto claro. */
+  --hero: #1e5b47;
+  --hero-2: #174a3a;
+  --on-hero: #ffffff;
+  --hero-muted: #b9d3c7;
+  --hero-row: rgb(255 255 255 / 0.09);
+  --hero-row-hover: rgb(255 255 255 / 0.15);
+  --tabbar: rgb(242 244 241 / 0.88);
+  color-scheme: light;
+}
+
+/* Oscuro: el mismo bloque dos veces (preferencia del sistema y elección explícita). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0f1613;
+    --surface: #16201b;
+    --surface-2: #1b2721;
+    --ink: #e6eee9;
+    --muted: #93a39a;
+    --line: #26332c;
+    --line-strong: #35463c;
+    --primary: #6cc7a1;
+    --primary-hover: #86d4b3;
+    --primary-soft: #183329;
+    --on-primary: #0b1f16;
+    --attention: #e9b45e;
+    --attention-soft: #2e2413;
+    --danger: #f08a7e;
+    --danger-soft: #35201c;
+    --on-danger: #2a0f0b;
+    --orbit: #e9b45e;
+    --hero: #173427;
+    --hero-2: #122a20;
+    --on-hero: #e6eee9;
+    --hero-muted: #9fbcae;
+    --hero-row: rgb(255 255 255 / 0.05);
+    --hero-row-hover: rgb(255 255 255 / 0.09);
+    --tabbar: rgb(15 22 19 / 0.88);
+    color-scheme: dark;
+  }
+}
+/* .theme-dark fija el modo oscuro en una parte de la pantalla (la pantalla de Omni Pro), aunque la app esté en claro. */
+:root[data-theme="dark"],
+.theme-dark {
+  --canvas: #0f1613;
+  --surface: #16201b;
+  --surface-2: #1b2721;
+  --ink: #e6eee9;
+  --muted: #93a39a;
+  --line: #26332c;
+  --line-strong: #35463c;
+  --primary: #6cc7a1;
+  --primary-hover: #86d4b3;
+  --primary-soft: #183329;
+  --on-primary: #0b1f16;
+  --attention: #e9b45e;
+  --attention-soft: #2e2413;
+  --danger: #f08a7e;
+  --danger-soft: #35201c;
+  --on-danger: #2a0f0b;
+  --orbit: #e9b45e;
+  --hero: #173427;
+  --hero-2: #122a20;
+  --on-hero: #e6eee9;
+  --hero-muted: #9fbcae;
+  --hero-row: rgb(255 255 255 / 0.05);
+  --hero-row-hover: rgb(255 255 255 / 0.09);
+  --tabbar: rgb(15 22 19 / 0.88);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-on-primary: var(--on-primary);
+  --color-attention: var(--attention);
+  --color-attention-soft: var(--attention-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-on-danger: var(--on-danger);
+  --color-orbit: var(--orbit);
+  --color-hero: var(--hero);
+  --color-hero-2: var(--hero-2);
+  --color-on-hero: var(--on-hero);
+  --color-hero-muted: var(--hero-muted);
+  --color-hero-row: var(--hero-row);
+  --color-hero-row-hover: var(--hero-row-hover);
+  --color-tabbar: var(--tabbar);
+  --font-sans: var(--font-onest), ui-sans-serif, system-ui, sans-serif;
+  --shadow-card: 0 1px 2px rgb(19 32 27 / 0.06);
+  --shadow-float: 0 24px 48px -24px rgb(19 32 27 / 0.35);
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  [role="button"] {
+    cursor: pointer;
+  }
+}
+
+/* ── Boleta de aprobación (elemento de firma) ─────────────────
+   Dos piezas unidas por una línea perforada; las muescas son cortes reales (mask). */
+.slip {
+  --notch: 12px;
+  filter: drop-shadow(0 1px 1px rgb(19 32 27 / 0.05)) drop-shadow(0 6px 14px rgb(19 32 27 / 0.07));
+}
+.slip-body,
+.slip-stub {
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.slip-body {
+  border-bottom: 1.5px dashed var(--line-strong);
+  border-radius: 1.25rem 1.25rem 0 0;
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at 0 100%, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) left / 51% 100% no-repeat,
+    radial-gradient(circle var(--notch) at 100% 100%, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) right / 51% 100% no-repeat;
+  mask:
+    radial-gradient(circle var(--notch) at 0 100%, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) left / 51% 100% no-repeat,
+    radial-gradient(circle var(--notch) at 100% 100%, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) right / 51% 100% no-repeat;
+}
+.slip-stub {
+  border-top: 0;
+  border-radius: 0 0 1.25rem 1.25rem;
+  -webkit-mask:
+    radial-gradient(circle var(--notch) at 0 0, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) left / 51% 100% no-repeat,
+    radial-gradient(circle var(--notch) at 100% 0, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) right / 51% 100% no-repeat;
+  mask:
+    radial-gradient(circle var(--notch) at 0 0, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) left / 51% 100% no-repeat,
+    radial-gradient(circle var(--notch) at 100% 0, #0000 calc(var(--notch) - 0.5px), #000 var(--notch)) right / 51% 100% no-repeat;
+}
+
+/* ── Marca de Omni: la pupila mira y la órbita gira mientras piensa ── */
+@keyframes omni-look {
+  0%, 100% { transform: translate(0, 0); }
+  30% { transform: translate(-4px, 1.5px); }
+  60% { transform: translate(-1.5px, 4px); }
+  80% { transform: translate(2px, 2px); }
+}
+@keyframes omni-orbit {
+  to { transform: rotate(360deg); }
+}
+.omni-mark.is-thinking .omni-pupil {
+  animation: omni-look 1.8s ease-in-out infinite;
+}
+.omni-mark.is-thinking .omni-orbit {
+  transform-box: view-box;
+  transform-origin: 20px 20px;
+  animation: omni-orbit 2.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .omni-mark * {
+    animation: none !important;
+  }
+}
+
+/* ── Teléfonos de la landing y la vista previa (pantalla real de 375 px escalada) ── */
+.phone {
+  width: 20rem;
+  padding: 0.5rem;
+  border-radius: 2.5rem;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-float);
+}
+.phone-viewport {
+  width: 304px;
+  height: 616px;
+  overflow: hidden;
+  border-radius: 2rem;
+  background: var(--canvas);
+}
+.phone-screen {
+  width: 375px;
+  height: 760px;
+  transform: scale(0.8107);
+  transform-origin: top left;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Hoja de pago: "Permitir" se activa tras un instante (evita toques accidentales) ── */
+@keyframes arm-progress {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+.arm-progress {
+  animation: arm-progress 1.2s linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .arm-progress {
+    animation: none;
+    width: 100%;
+  }
+}
+
+/* ── Pantalla de Omni Pro ─────────────────────────────────────
+   Un bosque de noche detrás de la órbita, el anillo que marca la columna de Pro (con el punto ámbar de la marca)
+   y la órbita de 24 horas, que da una sola vuelta al abrir y enciende las revisiones de un día. */
+.paywall-sky {
+  background:
+    radial-gradient(70% 55% at 50% 0%, color-mix(in oklab, var(--hero) 95%, transparent) 0%, transparent 72%),
+    radial-gradient(40% 30% at 78% 8%, color-mix(in oklab, var(--orbit) 7%, transparent) 0%, transparent 70%);
+}
+@media (min-width: 1024px) {
+  .paywall-sky {
+    background:
+      radial-gradient(45% 60% at 22% 18%, color-mix(in oklab, var(--hero) 95%, transparent) 0%, transparent 72%),
+      radial-gradient(30% 30% at 30% 6%, color-mix(in oklab, var(--orbit) 6%, transparent) 0%, transparent 70%);
+  }
+}
+.paywall-ring {
+  border: 1px solid color-mix(in oklab, var(--primary) 60%, transparent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in oklab, var(--primary) 13%, transparent) 0%,
+    color-mix(in oklab, var(--primary) 5%, transparent) 45%,
+    color-mix(in oklab, var(--primary) 3%, transparent) 100%
+  );
+  box-shadow:
+    0 0 0 4px color-mix(in oklab, var(--primary) 7%, transparent),
+    0 0 36px -6px color-mix(in oklab, var(--primary) 45%, transparent),
+    0 18px 60px -24px color-mix(in oklab, var(--orbit) 35%, transparent);
+}
+.paywall-ring::after {
+  /* La luna de la órbita: arriba a la derecha, donde la lleva la marca de Omni. */
+  content: "";
+  position: absolute;
+  top: -5px;
+  right: 22px;
+  width: 9px;
+  height: 9px;
+  border-radius: 9999px;
+  background: var(--orbit);
+  box-shadow: 0 0 12px 3px color-mix(in oklab, var(--orbit) 60%, transparent);
+}
+.paywall-cta {
+  box-shadow: 0 14px 34px -12px color-mix(in oklab, var(--primary) 75%, transparent);
+}
+.paywall-cta:hover {
+  box-shadow: 0 16px 40px -12px color-mix(in oklab, var(--primary) 90%, transparent);
+}
+
+@keyframes dial-light {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes dial-sweep {
+  0% {
+    transform: rotate(0deg);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(360deg);
+    opacity: 0;
+  }
+}
+.dial-mark {
+  opacity: 0.18;
+  animation: dial-light 380ms ease-out forwards;
+}
+.dial-hand {
+  transform-box: view-box;
+  transform-origin: 120px 120px;
+  animation-name: dial-sweep;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dial-mark {
+    animation: none;
+    opacity: 1;
+  }
+  .dial-hand {
+    display: none;
+  }
+}
