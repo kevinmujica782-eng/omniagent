@@ -11,7 +11,7 @@ const schema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL_FREE: z.string().default("claude-haiku-4-5-20251001"),
-  ANTHROPIC_MODEL_PRO: z.string().default("claude-sonnet-5"),
+  ANTHROPIC_MODEL_PRO: z.string().default("claude-sonnet-5-5"),
   TOKEN_ENCRYPTION_KEY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),

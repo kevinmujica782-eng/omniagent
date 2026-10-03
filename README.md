@@ -31,7 +31,7 @@ Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendacione
 - **Next.js 16** (App Router, `proxy.ts`, React 19) + **TypeScript** estricto + **Tailwind CSS 4**
 - **Supabase**: PostgreSQL + Auth (`@supabase/ssr`, `getClaims()`)
 - **Prisma 7** (`prisma-client` generator, driver adapter `@prisma/adapter-pg`, `prisma.config.ts`)
-- **Anthropic SDK**: `claude-haiku-4-5-20251001` en el plan Gratis y `claude-sonnet-5` en Pro (configurable)
+- **Anthropic SDK**: `claude-haiku-4-5-20251001` en el plan Gratis y `claude-sonnet-5-5` en Pro (configurable)
 - **zod 4**: validación de API y esquemas de las herramientas (se convierten a JSON Schema)
 - **Stripe** (web) + **RevenueCat** (Google Play Billing)
 - **Plaid** (opcional) para cuentas reales; sandbox propio por defecto

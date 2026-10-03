@@ -29,7 +29,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 - Next.js 16 (App Router, `src/proxy.ts` en lugar de middleware), React 19, Tailwind 4, TypeScript estricto.
 - Prisma 7 con `prisma.config.ts`, cliente generado en `src/generated/prisma` y driver adapter `@prisma/adapter-pg`.
 - Supabase: `@supabase/ssr`, validación con `getClaims()`, llave publicable (`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`).
-- Modelos de IA: `claude-haiku-4-5-20251001` en el plan Gratis y `claude-sonnet-5` en Pro (variables `ANTHROPIC_MODEL_*`). Las tareas de fondo (clasificar correos, leer precios, redactar alertas) usan el modelo rápido y no gastan la cuota del chat.
+- Modelos de IA: `claude-haiku-4-5-20251001` en el plan Gratis y `claude-sonnet-5-5` en Pro (variables `ANTHROPIC_MODEL_*`). Las tareas de fondo (clasificar correos, leer precios, redactar alertas) usan el modelo rápido y no gastan la cuota del chat.
 - Planes (`src/modules/billing/plans.ts`):
   - **Gratis:** 40 mensajes al mes, 3 precios revisados una vez al día, correo revisado una vez al día, 2 metas, 5 formularios y 10 páginas leídas con IA, y análisis manual cada 12 h.
   - **Pro, a $19.99 al mes:** 1.500 mensajes, 50 precios revisados cada hora, correo cada 3 h, 20 metas, 100 formularios y 200 páginas, informe mensual automático, alertas redactadas por IA y el modelo más capaz.
