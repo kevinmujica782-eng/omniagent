@@ -48,7 +48,7 @@ La plantilla completa, con comentarios, está en `.env.example`. Las variables m
 | `DATABASE_URL` | al correr | Sí | Transaction pooler (puerto 6543). |
 | `DIRECT_URL` | migraciones y scripts | Para migrar | Session pooler (5432) o conexión directa. |
 | `TOKEN_ENCRYPTION_KEY` | al correr | Sí | `openssl rand -base64 32`. **No la cambies después**: los tokens guardados quedarían ilegibles. |
-| `SUPABASE_SECRET_KEY` | al correr | Recomendada | `sb_secret_…`. La usan **Eliminar cuenta** (Google Play lo exige) y Storage. |
+| `SUPABASE_SECRET_KEY` | al correr | Con `DOCUMENT_STORAGE=supabase` | `sb_secret_…`. Solo para Storage. **Eliminar cuenta** no la usa: llama a la función `public.delete_auth_user` (`npm run db:security`). |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL_FREE`, `ANTHROPIC_MODEL_PRO` | al correr | Recomendada | Sin la llave, el chat responde "no configurado". |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY` | al correr | Las tres o ninguna | Con solo una parte, el pago abre pero Pro nunca se activa: la app lo marca como error al arrancar. |
 | `REVENUECAT_WEBHOOK_AUTH`, `REVENUECAT_PRO_ENTITLEMENT` | al correr | Para Android | Ver la sección 10. |

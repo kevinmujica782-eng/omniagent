@@ -84,6 +84,33 @@ revoke execute on function public.handle_new_user() from public, anon, authentic
 revoke execute on function public.handle_updated_user() from public, anon, authenticated;
 revoke execute on function public.handle_deleted_user() from public, anon, authenticated;
 
+-- «Eliminar cuenta» (Google Play lo exige) sin la llave secreta de Supabase: la API del servidor, después
+-- de validar la sesión y la confirmación escrita, llama a esta función con el id del usuario. Borra la fila
+-- de auth.users; on_auth_user_deleted borra el perfil y, en cascada, todos sus datos. Solo la ejecuta el
+-- dueño (postgres, con el que corre `npm run db:security`) y el rol propio de la app en producción.
+create or replace function public.delete_auth_user(target uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  removed integer;
+begin
+  delete from auth.users where id = target;
+  get diagnostics removed = row_count;
+  return removed > 0;
+end;
+$$;
+
+revoke execute on function public.delete_auth_user(uuid) from public, anon, authenticated, service_role;
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'omniagent_app') then
+    grant execute on function public.delete_auth_user(uuid) to omniagent_app;
+  end if;
+end $$;
+
 -- Correo confirmado al crear la cuenta, mientras no haya SMTP propio. El correo de prueba de
 -- Supabase solo llega a los miembros del equipo: sin esto, nadie más podría confirmar su cuenta.
 -- Supabase Auth recarga el usuario después de insertarlo y, si ya está confirmado, no envía el

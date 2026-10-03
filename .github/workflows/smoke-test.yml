@@ -1,6 +1,7 @@
-# Prueba de producción: crea una cuenta de prueba (el correo queda confirmado al crearla), le escribe a Omni por la
-# API y deja el resultado como anotación. La cuenta de prueba (kevinmujica782+prueba-<run>@gmail.com) se borra
-# después con SQL en Supabase:  delete from auth.users where email like 'kevinmujica782+prueba-%@gmail.com';
+# Prueba de producción de punta a punta: crea una cuenta de prueba (el correo queda confirmado al crearla), le
+# escribe a Omni por la API, elimina la cuenta como lo haría la persona («Eliminar cuenta», que Google Play exige)
+# y comprueba que ya no puede entrar. Cada paso queda como anotación. La cuenta de prueba
+# (kevinmujica782+prueba-<run>@gmail.com) no queda guardada.
 name: Probar producción
 
 on:
@@ -35,7 +36,7 @@ jobs:
           health=$(curl -sS --max-time 30 "$APP_URL/api/health" || true)
           echo "::notice title=Salud::${health}"
 
-      - name: Crear cuenta y hablar con Omni
+      - name: Crear cuenta, hablar con Omni y eliminar la cuenta
         run: |
           set -u
           email="kevinmujica782+prueba-${GITHUB_RUN_ID}@gmail.com"
@@ -63,4 +64,16 @@ jobs:
           reply=$(printf '%s' "$reply" | sed -e 's/%/%25/g' -e 's/\r//g' | tr '\n' ' ')
           # Sin comas en el título: separan los parámetros de la anotación.
           echo "::notice title=Chat::HTTP ${chat_code} en ${chat_time} s · ${reply}"
-          [ "$chat_code" = "200" ]
+
+          # Eliminar la cuenta como lo haría la persona y comprobar que ya no puede entrar (400 = la cuenta no existe).
+          delete_code=$(curl -sS --max-time 60 -X POST "$APP_URL/api/v1/account/delete" \
+            -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+            -d '{"confirm":"ELIMINAR"}' -o delete.json -w "%{http_code}" || true)
+          login_code=$(curl -sS --max-time 30 -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg e "$email" --arg p "$password" '{email:$e, password:$p}')" \
+            -o /dev/null -w "%{http_code}" || true)
+          deleted=$(jq -c '.data // .error // empty' delete.json 2>/dev/null | head -c 400 | sed -e 's/%/%25/g' || true)
+          echo "::notice title=Eliminar cuenta::HTTP ${delete_code} · ${deleted} · volver a entrar: HTTP ${login_code}"
+
+          [ "$chat_code" = "200" ] && [ "$delete_code" = "200" ] && [ "$login_code" = "400" ]

@@ -93,7 +93,6 @@ describe("configuración al arrancar", () => {
     NEXT_PUBLIC_APP_URL: "https://omniagent.app",
     ANTHROPIC_API_KEY: "sk-ant-x",
     CRON_SECRET: "c",
-    SUPABASE_SECRET_KEY: "sb_secret_x",
     STRIPE_SECRET_KEY: "sk_live_x",
     STRIPE_WEBHOOK_SECRET: "whsec_x",
     STRIPE_PRICE_PRO_MONTHLY: "price_x",
@@ -115,6 +114,14 @@ describe("configuración al arrancar", () => {
     expect(report.warnings[0]).toMatch(/modo de prueba/);
     expect(report.critical.some((k) => k.startsWith("NEXT_PUBLIC_APP_URL"))).toBe(true);
     expect(checkConfig({ ...complete, NEXT_PUBLIC_APP_URL: "http://localhost:3000" }, false).critical).toEqual([]);
+  });
+
+  it("la llave secreta de Supabase solo hace falta con los documentos en Storage", () => {
+    expect(checkConfig(complete, true).critical).toEqual([]);
+    expect(checkConfig({ ...complete, DOCUMENT_STORAGE: "supabase" }, true).critical).toEqual([
+      "SUPABASE_SECRET_KEY (DOCUMENT_STORAGE=supabase)",
+    ]);
+    expect(checkConfig({ ...complete, DOCUMENT_STORAGE: "supabase", SUPABASE_SECRET_KEY: "sb_secret_x" }, true).critical).toEqual([]);
   });
 });
 

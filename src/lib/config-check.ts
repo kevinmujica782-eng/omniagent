@@ -13,8 +13,12 @@ export function checkConfig(env: Env, production: boolean): ConfigReport {
   for (const key of ["DATABASE_URL", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "TOKEN_ENCRYPTION_KEY"]) {
     if (!present(env, key)) report.critical.push(key);
   }
-  // SUPABASE_SECRET_KEY: sin ella no se puede eliminar una cuenta (Google Play lo exige) ni usar Supabase Storage.
-  for (const key of ["ANTHROPIC_API_KEY", "CRON_SECRET", "SUPABASE_SECRET_KEY"]) if (!present(env, key)) report.recommended.push(key);
+  for (const key of ["ANTHROPIC_API_KEY", "CRON_SECRET"]) if (!present(env, key)) report.recommended.push(key);
+  // Con los documentos en Supabase Storage, sin la llave secreta no se pueden subir ni leer. (Eliminar una
+  // cuenta ya no la necesita: usa la función public.delete_auth_user de prisma/sql/supabase-setup.sql.)
+  if (env.DOCUMENT_STORAGE === "supabase" && !present(env, "SUPABASE_SECRET_KEY")) {
+    report.critical.push("SUPABASE_SECRET_KEY (DOCUMENT_STORAGE=supabase)");
+  }
 
   // Stripe va completo o no va: con la mitad, el pago abre pero Pro nunca se activa.
   const stripe = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO_MONTHLY"];

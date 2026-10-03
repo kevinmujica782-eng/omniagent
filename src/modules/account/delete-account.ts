@@ -1,6 +1,5 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { requireEnv } from "@/lib/env";
 import { AppError, Errors } from "@/lib/errors";
 import { log } from "@/lib/log";
 import { isEntitled } from "@/modules/billing/status";
@@ -17,11 +16,28 @@ export type AccountDeletion = {
   filesDeleted: number;
 };
 
-/** Llave secreta de Supabase: las sb_secret_ van solo en apikey (no son JWT); la service_role heredada, también en Authorization. */
-function adminHeaders(key: string): Record<string, string> {
-  const headers: Record<string, string> = { apikey: key };
-  if (key.startsWith("eyJ")) headers.Authorization = `Bearer ${key}`;
-  return headers;
+/**
+ * El acceso se borra en la base con public.delete_auth_user (prisma/sql/supabase-setup.sql): una función
+ * SECURITY DEFINER que solo puede ejecutar el rol de la app, así que no hace falta la llave secreta de Supabase.
+ * Se comprueba antes de tocar nada: sin la función, ninguna parte de la cuenta se borra.
+ */
+async function assertAuthDeletionReady(): Promise<void> {
+  const [row] = await prisma.$queryRaw<{ ready: boolean }[]>`
+    select case
+      when to_regprocedure('public.delete_auth_user(uuid)') is null then false
+      else has_function_privilege(to_regprocedure('public.delete_auth_user(uuid)'), 'execute')
+    end as ready`;
+  if (!row?.ready) throw Errors.notConfigured("Eliminar la cuenta (función public.delete_auth_user: npm run db:security)");
+}
+
+/** Borra el usuario de Supabase Auth; su trigger borra el perfil y, en cascada, todos sus datos. */
+async function deleteAuthUser(userId: string): Promise<void> {
+  try {
+    await prisma.$queryRaw`select public.delete_auth_user(${userId}::uuid)`;
+  } catch (error) {
+    log.error("account.auth_delete_failed", { userId, error });
+    throw new AppError(502, "auth_provider_error", "No pudimos eliminar tu acceso en este momento. Inténtalo de nuevo en unos minutos.");
+  }
 }
 
 async function cancelStripeSubscription(subscriptionId: string): Promise<boolean> {
@@ -48,9 +64,7 @@ async function cancelStripeSubscription(subscriptionId: string): Promise<boolean
  * Una suscripción de Google Play no se puede cancelar desde el servidor: la pantalla lo avisa antes de confirmar.
  */
 export async function deleteAccount(userId: string, now = new Date()): Promise<AccountDeletion> {
-  const secretKey = requireEnv("SUPABASE_SECRET_KEY", "Eliminar la cuenta (SUPABASE_SECRET_KEY)");
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl) throw Errors.notConfigured("Supabase");
+  await assertAuthDeletionReady();
 
   const subscriptions = await prisma.subscription.findMany({
     where: { userId, status: { notIn: ["CANCELED", "EXPIRED"] } },
@@ -71,14 +85,7 @@ export async function deleteAccount(userId: string, now = new Date()): Promise<A
     return 0;
   });
 
-  const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/auth/v1/admin/users/${encodeURIComponent(userId)}`, {
-    method: "DELETE",
-    headers: adminHeaders(secretKey),
-  }).catch(() => null);
-  if (!response || (!response.ok && response.status !== 404)) {
-    log.error("account.auth_delete_failed", { userId, status: response?.status ?? null });
-    throw new AppError(502, "auth_provider_error", "No pudimos eliminar tu acceso en este momento. Inténtalo de nuevo en unos minutos.");
-  }
+  await deleteAuthUser(userId);
   // Lo que no cuelga del perfil en cascada: la bitácora (quedaría anónima) y los eventos de pago, de los que solo
   // se conserva el id (evita procesar dos veces un reintento de Stripe); el detalle queda en Stripe.
   await prisma.auditLog.deleteMany({ where: { userId } });

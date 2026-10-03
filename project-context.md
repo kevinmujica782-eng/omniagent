@@ -111,7 +111,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
   3. Borrar el usuario de Supabase Auth, lo que borra en cascada.
   4. Borrar la bitácora y vaciar los eventos de pago.
 
-  El webhook tardío de una cuenta borrada se ignora. Requiere `SUPABASE_SECRET_KEY`.
+  El webhook tardío de una cuenta borrada se ignora. El paso 3 llama a `public.delete_auth_user` (función SECURITY DEFINER de `supabase-setup.sql` que solo ejecuta el rol de la app): no necesita `SUPABASE_SECRET_KEY`.
 - **Google Play:** dentro de la app de Android no se dirige a pagar fuera de Google Play (la hoja solo dice que Pro llegará con Google Play). Target API 36 (Capacitor 8). Node 22+.
 - **Despliegue:**
   - Plataformas: Vercel (crons diarios en Hobby; cada hora con `npm run db:cron`, que usa Supabase pg_cron + pg_net con Vault) o Docker (`output: standalone`, usuario `node`, `HEALTHCHECK`, servicio `scheduler`).
@@ -158,8 +158,6 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
   - Los íconos y la pantalla de carga salen de `mobile/assets/`, y los gráficos de la tienda de `mobile/store/`.
 - **Agregado para Google Play:** páginas públicas `/privacidad`, `/terminos` y `/eliminar-cuenta`, con contacto kevinmujica782@gmail.com; botón «Reportar» en las respuestas de la IA (tabla `content_reports`); lo simulado marcado como «Demo»; «Continuar con Google» solo con `NEXT_PUBLIC_GOOGLE_AUTH=on`.
 - **Pendiente del dueño** (guía completa en `docs/GOOGLE_PLAY.md`):
-  - En Netlify: `SUPABASE_SECRET_KEY` (la usa «Eliminar cuenta», que Google Play exige), y luego volver a publicar.
-  - Borrar las cuentas de prueba: `delete from auth.users where email like 'kevinmujica782+prueba-%@gmail.com';` en el SQL Editor de Supabase.
   - En Google Play: cuenta de desarrollador (US$25), ficha, contenido de la app, prueba cerrada con 12 testers durante 14 días y solicitud de producción.
 
 ### Cómo retomar

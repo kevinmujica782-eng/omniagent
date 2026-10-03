@@ -506,7 +506,7 @@ Google Play exige que la cuenta se pueda eliminar desde la app y desde la web. E
 3. Borra el usuario de Supabase Auth. Con él se van, en cascada, todos sus datos.
 4. Borra su bitácora y vacía sus eventos de pago.
 
-Una suscripción de Google Play solo la puede cancelar la persona desde Google Play, así que la hoja se lo recuerda. La función necesita `SUPABASE_SECRET_KEY`.
+Una suscripción de Google Play solo la puede cancelar la persona desde Google Play, así que la hoja se lo recuerda. El paso 3 usa la función `public.delete_auth_user` de `prisma/sql/supabase-setup.sql` (SECURITY DEFINER; solo la ejecuta el rol de la app), así que no necesita la llave secreta de Supabase.
 
 ### Pruebas
 
@@ -686,7 +686,7 @@ Para agregar una herramienta: defínela con `defineTool()` en su módulo (esquem
   - Al volver del pago, la app también sincroniza sola.
   - Busca `stripe.webhook.failed` en los logs.
 - **`/api/health` responde `degraded`:** la base no contestó en 5 s. Revisa `DATABASE_URL` y que el proyecto de Supabase no esté pausado.
-- **"Eliminar la cuenta no está configurado":** falta `SUPABASE_SECRET_KEY`.
+- **"Eliminar la cuenta no está configurado":** falta la función `public.delete_auth_user` o el rol de la app no puede ejecutarla. Corre `npm run db:security`.
 - **"El precio cambió" al permitir una compra:** la tienda subió el total después de la cotización. No se cobró nada: revisa la hoja nueva y decide otra vez.
 
 ## Verificación
