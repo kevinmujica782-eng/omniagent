@@ -3,7 +3,8 @@
 // Con DB_BOOTSTRAP=1 (variable de compilación), antes de compilar crea o actualiza las tablas en Supabase con
 // `prisma db push`. Los poolers compartidos de Supabase tienen varios clústeres por región (aws-0, aws-1...) y un
 // proyecto vive en uno solo: si el host de DIRECT_URL responde "Tenant or user not found", se prueban los otros.
-// El resultado (host que funcionó y si se crearon las tablas, sin credenciales) queda en /omni-db-host.txt para
+// El resultado (host que funcionó y si se crearon las tablas, sin credenciales) queda en /brand/omni-db-host.txt
+// (brand/ no pasa por el proxy de sesión) para
 // corregir DATABASE_URL. Después de la primera vez, quita DB_BOOTSTRAP.
 import { execSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -55,8 +56,8 @@ if (process.env.DB_BOOTSTRAP === "1") {
       report.push(`tablas: error ${clean(error instanceof Error ? error.message : error)}`);
     }
   }
-  mkdirSync("public", { recursive: true });
-  writeFileSync("public/omni-db-host.txt", `${report.join("\n")}\n`);
+  mkdirSync("public/brand", { recursive: true });
+  writeFileSync("public/brand/omni-db-host.txt", `${report.join("\n")}\n`);
   console.log(`[omni] ${report.join(" · ")}`);
 }
 
