@@ -65,6 +65,26 @@ La plantilla completa, con comentarios, está en `.env.example`. Las variables m
 
 Al arrancar, la app revisa su configuración y deja en los logs `config.missing_critical`, `config.missing_recommended` o `config.warning` (por ejemplo, "Stripe está en modo de prueba en producción"). No se detiene: la landing y `/api/health` siguen respondiendo, así el problema se ve enseguida.
 
+## Producción actual (Netlify + Supabase)
+
+La app publicada vive en **https://omniagent-app.netlify.app**:
+
+- **Web y API:** proyecto `omniagent-app` de Netlify (Next.js con `@netlify/plugin-nextjs`, Node 24; ver `netlify.toml`). Las variables están en *Project configuration → Environment variables*. Cambiar una variable exige volver a publicar.
+- **Base de datos:** proyecto `omniagent` de Supabase (`nhrporwspcvnmabjaqta`, us-east-1).
+  - La app entra con el rol propio `omniagent_app`, con BYPASSRLS y miembro de `postgres`, por el pooler compartido `aws-0-us-east-1.pooler.supabase.com`: puerto 6543 en `DATABASE_URL` (con `sslmode=no-verify`) y 5432 en `DIRECT_URL`.
+  - Las tablas se crearon con `prisma db push`, ejecutado en la compilación de Netlify con `DB_BOOTSTRAP=1` (ver `scripts/netlify-build.mjs`). Después se aplicó la seguridad de `prisma/sql/supabase-setup.sql`: RLS, triggers de `auth.users`, bucket y Realtime.
+  - Para cambiar el esquema más adelante hay dos caminos:
+    - Pon `DB_BOOTSTRAP=1` en Netlify durante una publicación; `db push` aplica los cambios que no borran datos.
+    - O pasa a migraciones: crea `prisma/migrations/0_init` con `prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script` y márcala como aplicada con `prisma migrate resolve --applied 0_init`.
+- **Tareas programadas:** las mismas de `npm run db:cron`, ya creadas en Supabase con pg_cron y pg_net. La URL y el `CRON_SECRET` están en Vault.
+- **Código y CI:** repositorio privado `kevinmujica782-eng/omniagent`.
+  - **CI:** revisa tipos, corre las pruebas y compila en cada push.
+  - **Publicar en Netlify:** sube el código a Netlify y lo compila allá. Pide el `proxy_path` que entrega la herramienta *deploy-site* del MCP de Netlify; ese valor vence pronto. Para publicar sin ese paso, conecta el repositorio desde Netlify (*Project configuration → Build & deploy → Link repository*) y cada push a `main` se publica solo.
+  - **Simular compilación de Netlify:** repite la instalación y la compilación en GitHub y deja los errores como anotaciones.
+  - **App de Android:** compila el `.aab` (Google Play) y el `.apk` (instalar directo) firmados con la llave de subida `mobile/keystore/omniagent-upload.p12`.
+    - El archivo de la llave está cifrado en el repositorio. Su contraseña no se guarda ahí: va en el secreto `ANDROID_KEYSTORE_PASSWORD` o en el campo `keystore_password` al correr el workflow.
+    - El `versionCode` es el número de corrida, así que cada compilación sube de versión.
+
 ## 2. Opción A: Vercel
 
 1. **Importa el repositorio** en Vercel. Detecta Next.js solo; el comando de build (`npm run build`) ya genera el cliente de Prisma.

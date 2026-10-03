@@ -30,7 +30,8 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  # Escribe solo la rama "builds" con el último .aab y .apk (para descargarlos con git, sin el panel de Actions).
+  contents: write
 
 jobs:
   build:
@@ -142,3 +143,18 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 30
+
+      - name: Dejar el .aab y el .apk en la rama builds
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd dist
+          git init -q -b builds
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          printf 'OmniAgent %s (versionCode %s)\n' "$VERSION_NAME" "$RUN_NUMBER" > LEEME.txt
+          git add -A
+          git commit -q -m "Android $VERSION_NAME (versionCode $RUN_NUMBER)"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" builds
