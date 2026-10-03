@@ -4,13 +4,10 @@
 # y, si quieres aprobar cada migración a mano, añade revisores obligatorios a ese entorno.
 name: Migrar base de datos
 
+# Solo a mano (Actions → Migrar base de datos → Run workflow) mientras no exista el secreto DIRECT_URL. Cuando lo
+# configures, puedes volver a activar el disparo automático al subir migraciones (push a main con prisma/migrations/**).
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - prisma/migrations/**
-      - prisma/sql/supabase-setup.sql
 
 concurrency:
   group: migrate-production

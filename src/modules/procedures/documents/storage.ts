@@ -48,7 +48,8 @@ export async function putObject(
 ): Promise<void> {
   if (input.bytes.byteLength > MAX_DOCUMENT_BYTES) throw Errors.badRequest("El archivo supera los 10 MB.");
   if (driver === "database") {
-    await prisma.documentBlob.create({ data: { documentId: input.documentId, bytes: input.bytes } });
+    // Prisma pide un Uint8Array respaldado por ArrayBuffer: la copia lo garantiza.
+    await prisma.documentBlob.create({ data: { documentId: input.documentId, bytes: new Uint8Array(input.bytes) } });
     return;
   }
   const { base, headers } = supabaseStorage();

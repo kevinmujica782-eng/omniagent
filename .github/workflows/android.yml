@@ -1,13 +1,12 @@
 # App de Android: genera el proyecto nativo con Capacitor (modo hosted: abre la web publicada), los íconos y la pantalla
 # de carga, y compila el .aab firmado para Google Play y un .apk firmado para instalar directo en un teléfono.
 #
-# Secretos del repositorio (Settings → Secrets and variables → Actions):
-#   ANDROID_KEYSTORE_BASE64   llave de subida (.jks) en base64
-#   ANDROID_KEYSTORE_PASSWORD contraseña de la llave (la misma para el almacén y la clave)
-#   ANDROID_KEY_ALIAS         alias de la clave (omniagent)
-# Variables (Settings → Secrets and variables → Actions → Variables):
-#   CAP_SERVER_URL            URL pública HTTPS de la web (por ejemplo https://omniagent.netlify.app)
-#   NEXT_PUBLIC_REVENUECAT_ANDROID_KEY no se usa aquí: va en el hosting de la web, que es lo que abre la app.
+# Llave de subida de Google Play: mobile/keystore/omniagent-upload.p12 (PKCS12 cifrado; sin su contraseña no sirve).
+# La contraseña NO está en el repositorio. Dos formas de darla:
+#   - Secreto del repositorio ANDROID_KEYSTORE_PASSWORD (Settings → Secrets and variables → Actions), recomendado.
+#   - O el campo "keystore_password" al correr el workflow (se lee del evento y se oculta en los logs).
+# Opcional: secreto ANDROID_KEYSTORE_BASE64 para usar otra llave en lugar del archivo del repositorio.
+# La web que abre la app: campo server_url o variable CAP_SERVER_URL (Settings → Secrets and variables → Variables).
 name: App de Android
 
 on:
@@ -19,6 +18,10 @@ on:
         default: "1.0.0"
       server_url:
         description: "URL de la web (vacío = variable CAP_SERVER_URL)"
+        required: false
+        default: "https://omniagent-app.netlify.app"
+      keystore_password:
+        description: "Contraseña de la llave (vacío = secreto ANDROID_KEYSTORE_PASSWORD)"
         required: false
         default: ""
 
@@ -49,15 +52,29 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Revisar configuración
+      - name: Llave de firma y URL
         env:
-          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SECRET_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          SECRET_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           case "$CAP_SERVER_URL" in
             https://*) echo "La app abrirá $CAP_SERVER_URL" ;;
             *) echo "::error::Falta CAP_SERVER_URL (https://...)"; exit 1 ;;
           esac
-          if [ -z "$KEYSTORE" ]; then echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64"; exit 1; fi
+          # La contraseña del formulario se lee del evento (no del texto del script) y se oculta antes de usarla.
+          password="$SECRET_PASSWORD"
+          if [ -z "$password" ]; then password=$(jq -r '.inputs.keystore_password // empty' "$GITHUB_EVENT_PATH"); fi
+          if [ -z "$password" ]; then echo "::error::Falta la contraseña de la llave (secreto ANDROID_KEYSTORE_PASSWORD o campo keystore_password)"; exit 1; fi
+          echo "::add-mask::$password"
+          store="$RUNNER_TEMP/upload.p12"
+          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > "$store"; else cp mobile/keystore/omniagent-upload.p12 "$store"; fi
+          keytool -list -keystore "$store" -storetype PKCS12 -storepass "$password" > /dev/null || { echo "::error::La contraseña no abre la llave"; exit 1; }
+          {
+            echo "ANDROID_KEYSTORE_PATH=$store"
+            echo "ANDROID_KEYSTORE_PASSWORD=$password"
+            echo "ANDROID_KEY_ALIAS=${SECRET_ALIAS:-omniagent}"
+          } >> "$GITHUB_ENV"
 
       - name: Instalar dependencias
         run: |
@@ -91,6 +108,7 @@ jobs:
               signingConfigs {
                   upload {
                       storeFile file(System.getenv("ANDROID_KEYSTORE_PATH"))
+                      storeType "pkcs12"
                       storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
                       keyAlias System.getenv("ANDROID_KEY_ALIAS")
                       keyPassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
@@ -107,13 +125,7 @@ jobs:
 
       - name: Compilar
         working-directory: android
-        env:
-          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          export ANDROID_KEYSTORE_PATH="$RUNNER_TEMP/upload.jks"
-          echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$ANDROID_KEYSTORE_PATH"
           chmod +x gradlew
           ./gradlew --no-daemon bundleRelease assembleRelease
           rm -f "$ANDROID_KEYSTORE_PATH"
