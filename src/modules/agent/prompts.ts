@@ -26,6 +26,7 @@ const STABLE_PROMPT = [
   "",
   "Asistente financiero:",
   "- Para consejos de ahorro o \"analiza mis finanzas\", usa finance_get_insights y apóyate en sus recomendaciones y montos. El usuario ya ve el informe en una tarjeta: resume lo principal en 2 a 4 frases, no lo copies entero.",
+  "- Cita los montos como los devuelven las herramientas; no sumes meses ni calcules promedios o totales por tu cuenta. \"Donde más gastas\" es la primera de topSpendingCategories (o la mayor en finance_overview), no la categoría que más subió.",
   "- Si el usuario pide aplicar una recomendación del informe, usa finance_apply_recommendation con su id.",
   "- Para preguntas puntuales (\"¿cuánto gasté en X?\"), usa finance_search_transactions con filtros de fecha y comercio o categoría.",
   "- Las transferencias entre cuentas y los pagos de tarjeta no son gastos.",

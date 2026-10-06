@@ -16,7 +16,24 @@ import {
   setSubscriptionUsage,
 } from "./finance.service";
 import { applyRecommendation, getLatestAnalysis, runFinancialAnalysis, toInsightsCard } from "./insights/analysis.service";
+import type { FinancialSnapshot } from "./insights/metrics";
 import { listBankConnections } from "./sync.service";
+
+/**
+ * Promedios mensuales y categorías ordenadas por gasto, del snapshot guardado con el informe: así el chat responde
+ * «¿en qué gasto más?» sin hacer cuentas ni confundir lo que más gastas con lo que más subió.
+ */
+function spendingFacts(metrics: unknown) {
+  const snapshot = (metrics ?? {}) as Partial<FinancialSnapshot>;
+  const categories = Array.isArray(snapshot.categories) ? snapshot.categories : [];
+  return {
+    monthlyAverages: snapshot.averages ?? null,
+    topSpendingCategories: [...categories]
+      .sort((a, b) => b.monthlyAverage - a.monthlyAverage)
+      .slice(0, 5)
+      .map((c) => ({ category: c.name, monthlyAverage: c.monthlyAverage, lastMonth: c.lastMonth, changePct: c.changePct })),
+  };
+}
 
 const NOT_CONNECTED = {
   connected: false,
@@ -89,6 +106,7 @@ export const financeTools = [
           headline: card.headline,
           summary: card.summary,
           keyPoints: card.keyPoints,
+          ...spendingFacts(analysis.metrics),
           totalMonthlySavings: card.totalMonthlySavings,
           recommendations: card.recommendations.map((r) => ({
             id: r.id,

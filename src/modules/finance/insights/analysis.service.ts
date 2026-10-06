@@ -19,7 +19,15 @@ import { listBudgets, upsertBudget } from "../budgets.service";
 import { proposeSubscriptionCancellation } from "../cancellation";
 import { loadTransactions } from "../finance.service";
 import { ANALYSIS_DAYS, buildSnapshot, type FinancialSnapshot } from "./metrics";
-import { ANALYST_SYSTEM_PROMPT, REPORT_TOOL_NAME, buildAnalysisPrompt, draftFromModel, reportSchema } from "./report";
+import {
+  ANALYST_SYSTEM_PROMPT,
+  REPORT_TOOL_NAME,
+  buildAnalysisPrompt,
+  draftFromModel,
+  findUnsupportedAmounts,
+  reportSchema,
+  unsupportedAmountsFeedback,
+} from "./report";
 import { buildCandidates, rulesReport, type AnalysisDraft, type Candidate } from "./rules";
 
 // Servicio de IA del asistente financiero:
@@ -69,7 +77,14 @@ export async function loadSnapshot(userId: string, timeZone?: string): Promise<F
   });
 }
 
-/** Pide el informe a Claude con salida estructurada (tool use forzado). Exportada para probarla con un cliente simulado. */
+/** Intentos del modelo: el primero y, si cita montos que no están en los datos, uno para corregirlos. */
+const REPORT_ATTEMPTS = 2;
+
+/**
+ * Pide el informe a Claude con salida estructurada (tool use forzado) y revisa cada monto contra los datos.
+ * Si alguno no sale de ellos, le pide una corrección; si sigue mal, lanza y se usa el informe por reglas.
+ * Exportada para probarla con un cliente simulado.
+ */
 export async function generateWithClaude(snapshot: FinancialSnapshot, candidates: Candidate[], model: string) {
   const schema = z.toJSONSchema(reportSchema, { io: "input" }) as Record<string, unknown>;
   delete schema.$schema;
@@ -79,26 +94,39 @@ export async function generateWithClaude(snapshot: FinancialSnapshot, candidates
     input_schema: schema as unknown as Anthropic.Tool["input_schema"],
   };
 
-  const response = await anthropic().messages.create({
-    model,
-    max_tokens: 2000,
-    system: [{ type: "text", text: ANALYST_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    tools: [tool],
-    // Salida estructurada: el modelo debe responder llamando a la herramienta con el esquema del informe.
-    tool_choice: { type: "tool", name: REPORT_TOOL_NAME },
-    messages: [{ role: "user", content: buildAnalysisPrompt(snapshot, candidates) }],
-  });
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: buildAnalysisPrompt(snapshot, candidates) }];
+  const usage = { input: 0, output: 0 };
+  for (let attempt = 1; ; attempt++) {
+    const response = await anthropic().messages.create({
+      model,
+      max_tokens: 2000,
+      system: [{ type: "text", text: ANALYST_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+      tools: [tool],
+      // Salida estructurada: el modelo debe responder llamando a la herramienta con el esquema del informe.
+      tool_choice: { type: "tool", name: REPORT_TOOL_NAME },
+      messages,
+    });
+    usage.input += response.usage.input_tokens;
+    usage.output += response.usage.output_tokens;
 
-  const block = response.content.find((b) => b.type === "tool_use" && b.name === REPORT_TOOL_NAME);
-  if (!block || block.type !== "tool_use") throw new Error("El modelo no devolvió el informe.");
-  const parsed = reportSchema.safeParse(block.input);
-  if (!parsed.success) {
-    throw new Error(`Informe inválido: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
+    const block = response.content.find((b) => b.type === "tool_use" && b.name === REPORT_TOOL_NAME);
+    if (!block || block.type !== "tool_use") throw new Error("El modelo no devolvió el informe.");
+    const parsed = reportSchema.safeParse(block.input);
+    if (!parsed.success) {
+      throw new Error(`Informe inválido: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
+    }
+
+    const unsupported = findUnsupportedAmounts(parsed.data, snapshot, candidates);
+    if (unsupported.length === 0) return { draft: draftFromModel(parsed.data, candidates, snapshot), usage };
+    if (attempt >= REPORT_ATTEMPTS) throw new Error(`El informe cita montos que no salen de los datos: ${unsupported.join(", ")}`);
+
+    console.warn("[finance] el informe citó montos que no están en los datos; se pide corregirlo", unsupported);
+    messages.push({ role: "assistant", content: [{ type: "tool_use", id: block.id, name: block.name, input: block.input }] });
+    messages.push({
+      role: "user",
+      content: [{ type: "tool_result", tool_use_id: block.id, is_error: true, content: unsupportedAmountsFeedback(unsupported) }],
+    });
   }
-  return {
-    draft: draftFromModel(parsed.data, candidates, snapshot),
-    usage: { input: response.usage.input_tokens, output: response.usage.output_tokens },
-  };
 }
 
 function waitLabel(minutes: number): string {
