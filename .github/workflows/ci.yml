@@ -1,4 +1,5 @@
-# Integración continua: tipos, pruebas unitarias y compilación de producción en cada cambio;
+# Integración continua: tipos, pruebas unitarias, compilación de producción y el correo real (IMAP/SMTP contra un
+# servidor de prueba) en cada cambio;
 # en main, además, se comprueba que la imagen de Docker compila y arranca.
 name: CI
 
@@ -53,6 +54,46 @@ jobs:
 
       - name: Compilar para producción
         run: npm run build
+
+  mail:
+    name: Correo real (IMAP/SMTP) con un servidor de prueba
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # Servidor de correo de prueba: IMAPS en 993 y SMTPS en 465 (como Gmail), SMTP sin TLS en 3025 para sembrar.
+      greenmail:
+        image: greenmail/standalone:2.1.13
+        env:
+          GREENMAIL_OPTS: "-Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled -Dgreenmail.verbose"
+        ports:
+          - 3025:3025
+          - 993:3993
+          - 465:3465
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package*.json
+
+      - name: Instalar dependencias
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      - name: Esperar al servidor de correo
+        run: |
+          for i in $(seq 1 45); do
+            if nc -z 127.0.0.1 993 && nc -z 127.0.0.1 465 && nc -z 127.0.0.1 3025; then exit 0; fi
+            sleep 2
+          done
+          echo "::error::El servidor de correo de prueba no arrancó"; exit 1
+
+      - name: Leer, bajar adjuntos, sincronizar y enviar
+        env:
+          MAIL_TEST_INSECURE_LOCAL: "1"
+        run: npx vitest run --config vitest.integration.config.mts
 
   docker:
     name: Imagen de Docker

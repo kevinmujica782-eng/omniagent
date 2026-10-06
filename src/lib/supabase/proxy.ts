@@ -2,8 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseEnv } from "./config";
 
-// Las páginas legales son públicas: Google Play las enlaza en la ficha y deben abrir sin sesión.
-const PUBLIC_PREFIXES = ["/login", "/auth", "/bot", "/privacidad", "/terminos", "/eliminar-cuenta"];
+// Las páginas legales y la de descarga de la app son públicas: se comparten y deben abrir sin sesión.
+const PUBLIC_PREFIXES = ["/login", "/auth", "/bot", "/privacidad", "/terminos", "/eliminar-cuenta", "/descargar"];
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;

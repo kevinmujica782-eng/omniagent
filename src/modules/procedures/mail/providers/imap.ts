@@ -76,7 +76,20 @@ function toAppError(error: unknown, phase: "imap" | "smtp", service: MailService
   return new AppError(502, "mail_unreachable", message);
 }
 
+/**
+ * Solo para la prueba de integración de CI (tests/integration): un servidor de correo local con certificado propio.
+ * Exige NODE_ENV=test (en producción y en desarrollo nunca se activa).
+ */
+function localTestServer(): boolean {
+  return process.env.NODE_ENV === "test" && process.env.MAIL_TEST_INSECURE_LOCAL === "1";
+}
+
+function tlsOptions(servername: string) {
+  return { servername, minVersion: "TLSv1.2" as const, ...(localTestServer() ? { rejectUnauthorized: false } : {}) };
+}
+
 async function resolveServer(server: MailServer, kind: "imap" | "smtp"): Promise<{ host: string; address: string }> {
+  if (localTestServer() && server.host === "localhost") return { host: "localhost", address: "127.0.0.1" };
   const host = normalizeMailHost(server.host);
   const label = kind === "imap" ? "IMAP" : "SMTP";
   if (!host) throw Errors.badRequest(`El servidor ${label} no es válido.`);
@@ -107,7 +120,7 @@ async function openImap(credentials: ImapCredentials): Promise<ImapSession> {
     connectionTimeout: 12_000,
     greetingTimeout: 10_000,
     socketTimeout: 45_000,
-    tls: { servername: target.host, minVersion: "TLSv1.2" },
+    tls: tlsOptions(target.host),
   };
   const client = new ImapFlow(options as unknown as ConstructorParameters<typeof ImapFlow>[0]) as unknown as ImapSession;
   // Sin oyente, un error del socket después de conectar tumbaría el proceso.
@@ -151,7 +164,7 @@ function smtpTransport(credentials: ImapCredentials, target: { host: string; add
     secure: implicitTls,
     requireTLS: !implicitTls,
     auth: { user: credentials.user, pass: credentials.pass },
-    tls: { servername: target.host, minVersion: "TLSv1.2" },
+    tls: tlsOptions(target.host),
     connectionTimeout: 12_000,
     greetingTimeout: 10_000,
     socketTimeout: 30_000,

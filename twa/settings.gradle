@@ -1,0 +1,18 @@
+// App de Android para clientes: Trusted Web Activity (TWA). Abre la web publicada en Chrome a pantalla completa,
+// con las notificaciones push y los pagos de la web. La compila .github/workflows/twa.yml.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "OmniAgentTWA"
+include ":app"

@@ -166,9 +166,14 @@ export function Landing() {
           <OmniMark size={32} />
           <span className="text-lg font-semibold tracking-tight text-ink">OmniAgent</span>
         </Link>
-        <ButtonLink href="/login" variant="secondary" size="sm">
-          Entrar
-        </ButtonLink>
+        <nav className="flex items-center gap-2">
+          <Link href="/descargar" className="px-2 text-sm font-semibold text-primary underline-offset-2 hover:underline">
+            Descargar app
+          </Link>
+          <ButtonLink href="/login" variant="secondary" size="sm">
+            Entrar
+          </ButtonLink>
+        </nav>
       </header>
 
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-4 pb-20 pt-8 sm:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:pt-14">
@@ -188,7 +193,13 @@ export function Landing() {
               Cómo funciona
             </a>
           </div>
-          <p className="mt-4 text-sm text-muted">En la web y en Android. Sin tarjeta para empezar.</p>
+          <p className="mt-4 text-sm text-muted">
+            En la web, Android y iPhone.{" "}
+            <Link href="/descargar" className="font-semibold text-primary underline-offset-2 hover:underline">
+              Descarga la app
+            </Link>
+            . Sin tarjeta para empezar.
+          </p>
         </div>
         <div className="mx-auto w-full max-w-md">
           <MessageBubble
@@ -263,7 +274,10 @@ export function Landing() {
             }
           />
         </div>
-        <p className="mt-4 text-sm text-muted">En Android, Pro se paga con Google Play. Cancela cuando quieras.</p>
+        <p className="mt-4 text-sm text-muted">
+          Pro se paga con Binance Pay: con el saldo de tu cuenta Binance, el mismo de tu tarjeta Binance Visa. Pagas mes a mes y
+          no se renueva solo.
+        </p>
       </section>
 
       <footer className="border-t border-line">

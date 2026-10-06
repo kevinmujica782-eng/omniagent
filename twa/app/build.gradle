@@ -1,0 +1,54 @@
+plugins {
+    id "com.android.application"
+}
+
+// Web que abre la app. Se puede cambiar al compilar: TWA_HOST=midominio.com
+def twaHost = System.getenv("TWA_HOST") ?: "omniagent-app.netlify.app"
+
+android {
+    namespace "com.omniagent.twa"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.omniagent.twa"
+        minSdk 23
+        targetSdk 35
+        versionCode((System.getenv("TWA_VERSION_CODE") ?: "1").toInteger())
+        versionName(System.getenv("TWA_VERSION_NAME") ?: "1.0.0")
+        manifestPlaceholders = [hostName: twaHost, launchUrl: "https://" + twaHost + "/inicio"]
+        resValue "string", "asset_statements",
+            "[{\\\"relation\\\": [\\\"delegate_permission/common.handle_all_urls\\\"], \\\"target\\\": {\\\"namespace\\\": \\\"web\\\", \\\"site\\\": \\\"https://" + twaHost + "\\\"}}]"
+    }
+
+    // La llave la crea el workflow en cada compilación y nunca se guarda (ver .github/workflows/twa.yml).
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("TWA_KEYSTORE_PATH") ?: "sin-llave.p12")
+            storeType "pkcs12"
+            storePassword System.getenv("TWA_KEYSTORE_PASSWORD")
+            keyAlias "omniagent"
+            keyPassword System.getenv("TWA_KEYSTORE_PASSWORD")
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0"
+}

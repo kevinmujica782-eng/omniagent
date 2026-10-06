@@ -1,0 +1,142 @@
+# App de Android para clientes (archivo .apk, sin Google Play): una Trusted Web Activity que abre la web publicada en
+# Chrome a pantalla completa, con notificaciones push y los pagos de la web (Binance Pay). El proyecto está en twa/.
+#
+# La llave de firma se crea en cada compilación y nunca se guarda ni se sube. Como la app solo abre la web, las
+# novedades llegan solas al publicar la web: el .apk casi nunca cambia. Si se compila otro, quien tenga el anterior
+# lo desinstala e instala el nuevo (la firma es distinta).
+#
+# Al terminar:
+#   - public/descargas/OmniAgent.apk → la web lo sirve en /descargas/OmniAgent.apk (página /descargar).
+#   - public/.well-known/assetlinks.json → con la huella de la llave, para abrir a pantalla completa (sin barra).
+#   - Release «app-android» del repositorio con el .apk.
+name: App Android para clientes (.apk)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Versión visible"
+        required: true
+        default: "1.0.0"
+      host:
+        description: "Dominio de la web que abre la app"
+        required: true
+        default: "omniagent-app.netlify.app"
+
+concurrency:
+  group: twa-apk
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compilar y publicar el .apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TWA_HOST: ${{ inputs.host }}
+      TWA_VERSION_NAME: ${{ inputs.version_name }}
+      TWA_VERSION_CODE: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Revisar el dominio
+        run: |
+          if ! printf '%s' "$TWA_HOST" | grep -Eq '^[a-z0-9.-]+\.[a-z]{2,}$'; then
+            echo "::error::Dominio no válido: $TWA_HOST"; exit 1
+          fi
+
+      - name: Llave de firma nueva (no se guarda)
+        run: |
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          store="$RUNNER_TEMP/twa.p12"
+          keytool -genkeypair -keystore "$store" -storetype PKCS12 -storepass "$password" -keypass "$password" \
+            -alias omniagent -keyalg RSA -keysize 3072 -validity 10000 -dname "CN=OmniAgent, O=OmniAgent"
+          fingerprint=$(keytool -list -v -keystore "$store" -storetype PKCS12 -storepass "$password" -alias omniagent \
+            | sed -n 's/^[[:space:]]*SHA256: //p' | head -1)
+          if ! printf '%s' "$fingerprint" | grep -Eq '^([0-9A-F]{2}:){31}[0-9A-F]{2}$'; then
+            echo "::error::No se pudo leer la huella SHA-256 de la llave"; exit 1
+          fi
+          {
+            echo "TWA_KEYSTORE_PATH=$store"
+            echo "TWA_KEYSTORE_PASSWORD=$password"
+            echo "TWA_FINGERPRINT=$fingerprint"
+          } >> "$GITHUB_ENV"
+          echo "Huella de la llave: $fingerprint"
+
+      - name: Compilar
+        working-directory: twa
+        run: |
+          gradle --no-daemon assembleRelease
+          rm -f "$TWA_KEYSTORE_PATH"
+          apk=app/build/outputs/apk/release/app-release.apk
+          test -f "$apk"
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$apk" "$GITHUB_WORKSPACE/dist/OmniAgent.apk"
+          ls -la "$GITHUB_WORKSPACE/dist"
+          sha256sum "$GITHUB_WORKSPACE/dist/OmniAgent.apk"
+
+      - name: Guardar el .apk en Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: OmniAgent-apk-${{ inputs.version_name }}-${{ github.run_number }}
+          path: dist/OmniAgent.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publicar en la web (apk y assetlinks)
+        env:
+          PACKAGE: com.omniagent.twa
+        run: |
+          mkdir -p public/descargas public/.well-known
+          cp dist/OmniAgent.apk public/descargas/OmniAgent.apk
+          # Se conservan las huellas anteriores (las apps ya instaladas siguen a pantalla completa); máximo 5.
+          node -e '
+            const fs = require("fs");
+            const file = "public/.well-known/assetlinks.json";
+            const pkg = process.env.PACKAGE;
+            let list = [];
+            try { list = JSON.parse(fs.readFileSync(file, "utf8")); } catch {}
+            const entry = list.find((s) => s.target && s.target.package_name === pkg);
+            const previous = entry ? entry.target.sha256_cert_fingerprints : [];
+            const prints = [process.env.TWA_FINGERPRINT, ...previous.filter((f) => f !== process.env.TWA_FINGERPRINT)].slice(0, 5);
+            const others = list.filter((s) => !(s.target && s.target.package_name === pkg));
+            const next = [...others, {
+              relation: ["delegate_permission/common.handle_all_urls"],
+              target: { namespace: "android_app", package_name: pkg, sha256_cert_fingerprints: prints },
+            }];
+            fs.writeFileSync(file, JSON.stringify(next, null, 2) + "\n");
+          '
+          cat public/.well-known/assetlinks.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/descargas/OmniAgent.apk public/.well-known/assetlinks.json
+          git commit -q -m "App Android ${TWA_VERSION_NAME} (${TWA_VERSION_CODE}) para descargar desde la web"
+          for attempt in 1 2 3; do
+            git pull -q --rebase origin "${GITHUB_REF_NAME}" && git push -q origin "HEAD:${GITHUB_REF_NAME}" && break
+            sleep 5
+          done
+
+      - name: Release del repositorio
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes="OmniAgent ${TWA_VERSION_NAME} para Android (versionCode ${TWA_VERSION_CODE}). Abre https://${TWA_HOST}. Huella SHA-256: ${TWA_FINGERPRINT}"
+          if gh release view app-android > /dev/null 2>&1; then
+            gh release upload app-android dist/OmniAgent.apk --clobber
+            gh release edit app-android --title "OmniAgent para Android ${TWA_VERSION_NAME}" --notes "$notes"
+          else
+            gh release create app-android dist/OmniAgent.apk --title "OmniAgent para Android ${TWA_VERSION_NAME}" --notes "$notes" --latest
+          fi
