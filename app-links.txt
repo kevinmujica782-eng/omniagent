@@ -1,0 +1,5 @@
+  com.omniagent.twa:
+    ID: 1cc1f1ca-1db4-4847-a91a-de4dafc36540
+    Signatures: [DF:11:09:DF:93:26:F6:51:BB:3D:F8:BE:71:D4:F0:2E:17:05:46:A5:D8:4A:42:DC:E8:CD:11:E3:24:96:55:3A]
+    Domain verification state:
+      omniagent-app.netlify.app: none
