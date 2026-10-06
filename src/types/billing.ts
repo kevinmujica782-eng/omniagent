@@ -15,7 +15,7 @@ export interface BillingOverview {
   plan: PlanId;
   planName: string;
   priceLabel: string;
-  source: "STRIPE" | "REVENUECAT" | null;
+  source: "STRIPE" | "REVENUECAT" | "BINANCE" | null;
   status: string | null;
   renewsAt: string | null;
   cancelAtPeriodEnd: boolean;
@@ -31,4 +31,6 @@ export interface BillingOverview {
   };
   /** El pago de la web está configurado (STRIPE_SECRET_KEY y el precio de Pro). */
   checkoutAvailable: boolean;
+  /** Binance Pay está configurado: es la forma de pago en la web y en la app (sin Google Play). */
+  binanceAvailable: boolean;
 }

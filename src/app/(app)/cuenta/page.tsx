@@ -10,7 +10,11 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 export default async function AccountPage({ searchParams }: { searchParams: SearchParams }) {
   const user = await requireUser();
   const params = await searchParams;
-  const notice = params.checkout === "success" ? "success" : params.checkout === "cancel" ? "cancel" : null;
+  // Binance Pay vuelve con ?binance=<orden> o ?binance=cancelado (admite un solo parámetro en cada URL de vuelta).
+  const binance = typeof params.binance === "string" ? params.binance : null;
+  const binanceOrder = binance && binance !== "cancelado" && /^[A-Za-z0-9]{1,32}$/.test(binance) ? binance : null;
+  const notice =
+    params.checkout === "success" ? "success" : params.checkout === "cancel" || binance === "cancelado" ? "cancel" : null;
   const sessionId = typeof params.session_id === "string" ? params.session_id : null;
 
   const profile = await ensureProfile(user);
@@ -22,6 +26,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Sear
       billing={billing}
       notice={notice}
       checkoutSessionId={sessionId}
+      binanceOrder={binanceOrder}
     />
   );
 }

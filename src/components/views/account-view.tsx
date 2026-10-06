@@ -1,6 +1,7 @@
 import { Check, ChevronRight, FileText, Lock, LogOut, Mail, ShieldCheck, Sparkles, UserX, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { ActionButton } from "@/components/action-button";
+import { BinanceRenewButton, BinanceReturn } from "@/components/binance-pay";
 import { UpgradeButton } from "@/components/upgrade-sheet";
 import { CheckoutReturn } from "@/components/checkout-return";
 import { DeleteAccountSection } from "@/components/delete-account";
@@ -77,6 +78,7 @@ export function AccountView({
   billing,
   notice = null,
   checkoutSessionId = null,
+  binanceOrder = null,
   preview = false,
   deleteOpen = false,
 }: {
@@ -84,6 +86,8 @@ export function AccountView({
   billing: BillingOverview;
   notice?: "success" | "cancel" | null;
   checkoutSessionId?: string | null;
+  /** Orden de Binance Pay al volver del pago (?binance=<orden>). */
+  binanceOrder?: string | null;
   preview?: boolean;
   /** Solo la vista previa: abre la hoja de eliminar cuenta. */
   deleteOpen?: boolean;
@@ -94,6 +98,7 @@ export function AccountView({
     <PageBody>
       <PageHeader title="Cuenta" />
       {notice === "success" ? <CheckoutReturn sessionId={checkoutSessionId} alreadyPro={pro} /> : null}
+      {binanceOrder ? <BinanceReturn order={binanceOrder} alreadyPro={pro} /> : null}
       {notice === "cancel" ? <Notice tone="attention">No se hizo ningún cobro. Puedes pasarte a Pro cuando quieras.</Notice> : null}
 
       <Panel>
@@ -120,6 +125,10 @@ export function AccountView({
             <p className="mt-3 rounded-xl bg-attention-soft px-3 py-2.5 text-sm font-medium text-attention">
               Cancelaste la renovación: Pro sigue hasta el {shortDate(billing.renewsAt)}.
             </p>
+          ) : pro && billing.source === "BINANCE" && billing.renewsAt ? (
+            <p className="mt-2 text-sm text-muted">
+              Pagado con Binance Pay hasta el {shortDate(billing.renewsAt)}. No se renueva solo: te avisamos antes de que venza.
+            </p>
           ) : pro && billing.renewsAt ? (
             <p className="mt-2 text-sm text-muted">Se renueva el {shortDate(billing.renewsAt)}.</p>
           ) : null}
@@ -131,8 +140,10 @@ export function AccountView({
           </div>
           <div className="mt-5">
             {!pro ? (
-              // La pantalla de Pro compara los planes y cobra con Stripe (web) o Google Play (Android).
+              // La pantalla de Pro compara los planes y cobra con Binance Pay, Stripe (web) o Google Play (Android).
               <UpgradeButton>Desbloquear Omni Pro</UpgradeButton>
+            ) : billing.source === "BINANCE" ? (
+              <BinanceRenewButton preview={preview} />
             ) : billing.source === "STRIPE" ? (
               preview ? (
                 <span className={buttonClass("secondary")}>Administrar suscripción</span>

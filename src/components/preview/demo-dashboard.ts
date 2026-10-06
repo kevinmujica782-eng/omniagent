@@ -43,6 +43,7 @@ function billingFor(plan: PlanId, usage: { messages: number; watching: number; f
       goals: { used: usage.goals, limit: limits.activeGoals },
     },
     checkoutAvailable: true,
+    binanceAvailable: true,
   };
 }
 

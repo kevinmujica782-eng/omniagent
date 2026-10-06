@@ -20,14 +20,15 @@ export function checkConfig(env: Env, production: boolean): ConfigReport {
     report.critical.push("SUPABASE_SECRET_KEY (DOCUMENT_STORAGE=supabase)");
   }
 
-  // Stripe va completo o no va: con la mitad, el pago abre pero Pro nunca se activa.
+  // Cada pasarela va completa o no va: con la mitad, el pago abre (o ni se firma) pero Pro nunca se activa.
   const stripe = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO_MONTHLY"];
   const stripeSet = stripe.filter((key) => present(env, key));
-  if (stripeSet.length > 0 && stripeSet.length < stripe.length) {
-    report.critical.push(...stripe.filter((key) => !present(env, key)));
-  } else if (stripeSet.length === 0) {
-    report.recommended.push("STRIPE_SECRET_KEY");
-  }
+  if (stripeSet.length > 0 && stripeSet.length < stripe.length) report.critical.push(...stripe.filter((key) => !present(env, key)));
+  const binance = ["BINANCE_PAY_API_KEY", "BINANCE_PAY_SECRET_KEY"];
+  const binanceSet = binance.filter((key) => present(env, key));
+  if (binanceSet.length === 1) report.critical.push(...binance.filter((key) => !present(env, key)));
+  // Sin ninguna pasarela, nadie puede pagar Pro.
+  if (stripeSet.length === 0 && binanceSet.length === 0) report.recommended.push("BINANCE_PAY_API_KEY");
   if (present(env, "STRIPE_SECRET_KEY") && production && env.STRIPE_SECRET_KEY!.startsWith("sk_test_")) {
     report.warnings.push("Stripe está en modo de prueba (sk_test_) en producción.");
   }

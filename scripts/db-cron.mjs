@@ -15,6 +15,7 @@ const JOBS = [
   { name: "omniagent-tramites", schedule: "35 * * * *", path: "/api/cron/procedures", what: "trámites, cada hora" },
   { name: "omniagent-finanzas", schedule: "0 11 * * *", path: "/api/cron/finance", what: "finanzas, cada día 11:00 UTC" },
   { name: "omniagent-devoluciones", schedule: "45 * * * *", path: "/api/cron/returns", what: "devoluciones, cada hora" },
+  { name: "omniagent-cobros", schedule: "25 * * * *", path: "/api/cron/billing", what: "vencimientos y avisos de Binance Pay, cada hora" },
 ];
 const URL_SECRET = "omniagent_app_url";
 const CRON_SECRET_NAME = "omniagent_cron_secret";

@@ -12,14 +12,17 @@ import { autopilotPerMonth, paywallRows, rowForLimit, type PaywallRow } from "@/
 import { PLANS, type PlanId } from "@/modules/billing/plans";
 
 // Pantalla de Omni Pro (paywall). Siempre oscura (clase theme-dark), a pantalla completa en el teléfono y en dos
-// columnas en pantallas grandes. Los números salen de PLANS; el botón usa la pasarela que corresponde: Stripe en la
-// web y Google Play (RevenueCat) en la app de Android.
+// columnas en pantallas grandes. Los números salen de PLANS; el botón usa la pasarela que corresponde: Binance Pay
+// cuando está configurado (web y app); si no, Stripe en la web y Google Play (RevenueCat) en la app de Android.
 
 const FREE = PLANS.FREE;
 const PRO = PLANS.PRO;
 
 type Phase = "idle" | "paying" | "confirming" | "active";
-type BillingState = { plan: PlanId; checkoutAvailable: boolean };
+type BillingState = { plan: PlanId; checkoutAvailable: boolean; binanceAvailable: boolean };
+
+/** Un mes de Pro en USDT con Binance Pay: el mismo número que el precio en dólares ("$19.99" → "19.99 USDT"). */
+const USDT_PRICE = `${PRO.price.replace(/[^\d.]/g, "")} USDT`;
 
 const FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
@@ -39,7 +42,9 @@ export function Paywall({ request, onClose, userId = null, preview = false, init
   const titleId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [channel, setChannel] = useState<PurchaseChannel>("stripe");
-  const [billing, setBilling] = useState<BillingState | null>(initialPlan ? { plan: initialPlan, checkoutAvailable: true } : null);
+  const [billing, setBilling] = useState<BillingState | null>(
+    initialPlan ? { plan: initialPlan, checkoutAvailable: true, binanceAvailable: true } : null,
+  );
   const [price, setPrice] = useState(PRO.price);
   const [phase, setPhase] = useState<Phase>(initialPlan === "PRO" ? "active" : "idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -59,28 +64,49 @@ export function Paywall({ request, onClose, userId = null, preview = false, init
     };
   }, []);
 
-  // El plan de verdad y, en Android, el precio que cobra Google Play en la moneda de la persona.
+  // El plan de verdad, la pasarela (Binance Pay si está configurado) y, con Google Play, el precio en la moneda local.
   useEffect(() => {
-    const current = purchaseChannel();
-    setChannel(current);
-    if (preview) return;
+    if (preview) {
+      setChannel(purchaseChannel(true));
+      setPrice(USDT_PRICE);
+      return;
+    }
+    setChannel(purchaseChannel());
     let alive = true;
     apiFetch<BillingState>("/api/v1/billing")
       .then((data) => {
         if (!alive) return;
-        setBilling({ plan: data.plan, checkoutAvailable: data.checkoutAvailable });
+        setBilling({ plan: data.plan, checkoutAvailable: data.checkoutAvailable, binanceAvailable: data.binanceAvailable });
         if (data.plan === "PRO") setPhase("active");
+        const next = purchaseChannel(data.binanceAvailable);
+        setChannel(next);
+        if (next === "binance") setPrice(USDT_PRICE);
+        if (next === "google_play") {
+          void storePrice(userId).then((value) => {
+            if (alive && value) setPrice(value);
+          });
+        }
       })
       .catch(() => undefined);
-    if (current === "google_play") {
-      void storePrice(userId).then((value) => {
-        if (alive && value) setPrice(value);
-      });
-    }
     return () => {
       alive = false;
     };
   }, [preview, userId]);
+
+  // Binance Pay se abre fuera de la app (la app de Binance o el navegador). Al volver, se revisa si Pro ya se activó.
+  useEffect(() => {
+    if (channel !== "binance" || phase !== "paying") return;
+    function onVisible() {
+      if (document.visibilityState !== "visible") return;
+      setPhase("confirming");
+      void waitForPro({ tries: 6, everyMs: 2000 }).then((active) => {
+        setPhase(active ? "active" : "idle");
+        if (!active) setMessage("Si ya pagaste en Binance, Pro se activa en unos segundos. Si no, vuelve a intentarlo.");
+      });
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [channel, phase]);
 
   function close() {
     if (busy) return;
@@ -91,18 +117,24 @@ export function Paywall({ request, onClose, userId = null, preview = false, init
   async function unlock() {
     setMessage(null);
     if (preview) {
-      setMessage(channel === "google_play" ? "Vista previa: aquí se abre el pago de Google Play." : "Vista previa: aquí se abre el pago seguro de Stripe.");
+      setMessage(
+        channel === "binance"
+          ? "Vista previa: aquí se abre el pago de Binance Pay."
+          : channel === "google_play"
+            ? "Vista previa: aquí se abre el pago de Google Play."
+            : "Vista previa: aquí se abre el pago seguro de Stripe.",
+      );
       return;
     }
     if (channel === "stripe" && billing && !billing.checkoutAvailable) {
-      setMessage("El pago con tarjeta todavía no está configurado en este entorno.");
+      setMessage("El pago todavía no está disponible. Inténtalo más tarde.");
       return;
     }
     setPhase("paying");
     try {
-      const result = await purchasePro(userId);
+      const result = await purchasePro(userId, channel);
       if (result.status === "redirect") {
-        // Se queda en "pagando" mientras el navegador abre Stripe.
+        // Se queda en "pagando" mientras se abre la pasarela (Stripe o Binance Pay).
         window.location.assign(result.url);
         return;
       }
@@ -289,10 +321,21 @@ function PlanComparison({ rows, price, highlighted }: { rows: PaywallRow[]; pric
 function TrustList({ channel, className }: { channel: PurchaseChannel; className?: string }) {
   const items: { icon: typeof Lock; text: ReactNode }[] = [
     { icon: ShieldCheck, text: "Omni no compra ni envía nada sin tu permiso, tampoco en Pro." },
-    { icon: RotateCcw, text: "Cancela cuando quieras: Pro sigue hasta el final del mes que pagaste." },
+    {
+      icon: RotateCcw,
+      text:
+        channel === "binance"
+          ? "Pagas mes a mes, sin renovación automática: te avisamos antes de que venza."
+          : "Cancela cuando quieras: Pro sigue hasta el final del mes que pagaste.",
+    },
     {
       icon: Lock,
-      text: channel === "google_play" ? "Pagas con tu cuenta de Google Play." : "Pago seguro con Stripe: Omni nunca ve tu tarjeta.",
+      text:
+        channel === "binance"
+          ? "Pagas con Binance Pay desde tu cuenta de Binance: Omni nunca ve tus datos de pago."
+          : channel === "google_play"
+            ? "Pagas con tu cuenta de Google Play."
+            : "Pago seguro con Stripe: Omni nunca ve tu tarjeta.",
     },
   ];
   return (
@@ -334,7 +377,14 @@ function CheckoutPanel({
     );
   }
   const busy = phase === "paying" || phase === "confirming";
-  const busyLabel = phase === "confirming" ? "Activando Pro…" : channel === "google_play" ? "Abriendo Google Play…" : "Abriendo el pago…";
+  const busyLabel =
+    phase === "confirming"
+      ? "Activando Pro…"
+      : channel === "binance"
+        ? "Abriendo Binance Pay…"
+        : channel === "google_play"
+          ? "Abriendo Google Play…"
+          : "Abriendo el pago…";
   return (
     <div>
       <button
@@ -346,10 +396,17 @@ function CheckoutPanel({
         {busy ? <Loader className="size-5 animate-spin" aria-hidden /> : null}
         {busy ? busyLabel : "Desbloquear Omni Pro"}
       </button>
-      <p className="mt-2.5 text-center text-[13px] leading-snug text-muted">
-        <span className="font-semibold text-ink tabular-nums">{price} al mes.</span> Se renueva cada mes hasta que canceles
-        {channel === "google_play" ? " en Google Play" : ""}.
-      </p>
+      {channel === "binance" ? (
+        <p className="mt-2.5 text-center text-[13px] leading-snug text-muted">
+          <span className="font-semibold text-ink tabular-nums">{price} por 1 mes</span> con Binance Pay. No se renueva solo:
+          te avisamos antes de que venza.
+        </p>
+      ) : (
+        <p className="mt-2.5 text-center text-[13px] leading-snug text-muted">
+          <span className="font-semibold text-ink tabular-nums">{price} al mes.</span> Se renueva cada mes hasta que canceles
+          {channel === "google_play" ? " en Google Play" : ""}.
+        </p>
+      )}
       {message ? (
         <p role="status" className="mt-3 rounded-xl bg-surface-2 px-3.5 py-2.5 text-center text-[13px] leading-snug text-ink">
           {message}

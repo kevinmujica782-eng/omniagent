@@ -43,6 +43,7 @@ export async function GET(request: Request) {
       anthropic: has(config.ANTHROPIC_API_KEY),
       stripe: has(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO_MONTHLY && config.STRIPE_WEBHOOK_SECRET),
       revenuecat: has(config.REVENUECAT_WEBHOOK_AUTH),
+      binance: has(config.BINANCE_PAY_API_KEY && config.BINANCE_PAY_SECRET_KEY),
       encryption: has(config.TOKEN_ENCRYPTION_KEY),
       cron: has(config.CRON_SECRET),
     };

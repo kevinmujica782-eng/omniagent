@@ -1,4 +1,6 @@
-// Comprar Omni Pro desde la app. Un solo punto para las dos pasarelas:
+// Comprar Omni Pro desde la app. Un solo punto para las pasarelas:
+// - Binance Pay (la principal, en la web y en la app): el servidor crea la orden y la persona paga en Binance con el
+//   saldo de su cuenta. Al volver, /cuenta confirma la orden en Binance; el webhook hace lo mismo.
 // - Web: Stripe Checkout. El servidor crea la sesión y la persona paga en la página de Stripe (Omni nunca ve la
 //   tarjeta). Al volver, /cuenta sincroniza la suscripción y el webhook hace lo mismo.
 // - App de Android: Google Play Billing con RevenueCat, como exige la política de pagos de Google Play (dentro de la
@@ -10,10 +12,10 @@ import { registerPlugin } from "@capacitor/core";
 import { apiFetch } from "@/lib/api-client";
 import { isNativeApp } from "@/lib/native";
 
-export type PurchaseChannel = "stripe" | "google_play";
+export type PurchaseChannel = "stripe" | "google_play" | "binance";
 
 export type PurchaseResult =
-  /** Stripe Checkout: hay que abrir esta URL. */
+  /** Stripe Checkout o Binance Pay: hay que abrir esta URL. */
   | { status: "redirect"; url: string }
   /** Google Play cobró; el servidor activa Pro cuando llega el aviso de RevenueCat. */
   | { status: "purchased" }
@@ -25,8 +27,16 @@ export type PurchaseResult =
 /** Un problema de la pasarela con un mensaje que sí se le puede mostrar a la persona. */
 export class PurchaseError extends Error {}
 
-export function purchaseChannel(): PurchaseChannel {
+/** Binance Pay cuando está configurado (web y app); si no, Stripe en la web y Google Play en la app de Android. */
+export function purchaseChannel(binanceAvailable = false): PurchaseChannel {
+  if (binanceAvailable) return "binance";
   return isNativeApp() ? "google_play" : "stripe";
+}
+
+/** En el teléfono, el enlace universal abre la app de Binance si está instalada; en la compu, la página de pago. */
+function binanceCheckoutUrl(order: { checkoutUrl: string; universalUrl: string | null }): string {
+  const phone = typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return phone && order.universalUrl ? order.universalUrl : order.checkoutUrl;
 }
 
 // ─── RevenueCat (plugin nativo "Purchases" de @revenuecat/purchases-capacitor) ───
@@ -88,8 +98,12 @@ export async function storePrice(userId: string | null): Promise<string | null> 
 }
 
 /** Empieza la compra de Pro con la pasarela que corresponde. */
-export async function purchasePro(userId: string | null): Promise<PurchaseResult> {
-  if (purchaseChannel() === "stripe") {
+export async function purchasePro(userId: string | null, channel: PurchaseChannel = purchaseChannel()): Promise<PurchaseResult> {
+  if (channel === "binance") {
+    const order = await apiFetch<{ checkoutUrl: string; universalUrl: string | null }>("/api/v1/billing/binance/checkout", { method: "POST" });
+    return { status: "redirect", url: binanceCheckoutUrl(order) };
+  }
+  if (channel === "stripe") {
     const { url } = await apiFetch<{ url: string }>("/api/v1/billing/checkout", { method: "POST" });
     return { status: "redirect", url };
   }

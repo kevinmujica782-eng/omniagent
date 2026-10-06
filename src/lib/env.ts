@@ -17,6 +17,9 @@ const schema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
   REVENUECAT_WEBHOOK_AUTH: z.string().optional(),
+  // Binance Pay (comercio): llave de API y llave secreta de merchant.binance.com. Las dos o ninguna.
+  BINANCE_PAY_API_KEY: z.string().optional(),
+  BINANCE_PAY_SECRET_KEY: z.string().optional(),
   REVENUECAT_PRO_ENTITLEMENT: z.string().default("pro"),
   FINANCE_PROVIDER: z.enum(["sandbox", "plaid"]).default("sandbox"),
   PLAID_CLIENT_ID: z.string().optional(),

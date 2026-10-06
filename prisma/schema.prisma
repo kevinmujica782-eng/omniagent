@@ -34,6 +34,7 @@ enum SubscriptionStatus {
 enum BillingProvider {
   STRIPE
   REVENUECAT
+  BINANCE
 
   @@map("billing_provider")
 }
@@ -416,6 +417,7 @@ model Profile {
   updatedAt           DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   subscriptions     Subscription[]
+  binanceOrders     BinanceOrder[]
   connections       IntegrationConnection[]
   usageLogs         AiUsageLog[]
   conversations     Conversation[]
@@ -468,6 +470,27 @@ model Subscription {
   @@unique([provider, providerSubscriptionId])
   @@index([userId, status])
   @@map("subscriptions")
+}
+
+/// Órdenes de Binance Pay. Cada una compra meses de Omni Pro por adelantado (no hay renovación automática):
+/// al confirmarse el pago, la suscripción BINANCE de la persona se extiende esos meses.
+model BinanceOrder {
+  merchantTradeNo String    @id @map("merchant_trade_no")
+  userId          String    @map("user_id") @db.Uuid
+  months          Int
+  amount          Decimal   @db.Decimal(12, 2)
+  currency        String    @default("USDT")
+  prepayId        String?   @map("prepay_id")
+  /// PENDING, PAID, CANCELED, EXPIRED o ERROR (los estados de Binance que cierran la orden).
+  status          String    @default("PENDING")
+  paidAt          DateTime? @map("paid_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("binance_orders")
 }
 
 /// Registro idempotente de webhooks (Stripe y RevenueCat reintentan).

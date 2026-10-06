@@ -1,6 +1,7 @@
 import "server-only";
 import { env } from "@/lib/env";
 import type { BillingOverview } from "@/types/billing";
+import { binanceConfigured } from "./binance";
 import { getEntitlements, usageSummary } from "./entitlements";
 import { AGENT_FEATURE_ORDER, AGENT_FEATURES, PLANS } from "./plans";
 import { billingNotice } from "./status";
@@ -28,5 +29,6 @@ export async function billingOverview(userId: string, now = new Date()): Promise
     })),
     usage,
     checkoutAvailable: Boolean(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO_MONTHLY),
+    binanceAvailable: binanceConfigured(),
   };
 }

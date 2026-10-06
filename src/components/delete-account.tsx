@@ -30,7 +30,7 @@ export function DeleteAccountSheet({
   preview = false,
   initialText = "",
 }: {
-  billingSource: "STRIPE" | "REVENUECAT" | null;
+  billingSource: "STRIPE" | "REVENUECAT" | "BINANCE" | null;
   pro: boolean;
   onClose: () => void;
   preview?: boolean;
@@ -119,7 +119,7 @@ export function DeleteAccountSection({
   preview = false,
   initialOpen = false,
 }: {
-  billingSource: "STRIPE" | "REVENUECAT" | null;
+  billingSource: "STRIPE" | "REVENUECAT" | "BINANCE" | null;
   pro: boolean;
   preview?: boolean;
   initialOpen?: boolean;
