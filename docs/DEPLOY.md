@@ -51,7 +51,9 @@ La plantilla completa, con comentarios, está en `.env.example`. Las variables m
 | `SUPABASE_SECRET_KEY` | al correr | Con `DOCUMENT_STORAGE=supabase` | `sb_secret_…`. Solo para Storage. **Eliminar cuenta** no la usa: llama a la función `public.delete_auth_user` (`npm run db:security`). |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL_FREE`, `ANTHROPIC_MODEL_PRO` | al correr | Recomendada | Sin la llave, el chat responde "no configurado". |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY` | al correr | Las tres o ninguna | Con solo una parte, el pago abre pero Pro nunca se activa: la app lo marca como error al arrancar. |
-| `REVENUECAT_WEBHOOK_AUTH`, `REVENUECAT_PRO_ENTITLEMENT` | al correr | Para Android | Ver la sección 10. |
+| `BINANCE_PAY_API_KEY`, `BINANCE_PAY_SECRET_KEY` | al correr | Las dos o ninguna | Cobro de Pro con Binance Pay (19.99 USDT al mes). Ver `docs/BINANCE_PAY.md`. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | al correr | No | Notificaciones push. Si faltan, la app crea sus llaves y las guarda cifradas en `app_settings`. |
+| `REVENUECAT_WEBHOOK_AUTH`, `REVENUECAT_PRO_ENTITLEMENT` | al correr | Solo Google Play | Ya no se usa: la app para clientes es el `.apk` de `docs/APP_ANDROID.md`. |
 | `CRON_SECRET` | al correr | Recomendada | `openssl rand -hex 32`. Protege `/api/cron/*` y el detalle de `/api/health`. |
 | `FINANCE_PROVIDER`, `PLAID_*` | al correr | No | `sandbox` por defecto. |
 | `DOCUMENT_STORAGE` | al correr | No | `database` (por defecto) o `supabase`. |
@@ -251,6 +253,8 @@ Las migraciones de este proyecto solo agregan tablas o columnas, así que pueden
 - [ ] El *Security Advisor* de Supabase no muestra tablas sin RLS.
 
 ## 10. Google Play (Android)
+
+> **Ya no es el plan.** La app para clientes es el `.apk` que abre la web (Trusted Web Activity), con descarga en `/descargar`, notificaciones push y cobro con Binance Pay: ver `docs/APP_ANDROID.md`, `docs/BINANCE_PAY.md` y `docs/CORREO.md`. Lo que sigue queda como referencia por si algún día se publica en Google Play.
 
 La app de Android usa Capacitor 8 en modo *hosted*: abre tu web desplegada, con la sesión y la API incluidas.
 

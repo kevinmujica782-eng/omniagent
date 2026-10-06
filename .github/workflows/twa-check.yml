@@ -1,5 +1,6 @@
 # Prueba la app de Android para clientes (public/descargas/OmniAgent.apk) en un emulador con Chrome: la instala,
 # la abre y deja capturas de pantalla, la actividad en primer plano y los errores en la rama «apk-checks».
+# Chrome se abre sin su pantalla de bienvenida (la ve solo quien nunca usó Chrome en ese teléfono).
 name: Probar la app Android en un emulador
 
 on:
@@ -39,6 +40,8 @@ jobs:
             adb install -r public/descargas/OmniAgent.apk > checks/install.txt 2>&1; cat checks/install.txt
             adb shell dumpsys package com.omniagent.twa | grep -E "versionName|versionCode|targetSdk" > checks/package.txt || true
             adb shell pm get-app-links com.omniagent.twa > checks/app-links.txt 2>&1 || true
+            adb shell am set-debug-app --persistent com.android.chrome
+            adb shell 'echo "_ --disable-fre --no-default-browser-check --no-first-run" > /data/local/tmp/chrome-command-line'
             adb logcat -c
             adb shell monkey -p com.omniagent.twa -c android.intent.category.LAUNCHER 1
             sleep 20

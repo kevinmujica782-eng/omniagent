@@ -43,7 +43,7 @@ function ConnectorRow({ connector, preview }: { connector: ConnectorView; previe
         ) : connector.action === "link_bank" ? (
           <ConnectBankButton label="Conectar" size="sm" icon={false} demo={preview} />
         ) : connector.action === "link_mail" ? (
-          <ConnectMailButton label="Conectar" size="sm" demo={preview} />
+          <ConnectMailButton label="Conectar" size="sm" demo={preview} startAt={connector.id === "mail_demo" ? "demo" : "real"} />
         ) : connector.action === "calendar_feed" ? (
           <Link href={hrefFor("/tramites#calendario", preview)} className={LINK_CLASS}>
             Configurar

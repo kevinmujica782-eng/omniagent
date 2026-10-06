@@ -9,7 +9,7 @@ import { deliverDueReminders } from "./reminders";
 // Trabajo programado del módulo de trámites: revisa las bandejas atrasadas (y crea las sugerencias)
 // y entrega los recordatorios que vencieron. Lotes pequeños para caber en una función serverless.
 
-export async function runScheduledProcedureJobs(opts: { syncLimit?: number; now?: Date } = {}) {
+export async function runScheduledProcedureJobs(opts: { syncLimit?: number; now?: Date; budgetMs?: number } = {}) {
   const nowDate = opts.now ?? new Date();
   const now = nowDate.getTime();
   const result = { synced: 0, suggested: 0, reminders: 0, errors: 0 };
@@ -32,7 +32,11 @@ export async function runScheduledProcedureJobs(opts: { syncLimit?: number; now?
     take: opts.syncLimit ?? 20,
     select: { id: true, userId: true },
   });
+  // Con correos reales (IMAP), cada bandeja tarda unos segundos: se deja de empezar bandejas nuevas antes del límite
+  // de la función. Las que quedan se revisan en la próxima corrida (van primero las más atrasadas).
+  const deadline = Date.now() + (opts.budgetMs ?? 35_000);
   for (const connection of stale) {
+    if (Date.now() > deadline) break;
     try {
       const sync = await syncMailbox(connection.userId, connection.id);
       result.synced += 1;

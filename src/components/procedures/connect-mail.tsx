@@ -531,6 +531,7 @@ export function ConnectMailButton({
   className,
   demo = false,
   initialStep,
+  startAt,
 }: {
   label?: string;
   variant?: "primary" | "secondary";
@@ -539,6 +540,8 @@ export function ConnectMailButton({
   demo?: boolean;
   /** Vista previa: abrir el diálogo en un paso. */
   initialStep?: Step;
+  /** Paso en el que abre al tocar el botón: el correo real o la bandeja de prueba. */
+  startAt?: "real" | "demo";
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -552,7 +555,7 @@ export function ConnectMailButton({
       {open ? (
         <ConnectMailDialog
           demo={demo}
-          initialStep={initialStep}
+          initialStep={initialStep ?? startAt}
           onClose={(connected) => {
             setOpen(false);
             if (connected && !demo) startTransition(() => router.refresh());
@@ -680,7 +683,7 @@ export function MailboxBar({
           {syncing ? "Revisando…" : "Revisar correo"}
         </button>
         {realActive ? null : (
-          <ConnectMailButton label={hasReal ? "Volver a conectar mi correo" : "Conectar mi correo real"} size="sm" variant="secondary" demo={demo} />
+          <ConnectMailButton label={hasReal ? "Volver a conectar mi correo" : "Conectar mi correo real"} size="sm" variant="secondary" demo={demo} startAt="real" />
         )}
         {message ? (
           <p role="status" className="text-xs text-muted">

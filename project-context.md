@@ -11,8 +11,8 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 - **Frontend/Backend:** Next.js (TypeScript), Tailwind CSS.
 - **Base de Datos y Auth:** Supabase (PostgreSQL + Row Level Security).
 - **Inteligencia Artificial:** Anthropic Claude API (SDK oficial con Function Calling para agentes autónomos).
-- **Pagos:** Stripe / RevenueCat para gestión de suscripciones Freemium/Pro ($19.99/mes).
-- **Empaquetado Móvil:** Capacitor (para convertir la app web en aplicación nativa de Android para Google Play).
+- **Pagos:** Stripe / RevenueCat para gestión de suscripciones Freemium/Pro ($19.99/mes). *Cambio del 6 oct 2026:* el cobro principal es **Binance Pay** (19.99 USDT por mes pagado por adelantado); Stripe queda para cuando exista la empresa con Stripe Atlas y RevenueCat ya no se usa.
+- **Empaquetado Móvil:** Capacitor (para convertir la app web en aplicación nativa de Android para Google Play). *Cambio del 6 oct 2026:* sin Google Play; los clientes instalan un `.apk` (Trusted Web Activity) desde `/descargar` o la web como app (PWA, también en iPhone).
 
 ## 3. Estructura de Módulos a Desarrollar
 - FASE 1: Configuración base, base de datos y autenticación de usuarios.
@@ -23,7 +23,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 
 ---
 
-## 4. Estado del desarrollo (actualizado el 2 oct 2026)
+## 4. Estado del desarrollo (actualizado el 6 oct 2026)
 
 ### Versiones y decisiones fijadas
 - Next.js 16 (App Router, `src/proxy.ts` en lugar de middleware), React 19, Tailwind 4, TypeScript estricto.
@@ -45,7 +45,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 | --- | --- | --- | --- |
 | 1. Base, BD y auth | Hecha | Esquema (hoy 34 tablas), SQL de RLS, triggers y Storage, login con correo y Google, rutas protegidas, API con cookie o Bearer | — |
 | 2. Finanzas | Hecha (v2) | Conector tipo Plaid (sandbox con 4 instituciones ficticias y adaptador de Plaid real), sync con cursor, análisis con Claude de 3 meses (salida estructurada + respaldo por reglas), gastos hormiga, suscripciones inactivas, recomendaciones accionables, presupuestos, buscador de movimientos, chat con preguntas sugeridas, cron diario, 11 herramientas, **estados de cuenta PDF/CSV** (vista previa, corrección de columnas/fechas/signos, sin duplicados, deshacer) | OCR de estados de cuenta escaneados, leer los PDF en un proceso aparte con límite de memoria, webhooks de Plaid, proveedor para Latinoamérica (p. ej. Belvo), alertas push de presupuesto |
-| 3. Trámites | Hecha (v3) | Conector de correo con contrato Gmail/Outlook (`MailProvider`, bandeja sandbox con 10 correos), clasificación con reglas + Claude, trámites sugeridos con fechas sin choques, confirmación de un toque, lectura de PDF con IA y llenado (AcroForm y planos), "Mis datos" cifrados, calendario conectado + feed ICS privado con alarmas, `.ics` por evento, recordatorios en la app, respuesta con el PDF adjunto previa aprobación, cron, 13 herramientas | OAuth real de Gmail (Google APIs) y Outlook (Microsoft Graph), OCR de escaneados, firma dibujada, envío a portales (`SUBMIT_FORM`), push (FCM) |
+| 3. Trámites | Hecha (v3 + correo real) | **Correo real por IMAP/SMTP** (Gmail, Yahoo, iCloud, AOL, Zoho o servidor propio, con contraseña de aplicación; 6 oct 2026) y conector de correo con contrato Gmail/Outlook (`MailProvider`, bandeja sandbox con 10 correos), clasificación con reglas + Claude, trámites sugeridos con fechas sin choques, confirmación de un toque, lectura de PDF con IA y llenado (AcroForm y planos), "Mis datos" cifrados, calendario conectado + feed ICS privado con alarmas, `.ics` por evento, recordatorios en la app, respuesta con el PDF adjunto previa aprobación, cron, 13 herramientas | Outlook con OAuth (Microsoft Graph; Microsoft no acepta contraseñas desde sept. 2024), calendario de Google con OAuth, OCR de escaneados, firma dibujada, envío a portales (`SUBMIT_FORM`) |
 | 4. Compras | Hecha (v4) | Seguir productos, boletos, vuelos y hoteles por enlace o búsqueda; lector de precios (JSON-LD, microdata, meta y lectura con Claude validada); rastreador que respeta robots.txt, se identifica como OmniAgentBot y bloquea SSRF; 9 tiendas sandbox `.test`; agente en segundo plano con cron (reserva atómica, reintentos, pausa); bajadas frente a la mediana de 30 días; alertas redactadas por Claude y validadas cifra por cifra; hoja de pago Permitir/Denegar con precio reconfirmado, límites y cobro idempotente (pagos simulados); pedidos; 9 herramientas | Medios de pago reales (Stripe SetupIntent/Elements), compra real con API de comercios o afiliados, API de vuelos y boletos (Amadeus, Duffel, Ticketmaster), push, comparar entre tiendas |
 | 5. Dashboard, pagos y producción | Hecha (v5) | Panel de Inicio (lo pendiente, ritmo de gasto, módulos, ahorro, agentes, actividad, plan) en claro/oscuro con pestañas en el teléfono; planes Gratis/Pro que habilitan las funciones autónomas (validadas en servidor, 402 `plan_limit`, hoja de Pro, cambios de plan que retiman o pausan agentes); Stripe completo (Checkout es-419, sync al volver, webhooks idempotentes, past_due, portal); errores estables con requestId, logs JSON con redacción, `/api/health`, límites de tasa, CSP/HSTS, revisión de configuración; eliminar cuenta; 58 pruebas unitarias (Vitest); Docker, docker-compose con programador, GitHub Actions (CI y migraciones), `npm run db:cron` y `docs/DEPLOY.md` | Configurar RevenueCat y la suscripción en Play Console, notificaciones push, Stripe Tax si aplica (íconos, splash, plugin de RevenueCat, política de privacidad, página para borrar la cuenta y borrador de la ficha: hechos el 2 oct) |
 | Devoluciones (extra) | Hecha (v6) | Pedidos de compras con OmniAgent, correos de tiendas y paqueterías, a mano y de ejemplo; retrasos con reclamo automático; reclamo por daño, producto equivocado, distinto al anuncio o arrepentimiento; envío por correo con aprobación o texto listo para marketplaces; seguimientos aprobados y escalamiento; lectura de respuestas; reembolso confirmado en Finanzas; pantalla Devoluciones, tarjetas del chat e Inicio; cron; 5 herramientas (41 en total); 92 pruebas unitarias (con las de la pantalla de Pro) | Leer respuestas ambiguas con Claude (validado), fotos en el reclamo, API de paqueterías, aviso del fin del plazo para devolver |
@@ -133,11 +133,34 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 - **Interfaz:** secciones "Necesitan tu atención", "Reclamos en curso", "En camino", "Entregados", "Resueltos" y "Cancelados y sin seguimiento"; la boleta de aprobación va dentro de la tarjeta del reclamo; hoja "¿Qué pasó con tu pedido?" en dos pasos; tarjetas del chat `tracked_orders` y `return_case`; en Inicio, las devoluciones pendientes y lo recuperado en el ahorro.
 - **Pruebas:** 30 unitarias de reglas, 93 comprobaciones de extremo a extremo y 23 por HTTP.
 
+### Cobros, notificaciones, correo real y app para clientes (6 oct 2026)
+El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto pasó CI, incluida una prueba de integración del correo contra un servidor IMAP/SMTP real.
+- **Binance Pay** (`docs/BINANCE_PAY.md`):
+  - Pro cuesta 19.99 USDT por mes pagado por adelantado, sin renovación automática. Se paga con el saldo de Binance, el mismo de la tarjeta Binance Visa.
+  - Cada pago suma un mes. Omni avisa 3 días antes de vencer y, al vencer, la cuenta vuelve a Gratis (cron `omniagent-cobros`, cada hora).
+  - Las órdenes se firman con HMAC-SHA512 y el webhook se verifica con RSA. Tabla `binance_orders`; código en `src/modules/billing/binance*.ts`.
+  - Falta que el dueño ponga `BINANCE_PAY_API_KEY` y `BINANCE_PAY_SECRET_KEY` en Netlify.
+- **Notificaciones push** (Web Push con VAPID y service worker `public/sw.js`):
+  - Se activan en **Cuenta → App y notificaciones**, donde también se instala la app.
+  - Cada fila nueva de `notifications` de alguien con aparatos registrados (`push_subscriptions`) dispara el trigger `on_notification_push`. El trigger llama a `/api/cron/push` con pg_net y el `CRON_SECRET` de Vault.
+  - Las llaves VAPID se crean solas y quedan cifradas en `app_settings`.
+- **Correo real** (`docs/CORREO.md`):
+  - Proveedor `imap` (`imapflow` + `mailparser` + `nodemailer`) con el mismo `MailProvider` del sandbox. Las conexiones van con `provider = MAIL_IMAP`.
+  - Lee en solo lectura (EXAMINE). La primera vez trae 20 correos de 30 días; después, solo los nuevos por UID.
+  - Envía por SMTP solo lo aprobado, en el mismo hilo. Los destinatarios `.test` nunca salen por el correo real.
+  - Contraseña cifrada. Servidores propios solo con nombre público e IP pública, sin SSRF. Máximo 8 intentos de conexión por hora.
+  - Outlook y Hotmail no se pueden conectar con contraseña (la app lo explica).
+- **App para clientes** (`docs/APP_ANDROID.md`):
+  - `twa/` es una Trusted Web Activity (`com.omniagent.twa`, ~500 KB). La compila el workflow «App Android para clientes (.apk)» con una llave nueva que no se guarda.
+  - El workflow publica `public/descargas/OmniAgent.apk`, agrega la huella a `public/.well-known/assetlinks.json` y actualiza el release `app-android`.
+  - El enlace para anuncios es `/descargar`. En iPhone: Safari → Agregar a inicio.
+  - El workflow «Probar la app Android en un emulador» deja capturas en la rama `apk-checks`.
+
 ### Pantalla de Omni Pro (paywall)
 - **Dónde:** `src/components/paywall/` (`paywall.tsx` y `autopilot-dial.tsx`); datos en `modules/billing/paywall.ts`; pago en `lib/purchase.ts`. Reemplaza la hoja anterior: la abren los límites del plan Gratis (402 `plan_limit`, con la fila del límite marcada), la tarjeta del chat, el Inicio y la cuenta.
 - **Diseño:** siempre oscura (clase `theme-dark`, que reutiliza los tokens oscuros), a pantalla completa en el teléfono con el botón fijo abajo y en dos columnas desde 1024 px. La órbita de 24 horas (la marca de Omni) muestra las revisiones de un día con Pro y da una sola vuelta al abrir. La columna de Pro tiene el anillo brillante, la luna ámbar y la etiqueta "Recomendado".
-- **Honestidad:** filas, precio y resumen salen de `PLANS`. No promete "ilimitado" (Pro tiene límites) ni "Gmail" (la bandeja real aún no está conectada). Permitir o Denegar aparece en los dos planes porque existe en los dos.
-- **Pago:** `purchasePro()` usa Stripe Checkout en la web y Google Play con RevenueCat en Android (plugin `@revenuecat/purchases-capacitor`, llave `NEXT_PUBLIC_REVENUECAT_ANDROID_KEY`, `appUserID` = id de Supabase). En Android muestra el precio de Google Play y espera a que el webhook active Pro.
+- **Honestidad:** filas, precio y resumen salen de `PLANS`. No promete "ilimitado" (Pro tiene límites). Desde el 6 oct 2026 el correo real sí existe (IMAP/SMTP), pero la pantalla no nombra proveedores. Permitir o Denegar aparece en los dos planes porque existe en los dos.
+- **Pago:** `purchasePro()` usa **Binance Pay** cuando está configurado, en la web, el `.apk` y el iPhone: abre el pago y, al volver, `/cuenta` confirma la orden. Si no, usa Stripe Checkout en la web. Google Play con RevenueCat queda solo para la app vieja de Capacitor.
 
 ### Producción (publicada el 2 oct 2026)
 - **Web y API:** https://omniagent-app.netlify.app. Es el proyecto `omniagent-app` de Netlify (Node 24, `@netlify/plugin-nextjs`, `netlify.toml`). Se publica desde GitHub Actions con el workflow «Publicar en Netlify», que usa el `proxy_path` de *deploy-site* del MCP de Netlify; también se puede conectar el repositorio desde Netlify.
@@ -161,9 +184,11 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 - **Listo para Google Play (3 oct 2026):** `.aab` 1.0.0 (versionCode 4, API 36) firmado con la llave de subida; cuenta de revisión `kevinmujica782+revisor@gmail.com` con banco, correo, compras y pedidos de prueba (la contraseña la pone el dueño con SQL o crea otra cuenta: ver `docs/GOOGLE_PLAY.md`); capturas en la rama `play-store`; «Eliminar cuenta» sin `SUPABASE_SECRET_KEY` (función `public.delete_auth_user`, ya creada en producción). Las cuentas `+prueba-…` viejas ya se borraron.
 - **Cifras de la IA (corregido el 5 oct 2026):** el informe de Finanzas había dicho «ingresaste $14.555 en promedio» (era el total de 3 meses) y el chat llamó a Delivery el mayor gasto cuando Vivienda es mayor. Ahora el modelo recibe las «cifras para citar» ya escritas, `findUnsupportedAmounts` revisa cada monto del informe contra el snapshot (con un intento de corrección y, si falla, el informe por reglas) y `finance_get_insights` entrega `topSpendingCategories` ordenadas por gasto.
 - **Cobros en la web:** Stripe no abre cuentas a negocios de Venezuela; el plan es una empresa en Delaware con Stripe Atlas (`docs/STRIPE_ATLAS.md`). Con la cuenta activa: conector de Stripe en Claude para crear producto, precio y webhook, y las 3 variables de Stripe en Netlify.
-- **Pendiente del dueño** (guía completa en `docs/GOOGLE_PLAY.md`):
-  - En Netlify: apagar la insignia «Powered by Netlify» (tapa el menú de abajo de la app) y publicar la corrección de «Eliminar cuenta», idealmente conectando el repositorio para que cada push a `main` se publique solo.
-  - En Google Play: cuenta de desarrollador (US$25), ficha, contenido de la app, prueba cerrada con 12 testers durante 14 días y solicitud de producción.
+- **Pendiente del dueño (6 oct 2026):**
+  - **Publicar.** En Netlify, conectar el repositorio para que cada push a `main` se publique solo y lanzar un deploy. Producción sigue en el deploy `6ac18a8b…` del 3 oct, sin Binance, push, correo real, `/descargar` ni `assetlinks.json`.
+  - Apagar la insignia «Powered by Netlify», que tapa el menú de abajo de la app.
+  - **Binance Pay:** cuenta de comercio en merchant.binance.com y las dos llaves en las variables de Netlify (`docs/BINANCE_PAY.md`).
+  - Google Play ya no es el plan; `docs/GOOGLE_PLAY.md` queda como referencia.
 
 ### Cómo retomar
 1. `npm install` (Node 22+; sube el `package-lock.json`), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`...).
@@ -175,9 +200,9 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 
    Después, `npm run db:security` y `npm test`. Para los agentes en segundo plano: `CRON_SECRET` y `npm run db:cron`, o los crons de Vercel.
 3. El detalle completo está en `README.md` (puesta en marcha, módulos, Inicio y planes, arquitectura, endpoints y hoja de ruta). El despliegue a producción y la lista de Google Play están en `docs/DEPLOY.md`.
-4. Las cinco fases, Devoluciones y los estados de cuenta en PDF/CSV están hechos, y la web está publicada (ver «Producción»). Lo siguiente, sin orden fijo:
-   - Terminar la publicación en Google Play (`docs/GOOGLE_PLAY.md`) y activar los cobros con RevenueCat.
-   - Notificaciones push.
-   - Integraciones reales: Gmail, Outlook y medios de pago.
+4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real y el `.apk` para clientes están hechos (ver «Cobros, notificaciones, correo real y app para clientes»). Lo siguiente, sin orden fijo:
+   - Publicar la web con todo lo nuevo (requiere conectar el repositorio en Netlify).
+   - Outlook con OAuth (Microsoft Graph) y Google Calendar con OAuth.
+   - Medios de pago reales para las compras del concierge.
    - Estados de cuenta: OCR de los escaneados y leer los PDF en un proceso aparte con límite de memoria.
    - Pruebas de integración contra Postgres en CI.
