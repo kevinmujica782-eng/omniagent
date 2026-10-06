@@ -63,8 +63,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Docker: BUILD_STANDALONE=1 genera .next/standalone (servidor mínimo con solo las dependencias usadas).
   output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
-  // El driver de Postgres, el adapter de Prisma, pdf.js y web-push se cargan desde node_modules en el servidor.
-  serverExternalPackages: ["pg", "@prisma/adapter-pg", "pdfjs-dist", "web-push"],
+  // El driver de Postgres, el adapter de Prisma, pdf.js, web-push y los clientes de correo (IMAP, SMTP y el lector
+  // MIME) se cargan desde node_modules en el servidor.
+  serverExternalPackages: ["pg", "@prisma/adapter-pg", "pdfjs-dist", "web-push", "imapflow", "mailparser", "nodemailer"],
   // pdf.js lee sus fuentes estándar y su worker en tiempo de ejecución: se incluyen en las funciones que leen PDF.
   outputFileTracingIncludes: {
     "/api/**/*": ["./node_modules/pdfjs-dist/standard_fonts/**", "./node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs"],

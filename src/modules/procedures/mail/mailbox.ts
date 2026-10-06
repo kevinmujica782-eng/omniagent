@@ -12,22 +12,26 @@ import type { MailFlavor, MailProvider, MailProviderName } from "./providers/typ
 // Acceso de bajo nivel a las bandejas conectadas: token, proveedor y descarga de adjuntos.
 // Lo usan el plan de trámites, la sincronización y el envío (sin dependencias circulares).
 
-export const MAIL_PROVIDERS = ["MAIL_DEMO"] as const;
+/** MAIL_DEMO: bandeja de prueba (sandbox). MAIL_IMAP: correo real por IMAP/SMTP. */
+export const MAIL_PROVIDERS = ["MAIL_DEMO", "MAIL_IMAP"] as const;
 
 export type MailboxMeta = {
   provider: MailProviderName;
   flavor: MailFlavor;
   address: string;
   cursor: string | null;
+  /** Correo real: gmail, yahoo, icloud… o custom. */
+  service?: string;
 };
 
 export function readMailboxMeta(value: unknown): MailboxMeta {
   const meta = (value ?? {}) as Partial<MailboxMeta>;
   return {
-    provider: "sandbox",
+    provider: meta.provider === "imap" ? "imap" : "sandbox",
     flavor: meta.flavor === "outlook" ? "outlook" : "gmail",
     address: meta.address ?? "",
     cursor: meta.cursor ?? null,
+    ...(typeof meta.service === "string" ? { service: meta.service } : {}),
   };
 }
 
@@ -60,13 +64,14 @@ export async function openMailbox(userId: string, connectionId: string): Promise
   };
 }
 
-/** Primera bandeja activa del usuario (para enviar respuestas). */
+/** Bandeja para enviar respuestas: el correo real si hay uno activo; si no, la de prueba. */
 export async function defaultMailbox(userId: string): Promise<OpenMailbox | null> {
-  const connection = await prisma.integrationConnection.findFirst({
+  const connections = await prisma.integrationConnection.findMany({
     where: { userId, provider: { in: [...MAIL_PROVIDERS] }, status: "ACTIVE" },
     orderBy: { createdAt: "asc" },
-    select: { id: true },
+    select: { id: true, provider: true },
   });
+  const connection = connections.find((c) => c.provider === "MAIL_IMAP") ?? connections[0];
   return connection ? openMailbox(userId, connection.id) : null;
 }
 

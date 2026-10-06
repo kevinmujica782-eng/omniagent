@@ -1,7 +1,8 @@
-// Contrato de los conectores de correo y calendario. El sandbox lo implementa hoy; Gmail (Google APIs)
-// y Outlook (Microsoft Graph) se suman implementando esta misma interfaz, sin tocar el resto del módulo.
+// Contrato de los conectores de correo y calendario. Lo implementan el sandbox (bandeja de prueba) y el correo
+// real por IMAP/SMTP; Gmail (Google APIs) y Outlook (Microsoft Graph) con OAuth se suman con esta misma interfaz.
+import type { ImapCredentials } from "./imap-rules";
 
-export type MailProviderName = "sandbox";
+export type MailProviderName = "sandbox" | "imap";
 export type MailFlavor = "gmail" | "outlook";
 
 export interface MailAttachmentMeta {
@@ -65,8 +66,8 @@ export interface MailboxAccount {
 
 export interface MailProvider {
   name: MailProviderName;
-  /** Conecta la bandeja (en Gmail/Outlook sería el canje del código OAuth). */
-  connect(input: { userId: string; flavor: MailFlavor; firstName: string | null; timeZone: string }): Promise<{
+  /** Conecta la bandeja: el sandbox la crea; IMAP entra con las credenciales (en Gmail/Outlook sería el canje OAuth). */
+  connect(input: { userId: string; flavor: MailFlavor; firstName: string | null; timeZone: string; credentials?: ImapCredentials }): Promise<{
     accessToken: string;
     account: MailboxAccount;
   }>;

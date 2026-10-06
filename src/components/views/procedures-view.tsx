@@ -47,7 +47,7 @@ function ProceduresWelcome({ demo, connectStep }: { demo: boolean; connectStep?:
           cuándo hacer cada cosa.
         </p>
         <div className="mx-auto mt-6 flex max-w-xs flex-col gap-3 sm:max-w-none sm:flex-row sm:items-start sm:justify-center">
-          <ConnectMailButton size="lg" label="Conectar correo de prueba" className="w-full sm:w-auto" demo={demo} initialStep={connectStep} />
+          <ConnectMailButton size="lg" label="Conectar mi correo" className="w-full sm:w-auto" demo={demo} initialStep={connectStep} />
           <UploadFormButton size="lg" label="Subir un formulario" className="w-full sm:w-auto" demo={demo} />
         </div>
       </div>

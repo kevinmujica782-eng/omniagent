@@ -6,7 +6,7 @@ import { connectMailbox, listMailboxes } from "@/modules/procedures/mail/mail.se
 export const maxDuration = 60;
 
 const connectSchema = z.object({
-  /** Estilo de la bandeja de prueba. Gmail y Outlook reales llegan con OAuth usando el mismo contrato. */
+  /** Estilo de la bandeja de prueba. El correo real se conecta en /api/v1/procedures/mailboxes/imap. */
   flavor: z.enum(["gmail", "outlook"]).default("gmail"),
   /** Cargar datos de ejemplo en "Mis datos" (solo si está vacío). */
   withDemoData: z.boolean().default(true),

@@ -1,9 +1,10 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import type { Prisma } from "@/generated/prisma/client";
 import { audit } from "@/lib/audit";
 import { encryptSecret } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
-import { Errors } from "@/lib/errors";
+import { AppError, Errors } from "@/lib/errors";
 import { firstName } from "@/lib/format";
 import { isUuid } from "@/lib/validation";
 import type { MailboxView, MailCategoryKind, MailMessageView } from "@/types/cards";
@@ -13,11 +14,21 @@ import { seedDemoPersonalData } from "../documents/personal-data.service";
 import { safeTimeZone } from "../time/tz";
 import { MAIL_PROVIDERS, defaultMailbox, flagExpired, openMailbox, readMailboxMeta, type MailboxMeta, type OpenMailbox } from "./mailbox";
 import { getMailProvider } from "./providers";
+import {
+  EMAIL_PATTERN,
+  MICROSOFT_NOTICE,
+  detectMailService,
+  mailService,
+  normalizeAppPassword,
+  type MailServer,
+  type MailServiceId,
+} from "./providers/imap-presets";
+import { mailServerProblem, normalizeMailHost, type ImapCredentials } from "./providers/imap-rules";
 import type { MailFlavor, MailMessageData } from "./providers/types";
 import { toStoredIcs, triageInbox, type MailExtracted } from "./triage/triage.service";
 
 // Bandejas de correo: conectar, sincronizar (incremental, con cursor), clasificar, listar, buscar y enviar.
-// Hoy con el sandbox (contrato de Gmail/Outlook); el envío solo ocurre después de que el usuario aprueba.
+// Correo real por IMAP/SMTP o bandeja de prueba (sandbox); el envío solo ocurre después de que el usuario aprueba.
 
 const MAX_PAGES = 10;
 const MAX_ICS_BYTES = 256 * 1024;
@@ -55,7 +66,7 @@ export async function connectMailbox(userId: string, input: { flavor: MailFlavor
   });
   // Una sola bandeja de prueba a la vez (dos repetirían los mismos correos y trámites).
   const other = await prisma.integrationConnection.findFirst({
-    where: { userId, provider: { in: [...MAIL_PROVIDERS] }, NOT: { externalAccountId: account.address } },
+    where: { userId, provider: "MAIL_DEMO", NOT: { externalAccountId: account.address } },
     select: { id: true },
   });
   if (other) throw Errors.conflict("Ya tienes una bandeja de prueba conectada. Desconéctala para cambiarla.");
@@ -94,6 +105,105 @@ export async function connectMailbox(userId: string, input: { flavor: MailFlavor
   const sync = await syncMailbox(userId, connection.id);
   const mailbox = (await listMailboxes(userId)).find((m) => m.id === connection.id)!;
   return { mailbox, sync };
+}
+
+export interface RealMailboxInput {
+  email: string;
+  /** Contraseña de aplicación (Gmail, Yahoo, iCloud…) o la del servidor propio. */
+  password: string;
+  service: MailServiceId;
+  /** Solo con service = "custom". */
+  imap?: MailServer;
+  smtp?: MailServer;
+}
+
+const MAX_REAL_MAILBOXES = 3;
+const EMPTY_SYNC: MailSyncResult = { fetched: 0, created: 0, removed: 0, triaged: 0, suggested: 0, source: null };
+
+/**
+ * Conecta el correo real de la persona (IMAP para leer, SMTP para enviar). Verifica las dos conexiones antes de
+ * guardar nada, guarda la contraseña cifrada y hace la primera revisión de la bandeja.
+ */
+export async function connectRealMailbox(userId: string, input: RealMailboxInput) {
+  const email = input.email.trim().toLowerCase();
+  if (!EMAIL_PATTERN.test(email)) throw Errors.badRequest("Escribe tu correo completo, por ejemplo laura@gmail.com.");
+  if (detectMailService(email) === "microsoft") throw Errors.badRequest(MICROSOFT_NOTICE);
+  const preset = input.service === "custom" ? null : mailService(input.service);
+  if (input.service !== "custom" && !preset) throw Errors.badRequest("Elige tu proveedor de correo.");
+  const imap = preset ? preset.imap : input.imap;
+  const smtp = preset ? preset.smtp : input.smtp;
+  if (!imap || !smtp) throw Errors.badRequest("Escribe los servidores IMAP y SMTP de tu correo.");
+  const problem = mailServerProblem(imap, "imap") ?? mailServerProblem(smtp, "smtp");
+  if (problem) throw Errors.badRequest(problem);
+  const password = normalizeAppPassword(input.service, input.password);
+  if (!password) throw Errors.badRequest("Escribe la contraseña de aplicación.");
+
+  const existing = await prisma.integrationConnection.findMany({
+    where: { userId, provider: "MAIL_IMAP" },
+    select: { id: true, externalAccountId: true, metadata: true },
+  });
+  const same = existing.find((c) => c.externalAccountId === email);
+  if (!same && existing.length >= MAX_REAL_MAILBOXES) throw Errors.conflict(`Puedes conectar hasta ${MAX_REAL_MAILBOXES} correos.`);
+
+  const profile = await prisma.profile.findUnique({ where: { id: userId }, select: { fullName: true, timezone: true } });
+  const credentials: ImapCredentials = {
+    v: 1,
+    service: input.service,
+    user: email,
+    pass: password,
+    name: profile?.fullName?.trim() || null,
+    imap: { host: normalizeMailHost(imap.host) ?? imap.host, port: imap.port },
+    smtp: { host: normalizeMailHost(smtp.host) ?? smtp.host, port: smtp.port },
+  };
+  const provider = getMailProvider("imap");
+  const { accessToken, account } = await provider.connect({
+    userId,
+    flavor: "gmail",
+    firstName: firstName(profile?.fullName),
+    timeZone: safeTimeZone(profile?.timezone),
+    credentials,
+  });
+
+  // Al reconectar (contraseña nueva) se conserva el cursor: los correos ya guardados no se duplican.
+  const previous = same ? readMailboxMeta(same.metadata) : null;
+  const meta: MailboxMeta = {
+    provider: "imap",
+    flavor: account.flavor,
+    address: account.address,
+    cursor: previous?.cursor ?? null,
+    service: input.service,
+  };
+  const data = {
+    displayName: account.displayName,
+    scopes: ["mail.read", "mail.send"],
+    accessTokenEncrypted: encryptSecret(accessToken),
+    status: "ACTIVE" as const,
+    metadata: meta as unknown as Prisma.InputJsonValue,
+  };
+  const connection = same
+    ? await prisma.integrationConnection.update({ where: { id: same.id }, data })
+    : await prisma.integrationConnection.create({ data: { userId, provider: "MAIL_IMAP", externalAccountId: account.address, ...data } });
+
+  await audit({
+    userId,
+    actor: "user",
+    action: "mail.connected",
+    entity: "integration_connection",
+    entityId: connection.id,
+    metadata: { provider: "imap", service: input.service, reconnected: Boolean(same) },
+  });
+
+  let sync = EMPTY_SYNC;
+  let syncError: string | null = null;
+  try {
+    sync = await syncMailbox(userId, connection.id);
+  } catch (error) {
+    // La bandeja quedó conectada: la próxima revisión (o el trabajo programado) la pone al día.
+    console.error("[mail] primera revisión del correo real", connection.id, error);
+    syncError = error instanceof AppError ? error.message : "La primera revisión no terminó; Omni lo intentará de nuevo.";
+  }
+  const mailbox = (await listMailboxes(userId)).find((m) => m.id === connection.id)!;
+  return { mailbox, sync, syncError };
 }
 
 async function readInvites(mailbox: OpenMailbox, message: MailMessageData, timeZone: string): Promise<MailExtracted["ics"]> {
@@ -243,6 +353,8 @@ export async function listMailboxes(userId: string): Promise<MailboxView[]> {
     where: { userId, provider: { in: [...MAIL_PROVIDERS] } },
     orderBy: { createdAt: "asc" },
   });
+  // El correo real va primero (es el que se usa para enviar).
+  rows.sort((a, b) => Number(b.provider === "MAIL_IMAP") - Number(a.provider === "MAIL_IMAP"));
   return Promise.all(
     rows.map(async (row) => {
       const meta = readMailboxMeta(row.metadata);
@@ -376,18 +488,25 @@ export async function sendMail(
       ? await prisma.mailMessage.findFirst({ where: { id: input.replyToMessageId, userId }, select: { externalId: true, threadId: true } })
       : null;
 
+  // Las tiendas y contactos de prueba usan el dominio reservado .test: eso nunca sale por el correo real.
+  const testRecipient = /\.test$/i.test(input.to.trim().split("@")[1] ?? "");
+  const simulated = mailbox.meta.provider === "sandbox" || testRecipient;
   let sent: { id: string; sentAt: Date };
-  try {
-    sent = await mailbox.provider.sendMessage(mailbox.token, {
-      to: input.to,
-      subject: input.subject,
-      body: input.body,
-      inReplyTo: original?.externalId ?? null,
-      attachments: attachments.map(({ fileName, mimeType, bytes }) => ({ fileName, mimeType, bytes })),
-    });
-  } catch (error) {
-    await flagExpired(mailbox.id, error);
-    throw error;
+  if (testRecipient && mailbox.meta.provider !== "sandbox") {
+    sent = { id: `sbx_sent_${randomUUID()}`, sentAt: new Date() };
+  } else {
+    try {
+      sent = await mailbox.provider.sendMessage(mailbox.token, {
+        to: input.to,
+        subject: input.subject,
+        body: input.body,
+        inReplyTo: original?.externalId ?? null,
+        attachments: attachments.map(({ fileName, mimeType, bytes }) => ({ fileName, mimeType, bytes })),
+      });
+    } catch (error) {
+      await flagExpired(mailbox.id, error);
+      throw error;
+    }
   }
 
   // Un documento solo puede quedar ligado a un adjunto: si ya se envió antes, el registro va sin enlace.
@@ -430,7 +549,7 @@ export async function sendMail(
     action: "mail.sent",
     entity: "mail_message",
     entityId: record.id,
-    metadata: { provider: mailbox.meta.provider, attachments: attachments.length },
+    metadata: { provider: mailbox.meta.provider, attachments: attachments.length, simulated },
   });
-  return { messageId: record.id, sentAt: sent.sentAt, sandbox: mailbox.meta.provider === "sandbox", to: input.to, from: mailbox.address };
+  return { messageId: record.id, sentAt: sent.sentAt, sandbox: simulated, to: input.to, from: mailbox.address };
 }

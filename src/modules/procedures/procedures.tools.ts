@@ -142,7 +142,7 @@ export const proceduresTools = [
           return {
             data: {
               connected: false,
-              hint: "No hay correo conectado. Ofrece conectar la bandeja de prueba (datos ficticios) desde Trámites, o hacerlo aquí si el usuario lo pide.",
+              hint: "No hay correo conectado. Ofrece conectar su correo real (Gmail, Yahoo, iCloud… con una contraseña de aplicación) en Trámites → Conectar mi correo, o la bandeja de prueba (datos ficticios), que puedes conectar aquí si el usuario lo pide.",
             },
           };
         }
@@ -161,7 +161,7 @@ export const proceduresTools = [
       return {
         data: {
           connected: true,
-          sandbox: true,
+          sandbox: !mailboxes.some((m) => m.provider === "imap"),
           correos_revisados: scanned,
           nuevos: newCount,
           por_confirmar: items.map((p) => forModel(p, ctx)),

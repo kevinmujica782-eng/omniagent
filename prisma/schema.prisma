@@ -45,6 +45,7 @@ enum IntegrationProvider {
   BANK_AGGREGATOR
   BANK_DEMO
   MAIL_DEMO // bandeja y calendario de prueba (sandbox con el contrato de Gmail/Outlook)
+  MAIL_IMAP // correo real por IMAP/SMTP con contraseña de aplicación (Gmail, Yahoo, iCloud…)
 
   @@map("integration_provider")
 }

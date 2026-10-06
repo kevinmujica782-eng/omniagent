@@ -33,18 +33,21 @@ export async function listConnectorViews(userId: string): Promise<{ connected: C
     };
   });
   for (const mailbox of mailboxes) {
+    const real = mailbox.provider === "imap";
     connected.push({
       id: mailbox.id,
-      name: mailbox.displayName,
-      description: "Correo y calendario de prueba.",
+      name: real ? `${mailbox.displayName} · tu correo` : mailbox.displayName,
+      description: real ? "Correo real: lectura de la bandeja y envíos aprobados." : "Correo y calendario de prueba.",
       icon: mailbox.flavor === "outlook" ? "inbox" : "mail",
       status: "connected",
-      detail: `${mailbox.address} · ${mailbox.messageCount} correos`,
+      detail: mailbox.status === "ACTIVE" ? `${mailbox.address} · ${mailbox.messageCount} correos` : `${mailbox.address} · vuelve a conectarlo`,
       action: null,
       manageHref: "/tramites",
-      sandbox: true,
+      sandbox: !real,
     });
   }
+  const hasDemoMail = mailboxes.some((m) => m.provider === "sandbox");
+  const hasRealMail = mailboxes.some((m) => m.provider === "imap");
   if (feed) {
     connected.push({
       id: "calendar_feed",
@@ -60,7 +63,8 @@ export async function listConnectorViews(userId: string): Promise<{ connected: C
 
   const available: ConnectorView[] = [];
   for (const entry of CONNECTOR_CATALOG) {
-    if (entry.id === "mail_demo" && mailboxes.length > 0) continue;
+    if (entry.id === "mail_demo" && (hasDemoMail || hasRealMail)) continue;
+    if (entry.id === "mail_real" && hasRealMail) continue;
     if (entry.id === "calendar_feed" && feed) continue;
     if (entry.id === "gmail" && active.has("GOOGLE")) {
       connected.push({ ...entry, status: "connected", detail: null });

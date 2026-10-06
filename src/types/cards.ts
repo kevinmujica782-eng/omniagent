@@ -293,7 +293,8 @@ export type MailboxView = {
   address: string;
   displayName: string;
   flavor: "gmail" | "outlook";
-  provider: "sandbox";
+  /** sandbox: bandeja de prueba. imap: correo real (IMAP/SMTP). */
+  provider: "sandbox" | "imap";
   status: "ACTIVE" | "EXPIRED" | "REVOKED" | "ERROR";
   lastSyncedAt: string | null;
   messageCount: number;

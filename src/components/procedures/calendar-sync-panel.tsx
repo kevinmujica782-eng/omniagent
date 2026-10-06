@@ -79,7 +79,7 @@ export function CalendarSyncPanel({ sync: initial, demo = false }: { sync: Calen
           </ul>
         ) : (
           <p className="mt-1 text-sm leading-relaxed text-muted">
-            Conecta tu correo de prueba: Omni lee tus horarios ocupados y agenda ahí lo que confirmes.
+            Con la bandeja de prueba, Omni lee tus horarios ocupados y agenda ahí lo que confirmes. Para tu calendario real, usa el enlace de abajo.
           </p>
         )}
       </div>
