@@ -1,0 +1,69 @@
+# Prueba la app de Android para clientes (public/descargas/OmniAgent.apk) en un emulador con Chrome: la instala,
+# la abre y deja capturas de pantalla, la actividad en primer plano y los errores en la rama «apk-checks».
+name: Probar la app Android en un emulador
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: twa-check
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  emulator:
+    name: Instalar, abrir y capturar
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Activar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Emulador con Chrome (Android 14)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis_playstore
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            mkdir -p checks
+            adb install -r public/descargas/OmniAgent.apk > checks/install.txt 2>&1; cat checks/install.txt
+            adb shell dumpsys package com.omniagent.twa | grep -E "versionName|versionCode|targetSdk" > checks/package.txt || true
+            adb shell pm get-app-links com.omniagent.twa > checks/app-links.txt 2>&1 || true
+            adb logcat -c
+            adb shell monkey -p com.omniagent.twa -c android.intent.category.LAUNCHER 1
+            sleep 20
+            adb exec-out screencap -p > checks/1-abierta.png
+            sleep 25
+            adb exec-out screencap -p > checks/2-despues.png
+            adb shell dumpsys activity activities | grep -E "ResumedActivity" > checks/actividad.txt || true
+            adb logcat -d > checks/logcat.txt || true
+            grep -nE "FATAL EXCEPTION|AndroidRuntime" checks/logcat.txt > checks/errores.txt || echo "sin errores fatales" > checks/errores.txt
+            grep -niE "TrustedWebActivity|TwaLauncher|LauncherActivity|customtabs" checks/logcat.txt | tail -60 > checks/twa.txt || true
+
+      - name: Resumen
+        run: |
+          for f in install package app-links actividad errores; do echo "== $f"; cat "checks/$f.txt" || true; done
+          ls -la checks
+
+      - name: Dejar el resultado en la rama apk-checks
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd checks
+          rm -f logcat.txt
+          git init -q -b apk-checks
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Prueba del .apk en emulador (corrida ${GITHUB_RUN_NUMBER})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" apk-checks
