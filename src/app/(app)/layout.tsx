@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
+import { ServiceWorkerRegistration } from "@/components/push/service-worker";
 import { ensureProfile, requireUser } from "@/lib/auth";
 import { agentStatusLine } from "@/lib/format";
 import { countPendingActions } from "@/modules/actions/actions.service";
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       status={agentStatusLine(watching, openTasks)}
       recent={recent}
     >
+      <ServiceWorkerRegistration />
       {children}
     </AppShell>
   );

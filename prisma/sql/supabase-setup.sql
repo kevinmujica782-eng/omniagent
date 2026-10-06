@@ -163,7 +163,8 @@ alter default privileges for role postgres in schema public
 -- mail_messages, mail_attachments, personal_fields, calendar_feeds y document_blobs
 -- (correos, datos personales cifrados, secretos del feed y binarios de documentos), price_points
 -- (se lee por la API junto con su producto) y return_cases (el texto de los reclamos, las respuestas
--- de las tiendas y el historial: se leen por la API, que arma la vista con la aprobación pendiente).
+-- de las tiendas y el historial: se leen por la API, que arma la vista con la aprobación pendiente),
+-- push_subscriptions (las llaves de cada aparato) y app_settings (ajustes internos, como las llaves VAPID).
 
 do $$
 declare
@@ -232,5 +233,47 @@ begin
     end if;
   end if;
 end $$;
+
+-- ─── 7. Notificaciones push al teléfono ───────────────────────────────
+-- Cada notificación nueva de alguien con notificaciones push activas (tabla push_subscriptions) se manda a
+-- sus aparatos: pg_net llama a /api/cron/push con el mismo «Bearer CRON_SECRET» de las tareas programadas.
+-- La URL y el secreto salen de Vault (los guarda `npm run db:cron`); mientras no estén, no hace nada.
+-- Un fallo aquí nunca impide guardar la notificación.
+create or replace function public.push_new_notification()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  app_url text;
+  cron_secret text;
+begin
+  if not exists (select 1 from public.push_subscriptions s where s.user_id = new.user_id) then
+    return new;
+  end if;
+  select decrypted_secret into app_url from vault.decrypted_secrets where name = 'omniagent_app_url';
+  select decrypted_secret into cron_secret from vault.decrypted_secrets where name = 'omniagent_cron_secret';
+  if app_url is null or cron_secret is null then
+    return new;
+  end if;
+  perform net.http_post(
+    url := app_url || '/api/cron/push',
+    body := jsonb_build_object('notificationId', new.id),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || cron_secret),
+    timeout_milliseconds := 15000
+  );
+  return new;
+exception when others then
+  raise warning 'push_new_notification: %', sqlerrm;
+  return new;
+end;
+$$;
+
+revoke execute on function public.push_new_notification() from public, anon, authenticated, service_role;
+
+create or replace trigger on_notification_push
+  after insert on public.notifications
+  for each row execute function public.push_new_notification();
 
 commit;

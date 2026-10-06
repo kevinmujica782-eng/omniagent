@@ -6,6 +6,7 @@ import { UpgradeButton } from "@/components/upgrade-sheet";
 import { CheckoutReturn } from "@/components/checkout-return";
 import { DeleteAccountSection } from "@/components/delete-account";
 import { PlanCard } from "@/components/plan-card";
+import { AppAndNotifications } from "@/components/push/app-and-notifications";
 import { ThemeSelector } from "@/components/theme-toggle";
 import { Notice, PageBody, PageHeader, Panel, Progress, Section, buttonClass } from "@/components/ui";
 import { meterTone } from "@/lib/dashboard-copy";
@@ -193,6 +194,10 @@ export function AccountView({
           <PlanCard plan={PLANS.FREE} current={!pro} />
           <PlanCard plan={PLANS.PRO} current={pro} />
         </div>
+      </Section>
+
+      <Section title="App y notificaciones">
+        <AppAndNotifications />
       </Section>
 
       <Section title="Apariencia">

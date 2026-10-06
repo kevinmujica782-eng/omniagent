@@ -5,7 +5,8 @@ import { env } from "./env";
 import { requestIdOf } from "./http";
 import { log } from "./log";
 
-function authorized(header: string | null, secret: string): boolean {
+/** ¿Trae «Authorization: Bearer <CRON_SECRET>»? Comparación en tiempo constante. */
+export function cronAuthorized(header: string | null, secret: string): boolean {
   const expected = Buffer.from(`Bearer ${secret}`);
   const given = Buffer.from(header ?? "");
   return given.length === expected.length && timingSafeEqual(given, expected);
@@ -19,7 +20,7 @@ export function cronRoute(job: string, run: () => Promise<Record<string, unknown
   return async function GET(request: Request): Promise<Response> {
     const secret = env().CRON_SECRET;
     if (!secret) return NextResponse.json({ error: "CRON_SECRET no está configurado" }, { status: 503 });
-    if (!authorized(request.headers.get("authorization"), secret)) {
+    if (!cronAuthorized(request.headers.get("authorization"), secret)) {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
     const requestId = requestIdOf(request);

@@ -12,7 +12,9 @@ export const metadata: Metadata = {
   description: "Tu agente personal para finanzas, trámites y compras. Omni propone; tú apruebas.",
   applicationName: "OmniAgent",
   manifest: "/manifest.webmanifest",
-  icons: { icon: "/brand/omni-mark.svg" },
+  icons: { icon: "/brand/omni-mark.svg", apple: "/icons/apple-touch-icon.png" },
+  // En iPhone, «Agregar a inicio» abre OmniAgent como app (sin barra del navegador) y permite notificaciones push.
+  appleWebApp: { capable: true, title: "OmniAgent", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

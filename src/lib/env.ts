@@ -20,6 +20,9 @@ const schema = z.object({
   // Binance Pay (comercio): llave de API y llave secreta de merchant.binance.com. Las dos o ninguna.
   BINANCE_PAY_API_KEY: z.string().optional(),
   BINANCE_PAY_SECRET_KEY: z.string().optional(),
+  // Notificaciones push: si faltan, la app genera sus llaves VAPID y las guarda cifradas en app_settings.
+  VAPID_PUBLIC_KEY: z.string().optional(),
+  VAPID_PRIVATE_KEY: z.string().optional(),
   REVENUECAT_PRO_ENTITLEMENT: z.string().default("pro"),
   FINANCE_PROVIDER: z.enum(["sandbox", "plaid"]).default("sandbox"),
   PLAID_CLIENT_ID: z.string().optional(),

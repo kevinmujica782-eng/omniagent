@@ -418,6 +418,7 @@ model Profile {
 
   subscriptions     Subscription[]
   binanceOrders     BinanceOrder[]
+  pushSubscriptions PushSubscription[]
   connections       IntegrationConnection[]
   usageLogs         AiUsageLog[]
   conversations     Conversation[]
@@ -1232,6 +1233,35 @@ model AppNotification {
 
   @@index([userId, readAt, createdAt(sort: Desc)])
   @@map("notifications")
+}
+
+/// Notificaciones push (Web Push) de cada teléfono o navegador donde la persona las activó.
+model PushSubscription {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?   @map("user_agent")
+  failures      Int       @default(0)
+  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/// Ajustes que el servidor genera solo y guarda cifrados (por ejemplo, las llaves VAPID de las notificaciones push).
+model AppSetting {
+  key       String   @id
+  value     String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("app_settings")
 }
 
 /// Contadores de límite de tasa por ventana fija (solo servidor: RLS sin políticas).
