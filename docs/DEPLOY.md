@@ -139,6 +139,8 @@ docker compose logs -f web
 
 ## 5. Stripe en producción (plan Pro de US$19.99 al mes)
 
+Stripe no abre cuentas a negocios de Venezuela: la cuenta sale de una empresa en EE. UU. creada con Stripe Atlas (ver `docs/STRIPE_ATLAS.md`).
+
 1. **Activa la cuenta** (datos del negocio y cuenta bancaria) y pasa el Dashboard a modo *live*. Las llaves, precios y webhooks de *live* son distintos de los de prueba.
 2. **Producto:** crea **OmniAgent Pro** con un precio **recurrente mensual de USD 19.99**. Su id (`price_…`) va en `STRIPE_PRICE_PRO_MONTHLY`.
 3. **Webhook:** crea un endpoint `https://tu-dominio/api/webhooks/stripe` con estos eventos. Su secreto (`whsec_…`) va en `STRIPE_WEBHOOK_SECRET`.
