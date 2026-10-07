@@ -69,6 +69,26 @@ enum AgentModule {
   @@map("agent_module")
 }
 
+/// Categoría de un recuerdo del agente (ver src/modules/memory/memory.types.ts).
+enum MemoryKind {
+  PREFERENCE // cómo quiere que Omni trabaje o le hable
+  FINANCE // datos de dinero que el banco conectado no muestra
+  WEBSITE // páginas o sitios web que creó
+  GOAL // metas y aspiraciones
+  NOTE // otros datos duraderos (familia, trabajo, negocio)
+
+  @@map("memory_kind")
+}
+
+/// Quién guardó el recuerdo.
+enum MemorySource {
+  USER // la persona, desde Cuenta
+  AGENT // Omni, en el chat, con lo que la persona dijo
+  SYSTEM // la app, al importar o sincronizar
+
+  @@map("memory_source")
+}
+
 enum MessageRole {
   USER
   ASSISTANT
@@ -448,6 +468,7 @@ model Profile {
   trackedOrders     TrackedOrder[]
   returnCases       ReturnCase[]
   contentReports    ContentReport[]
+  memories          AgentMemory[]
 
   @@map("profiles")
 }
@@ -576,6 +597,34 @@ model Conversation {
 
   @@index([userId, updatedAt(sort: Desc)])
   @@map("conversations")
+}
+
+/// Memoria del agente: lo que Omni recuerda de cada persona entre conversaciones. `data` sigue el esquema de su
+/// categoría (memory.types.ts) y `dedupeKey` (categoría + título normalizado, o la dirección de la página web) evita
+/// duplicados. Solo el servidor la lee y la escribe; la persona la ve y la borra en Cuenta.
+model AgentMemory {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String       @map("user_id") @db.Uuid
+  kind           MemoryKind
+  title          String
+  data           Json         @default("{}")
+  dedupeKey      String       @map("dedupe_key")
+  importance     Int          @default(2) @db.SmallInt // 1 baja, 2 media, 3 alta
+  pinned         Boolean      @default(false)
+  source         MemorySource @default(AGENT)
+  /// Conversación donde Omni lo guardó (sin llave foránea: la conversación se puede borrar).
+  conversationId String?      @map("conversation_id") @db.Uuid
+  useCount       Int          @default(0) @map("use_count")
+  lastUsedAt     DateTime?    @map("last_used_at") @db.Timestamptz(6)
+  expiresAt      DateTime?    @map("expires_at") @db.Timestamptz(6)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dedupeKey])
+  @@index([userId, kind])
+  @@map("agent_memories")
 }
 
 /// content guarda lo que ve la UI: { text, cards[] }. Los mensajes TOOL registran cada llamada a herramienta.

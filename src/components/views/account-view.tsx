@@ -5,6 +5,7 @@ import { BinanceRenewButton, BinanceReturn } from "@/components/binance-pay";
 import { UpgradeButton } from "@/components/upgrade-sheet";
 import { CheckoutReturn } from "@/components/checkout-return";
 import { DeleteAccountSection } from "@/components/delete-account";
+import { MemoryPanel } from "@/components/memory/memory-panel";
 import { PlanCard } from "@/components/plan-card";
 import { AppAndNotifications } from "@/components/push/app-and-notifications";
 import { ThemeSelector } from "@/components/theme-toggle";
@@ -194,6 +195,10 @@ export function AccountView({
           <PlanCard plan={PLANS.FREE} current={!pro} />
           <PlanCard plan={PLANS.PRO} current={pro} />
         </div>
+      </Section>
+
+      <Section title="Lo que Omni recuerda">
+        <MemoryPanel demo={preview} />
       </Section>
 
       <Section title="App y notificaciones">

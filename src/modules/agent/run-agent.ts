@@ -7,6 +7,7 @@ import { AppError, Errors, isFreePlanLimit, type PlanLimitDetails } from "@/lib/
 import { log } from "@/lib/log";
 import { assertCanSendMessage, getEntitlements } from "@/modules/billing/entitlements";
 import { upgradeCard } from "@/modules/billing/upgrade";
+import { buildAgentMemory } from "@/modules/memory/memory.service";
 import type { AgentCard, ChatMessageView } from "@/types/cards";
 import { anthropic } from "./anthropic";
 import { buildSystemPrompt } from "./prompts";
@@ -79,10 +80,23 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     plan: entitlements.plan,
     now,
   });
-  // Prompt caching: herramientas + parte fija del sistema se reutilizan entre turnos (menos costo y latencia).
+  // Memoria de Omni: lo más relevante para este mensaje. Si falla, el turno sigue sin ella.
+  const memory = await buildAgentMemory(userId, {
+    query: text,
+    now,
+    timeZone: profile.timezone,
+    excludeConversationId: conversationId,
+  }).catch((error: unknown) => {
+    log.warn("agent.memory_unavailable", { userId, error });
+    return null;
+  });
+  // Prompt caching: herramientas + parte fija del sistema se reutilizan entre turnos (menos costo y latencia). El
+  // segundo punto de caché (después de la memoria) sirve entre las rondas de herramientas de este mismo turno.
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: prompt.stable, cache_control: { type: "ephemeral" } },
-    { type: "text", text: prompt.dynamic },
+    memory?.text
+      ? { type: "text", text: `${prompt.dynamic}\n\n${memory.text}`, cache_control: { type: "ephemeral" } }
+      : { type: "text", text: prompt.dynamic },
   ];
   const tools = ALL_TOOLS.map(toAnthropicTool);
 
