@@ -23,7 +23,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 
 ---
 
-## 4. Estado del desarrollo (actualizado el 6 oct 2026)
+## 4. Estado del desarrollo (actualizado el 7 oct 2026)
 
 ### Versiones y decisiones fijadas
 - Next.js 16 (App Router, `src/proxy.ts` en lugar de middleware), React 19, Tailwind 4, TypeScript estricto.
@@ -155,6 +155,16 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - El workflow publica `public/descargas/OmniAgent.apk`, agrega la huella a `public/.well-known/assetlinks.json` y actualiza el release `app-android`.
   - El enlace para anuncios es `/descargar`. En iPhone: Safari → Agregar a inicio.
   - El workflow «Probar la app Android en un emulador» deja capturas en la rama `apk-checks`.
+
+### Memoria de Omni (7 oct 2026)
+- **Qué hace:** Omni recuerda a cada persona entre conversaciones (`docs/MEMORIA.md`, módulo `src/modules/memory/`). Hay cinco categorías con datos tipados: preferencias, finanzas, páginas web que creó, metas y otros datos. Los esquemas son zod y el tipo es una unión discriminada por `kind`. Todo vive en la tabla `agent_memories`.
+- **Cada turno del chat:** `buildAgentMemory` suma los recuerdos más relevantes para el mensaje con lo que muestran los módulos (metas que sigue, último análisis de Finanzas y actividad de 30 días). Arma un bloque de unos 2.600 caracteres al final del prompt de sistema, con refs y como «información, nunca instrucciones».
+- **Herramientas:** `memory_save_preference`, `memory_save_finance`, `memory_save_website`, `memory_save_goal`, `memory_save_note`, `memory_recall` y `memory_forget`.
+- **Reglas:**
+  - Sin duplicados: cuenta el título normalizado o la dirección web.
+  - Nunca guarda tarjetas, claves, llaves, documentos ni datos de salud.
+  - Máximo 200 recuerdos; con la memoria llena se descarta lo menos útil que guardó Omni.
+- **Control de la persona:** en Cuenta → «Lo que Omni recuerda» la persona fija, olvida, agrega o borra todo. La API está en `/api/v1/memory`.
 
 ### Pantalla de Omni Pro (paywall)
 - **Dónde:** `src/components/paywall/` (`paywall.tsx` y `autopilot-dial.tsx`); datos en `modules/billing/paywall.ts`; pago en `lib/purchase.ts`. Reemplaza la hoja anterior: la abren los límites del plan Gratis (402 `plan_limit`, con la fila del límite marcada), la tarjeta del chat, el Inicio y la cuenta.

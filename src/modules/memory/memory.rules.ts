@@ -125,7 +125,7 @@ export function validateMemoryInput(input: MemoryInput): ValidMemoryInput {
  * Clave para no duplicar: categoría + título normalizado. Una página web con dirección se reconoce por la dirección
  * (sin www ni barra final), aunque cambie de nombre.
  */
-export function dedupeKeyFor(input: Pick<ValidMemoryInput, "kind" | "title" | "data">): string {
+export function dedupeKeyFor(input: Summarizable): string {
   if (input.kind === "WEBSITE" && input.data.url) {
     const url = new URL(input.data.url);
     const host = url.hostname.toLowerCase().replace(/^www\./, "");
