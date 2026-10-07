@@ -335,3 +335,267 @@
     display: none;
   }
 }
+
+/* ── Asistente de Omni: el ojo de la marca, vivo ──────────────────
+   El anillo es el ojo, la pupila mira y la luna ámbar (la actividad de Omni) orbita. La pose de cada parte va en las
+   propiedades translate / rotate (con transición) y el movimiento continuo en transform (animaciones): así se suman. */
+.assistant-sky {
+  background:
+    radial-gradient(75% 38% at 50% 0%, color-mix(in oklab, var(--hero) 92%, transparent) 0%, transparent 78%),
+    radial-gradient(24% 16% at 50% 13%, color-mix(in oklab, var(--orbit) 7%, transparent) 0%, transparent 70%),
+    var(--canvas);
+}
+
+.omni-eye {
+  --level: 0;
+  overflow: visible;
+}
+.omni-eye .eye-halo {
+  transition: opacity 400ms ease;
+  opacity: 0.85;
+}
+.omni-eye .eye-ring {
+  fill: none;
+  stroke: var(--primary);
+  stroke-width: 10;
+  transition: stroke 400ms ease;
+}
+.omni-eye .eye-pupil {
+  fill: var(--ink);
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+  translate: 13px -9.5px;
+  transition: translate 450ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.omni-eye .eye-orbit {
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+  rotate: 47deg;
+  transition: rotate 700ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.omni-eye .eye-moon {
+  fill: var(--orbit);
+  filter: drop-shadow(0 0 6px color-mix(in oklab, var(--orbit) 65%, transparent));
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.omni-eye .eye-trail {
+  fill: none;
+  stroke: var(--orbit);
+  stroke-width: 3;
+  stroke-linecap: round;
+  /* Un arco de ~70° que termina en la luna (que está arriba dentro de su grupo). */
+  stroke-dasharray: 76 314;
+  stroke-dashoffset: -216;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.omni-eye .eye-scan,
+.omni-eye .eye-ripple,
+.omni-eye .eye-waves circle {
+  fill: none;
+  transform-box: view-box;
+  transform-origin: 100px 100px;
+}
+.omni-eye .eye-scan {
+  stroke: var(--ink);
+  stroke-opacity: 0.55;
+  stroke-width: 10;
+  stroke-linecap: round;
+  stroke-dasharray: 26 314;
+  opacity: 0;
+}
+.omni-eye .eye-ripple {
+  stroke: var(--primary);
+  stroke-width: 2;
+  opacity: 0;
+}
+.omni-eye .eye-waves {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.omni-eye .eye-waves circle {
+  stroke: var(--primary);
+  stroke-width: 1.5;
+  opacity: 0;
+}
+
+@keyframes eye-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes eye-arrive {
+  from {
+    transform: rotate(-360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+@keyframes eye-wave {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+}
+@keyframes eye-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+@keyframes eye-look {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(-14px, 4px);
+  }
+  50% {
+    transform: translate(-4px, 14px);
+  }
+  75% {
+    transform: translate(11px, 5px);
+  }
+}
+@keyframes eye-ripple {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+@keyframes eye-talk {
+  0%,
+  100% {
+    stroke-width: 10;
+  }
+  50% {
+    stroke-width: 13;
+  }
+}
+@keyframes eye-news {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.7);
+  }
+}
+
+/* En espera: una vuelta cada 24 s (la órbita de un día de trabajo); al abrir, una vuelta rápida y se posa. */
+.omni-eye.is-idle .eye-orbit {
+  animation: eye-turn 24s linear infinite;
+}
+.omni-eye.is-idle.is-entering .eye-orbit {
+  animation: eye-arrive 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Escuchando: la luna se detiene arriba, la pupila se centra y late con la voz, y salen ondas del anillo. */
+.omni-eye.is-listening .eye-orbit {
+  rotate: 0deg;
+}
+.omni-eye.is-listening .eye-halo {
+  opacity: 1;
+}
+.omni-eye.is-listening .eye-pupil {
+  translate: 0 0;
+  scale: calc(1 + var(--level) * 0.45);
+  animation: eye-breathe 1.6s ease-in-out infinite;
+}
+.omni-eye.is-listening .eye-ring {
+  stroke-width: calc(10 + var(--level) * 5);
+}
+.omni-eye.is-listening .eye-waves {
+  opacity: calc(0.4 + var(--level) * 0.6);
+}
+.omni-eye.is-listening .eye-waves circle {
+  animation: eye-wave 1.8s ease-out infinite;
+}
+.omni-eye.is-listening .eye-waves circle:nth-child(2) {
+  animation-delay: 0.6s;
+}
+.omni-eye.is-listening .eye-waves circle:nth-child(3) {
+  animation-delay: 1.2s;
+}
+
+/* Procesando: la pupila busca, la luna corre con su estela y un tramo del anillo gira al revés. */
+.omni-eye.is-processing .eye-orbit {
+  animation: eye-turn 1.15s linear infinite;
+}
+.omni-eye.is-processing .eye-trail {
+  opacity: 0.5;
+}
+.omni-eye.is-processing .eye-scan {
+  opacity: 1;
+  animation: eye-turn 1.7s linear infinite reverse;
+}
+.omni-eye.is-processing .eye-pupil {
+  translate: 0 0;
+  animation: eye-look 1.7s ease-in-out infinite;
+}
+
+/* Activo: la luna se posa donde la lleva la marca, el anillo se aviva y la pupila mira la respuesta. */
+.omni-eye.is-active .eye-ring {
+  stroke: var(--primary-hover);
+}
+.omni-eye.is-active .eye-halo {
+  opacity: 1;
+}
+.omni-eye.is-active .eye-ripple {
+  animation: eye-ripple 900ms ease-out 1;
+}
+.omni-eye.is-active .eye-pupil {
+  translate: 0 12px;
+}
+.omni-eye.is-speaking .eye-ring {
+  animation: eye-talk 0.9s ease-in-out infinite;
+}
+
+/* Error: el anillo y la luna en coral; la pupila baja. */
+.omni-eye.is-error .eye-ring {
+  stroke: var(--danger);
+}
+.omni-eye.is-error .eye-moon {
+  fill: var(--danger);
+  filter: none;
+}
+.omni-eye.is-error .eye-pupil {
+  translate: 0 6px;
+}
+
+/* Algo nuevo llegó en vivo: la luna destella tres veces. */
+.omni-eye.has-news .eye-moon {
+  animation: eye-news 900ms ease-out 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .omni-eye,
+  .omni-eye * {
+    animation: none !important;
+    transition: none !important;
+  }
+  .omni-eye.is-listening .eye-waves {
+    opacity: 1;
+  }
+  .omni-eye.is-listening .eye-waves circle:first-child {
+    opacity: 0.35;
+    transform: scale(1.25);
+  }
+  .omni-eye.is-processing .eye-scan {
+    opacity: 0.6;
+  }
+}

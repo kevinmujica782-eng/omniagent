@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { AppShell, type NavKey } from "@/components/app-shell";
+import { INITIAL_ASSISTANT } from "@/components/assistant/assistant-model";
+import type { AssistantPreset } from "@/components/assistant/omni-assistant";
 import { ChatView } from "@/components/chat/chat-view";
 import { demoConcierge } from "@/components/preview/demo-concierge";
 import { demoDashboard, type DemoDashboardVariant } from "@/components/preview/demo-dashboard";
@@ -64,6 +66,11 @@ export const PREVIEW_SCREENS = [
   "devoluciones-vacia",
   "reclamo",
   "chat-devoluciones",
+  // Asistente interactivo (sobre el Inicio): en espera con un aviso en vivo, escuchando, procesando y activo.
+  "asistente",
+  "asistente-escuchando",
+  "asistente-procesando",
+  "asistente-activo",
 ] as const;
 export type PreviewScreenKey = (typeof PREVIEW_SCREENS)[number];
 
@@ -104,7 +111,44 @@ const NAV_FOR: Record<PreviewScreenKey, NavKey> = {
   "devoluciones-vacia": "devoluciones",
   reclamo: "devoluciones",
   "chat-devoluciones": "chat",
+  asistente: "inicio",
+  "asistente-escuchando": "inicio",
+  "asistente-procesando": "inicio",
+  "asistente-activo": "inicio",
 };
+
+/** El asistente abierto en cada pantalla de ejemplo. */
+function assistantPreset(screen: PreviewScreenKey): AssistantPreset | null {
+  switch (screen) {
+    case "asistente":
+      return { state: INITIAL_ASSISTANT, news: { id: "demo-news", title: "Compra de los audífonos Aura X2 por $247" } };
+    case "asistente-escuchando":
+      return {
+        state: { ...INITIAL_ASSISTANT, phase: "listening", via: "voice", heard: "Vigila el precio de unos audífonos", interim: "inalámbricos y avísame si bajan" },
+      };
+    case "asistente-procesando":
+      return { state: { ...INITIAL_ASSISTANT, phase: "processing", via: "voice", heard: "Revisa mi correo y dime qué trámites tengo" } };
+    case "asistente-activo":
+      return {
+        state: {
+          ...INITIAL_ASSISTANT,
+          phase: "active",
+          via: "voice",
+          speaking: true,
+          heard: "¿Qué tengo pendiente por aprobar?",
+          reply: {
+            text: "Tienes 3 cosas por aprobar: la compra de los audífonos por $247, cancelar Cine+ y el correo a la escuela.",
+            suggestions: ["Aprueba la compra de los audífonos", "¿Qué vence esta semana?"],
+            approvals: 3,
+            cards: 3,
+            conversationId: "demo",
+          },
+        },
+      };
+    default:
+      return null;
+  }
+}
 
 export function isPreviewScreen(value: unknown): value is PreviewScreenKey {
   return typeof value === "string" && (PREVIEW_SCREENS as readonly string[]).includes(value);
@@ -356,6 +400,10 @@ export function PreviewScreen({ screen, emptyChat = false }: { screen: PreviewSc
     case "inicio-nuevo":
     case "mejorar":
     case "pro":
+    case "asistente":
+    case "asistente-escuchando":
+    case "asistente-procesando":
+    case "asistente-activo":
       body = <DashboardView data={dashboard} preview />;
       break;
     case "cuenta":
@@ -381,7 +429,7 @@ export function PreviewScreen({ screen, emptyChat = false }: { screen: PreviewSc
       conciergeBadge={screen === "compras-vacia" || screen === "inicio-nuevo" ? 0 : shopping.alerts.filter((a) => a.status === "NEW").length}
       returnsBadge={screen === "devoluciones-vacia" || screen === "inicio-nuevo" ? 0 : returns.badge}
       status={
-        screen.startsWith("inicio") || screen === "mejorar" || screen === "pro"
+        screen.startsWith("inicio") || screen.startsWith("asistente") || screen === "mejorar" || screen === "pro"
           ? dashboard.status
           : agentStatusLine(screen === "compras-vacia" ? 0 : shopping.items.filter((i) => i.status === "ACTIVE").length, 1)
       }
@@ -395,6 +443,7 @@ export function PreviewScreen({ screen, emptyChat = false }: { screen: PreviewSc
             : screen === "pro"
               ? { reason: null, feature: null }
               : null,
+        assistant: assistantPreset(screen),
       }}
     >
       {body}

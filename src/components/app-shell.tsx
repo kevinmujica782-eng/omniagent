@@ -21,6 +21,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { AgentBar } from "@/components/agent-bar";
+import { AssistantProvider, AssistantTrigger } from "@/components/assistant/assistant-provider";
+import type { AssistantPreset } from "@/components/assistant/omni-assistant";
 import { OmniMark } from "@/components/omni-mark";
 import { UpgradeSheetHost } from "@/components/upgrade-sheet";
 import { cn } from "@/lib/cn";
@@ -77,7 +79,7 @@ export interface AppShellProps {
   recent: { id: string; title: string }[];
   children: ReactNode;
   /** Vista previa (/preview): la navegación cambia de pantalla de ejemplo en vez de ir a rutas reales. */
-  preview?: { active: NavKey; upgrade?: UpgradeRequest | null };
+  preview?: { active: NavKey; upgrade?: UpgradeRequest | null; assistant?: AssistantPreset | null };
 }
 
 export function AppShell({
@@ -216,6 +218,17 @@ export function AppShell({
   const showTabs = !isActive("chat");
 
   return (
+    <AssistantProvider
+      status={status}
+      counts={{ approvals: pendingApprovals, procedures: proceduresBadge, offers: conciergeBadge, orders: returnsBadge }}
+      userId={user.id ?? null}
+      links={{
+        chat: (conversationId) => (preview ? hrefFor("chat") : conversationId ? `/chat?c=${conversationId}` : "/chat"),
+        approvals: hrefFor("aprobaciones"),
+      }}
+      demo={Boolean(preview)}
+      preset={preview?.assistant ?? null}
+    >
     <div className="flex h-dvh overflow-hidden bg-canvas">
       <aside className="hidden w-64 shrink-0 border-r border-line bg-surface-2 lg:block">{nav}</aside>
 
@@ -246,6 +259,7 @@ export function AppShell({
           status={status}
           pending={pendingApprovals}
           approvalsHref={hrefFor("aprobaciones")}
+          summon
           leading={
             <button
               type="button"
@@ -267,6 +281,21 @@ export function AppShell({
               {TABS.map(({ key, label, icon: Icon }) => {
                 const active = isActive(key);
                 const badge = badgeFor(key);
+                // La pestaña del centro es Omni: abre el asistente (el chat sigue en el menú y en el asistente).
+                if (!Icon) {
+                  return (
+                    <AssistantTrigger
+                      key={key}
+                      aria-label="Hablar con Omni"
+                      className="flex flex-col items-center gap-0.5 pb-1.5 pt-2 active:scale-95"
+                    >
+                      <span className="relative grid h-8 w-14 place-items-center rounded-full">
+                        <OmniMark size={28} />
+                      </span>
+                      <span className="text-[11px] leading-tight text-muted">{label}</span>
+                    </AssistantTrigger>
+                  );
+                }
                 return (
                   <Link
                     key={key}
@@ -298,5 +327,6 @@ export function AppShell({
       </div>
       <UpgradeSheetHost preview={Boolean(preview)} initial={preview?.upgrade ?? null} userId={user.id ?? null} />
     </div>
+    </AssistantProvider>
   );
 }

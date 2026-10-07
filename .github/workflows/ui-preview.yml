@@ -1,0 +1,92 @@
+# Capturas de la interfaz: compila la app, la levanta con la vista previa (/preview, datos de ejemplo, sin base de
+# datos) y fotografía las pantallas pedidas en teléfono y compu. Deja las capturas en la rama «ui-checks».
+name: Capturas de la interfaz
+
+on:
+  workflow_dispatch:
+    inputs:
+      screens:
+        description: "Pantallas de /preview, separadas por comas"
+        required: true
+        default: "asistente,asistente-escuchando,asistente-procesando,asistente-activo,inicio"
+
+concurrency:
+  group: ui-preview
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+  NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+
+jobs:
+  shots:
+    name: Compilar y capturar
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package*.json
+
+      - name: Instalar dependencias
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      # Sin CSP: su upgrade-insecure-requests pasaría los archivos de http://127.0.0.1 a https y la página no cargaría.
+      - name: Compilar
+        env:
+          CSP_MODE: "off"
+        run: npm run build
+
+      - name: Levantar con la vista previa
+        env:
+          ENABLE_PREVIEW: "true"
+          DATABASE_URL: postgresql://nadie:nada@127.0.0.1:1/ninguna
+        run: |
+          nohup npx next start -p 3000 > "$RUNNER_TEMP/next.log" 2>&1 &
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000/preview?screen=inicio" || true)
+            if [ "$code" = "200" ]; then echo "Listo"; exit 0; fi
+            sleep 2
+          done
+          tail -50 "$RUNNER_TEMP/next.log"
+          exit 1
+
+      - name: Playwright con el Chrome del runner
+        run: |
+          mkdir -p "$RUNNER_TEMP/pw"
+          cp scripts/ui/preview-shots.mjs "$RUNNER_TEMP/pw/"
+          cd "$RUNNER_TEMP/pw"
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund playwright-core@1
+
+      - name: Capturas
+        env:
+          SCREENS: ${{ inputs.screens }}
+          OUT_DIR: ${{ github.workspace }}/ui-checks
+        run: node "$RUNNER_TEMP/pw/preview-shots.mjs"
+
+      - name: Errores del servidor
+        if: always()
+        run: grep -iE "error|warn" "$RUNNER_TEMP/next.log" | tail -30 || true
+
+      - name: Dejar las capturas en la rama ui-checks
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd ui-checks
+          git init -q -b ui-checks
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Capturas de la interfaz (corrida ${GITHUB_RUN_NUMBER})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ui-checks
