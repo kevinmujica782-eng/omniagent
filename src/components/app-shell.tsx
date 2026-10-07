@@ -307,10 +307,10 @@ export function AppShell({
                     <span
                       className={cn(
                         "relative grid h-8 w-14 place-items-center rounded-full transition-colors",
-                        active && Icon ? "bg-primary-soft text-primary" : "text-muted",
+                        active ? "bg-primary-soft text-primary" : "text-muted",
                       )}
                     >
-                      {Icon ? <Icon className="size-[21px]" aria-hidden /> : <OmniMark size={28} />}
+                      <Icon className="size-[21px]" aria-hidden />
                       {badge > 0 ? (
                         <span className="absolute right-1.5 top-0 min-w-4 rounded-full bg-orbit px-1 text-center text-[10px] font-bold leading-4 text-[#2a1d05] tabular-nums">
                           {badge}
