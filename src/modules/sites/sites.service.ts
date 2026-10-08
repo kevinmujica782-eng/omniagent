@@ -223,7 +223,9 @@ async function findOwnedSiteById(userId: string, siteId: string): Promise<Site> 
 /** Una página de la persona por su id, su dirección (/s/slug o el enlace completo) o su nombre. */
 export async function findOwnedSite(userId: string, ref: string): Promise<Site> {
   const value = ref.trim();
-  if (isUuid(value)) return findOwnedSiteById(userId, value);
+  // isUuid estrecha el tipo: si no es un id, `value` sigue siendo un texto (dirección o nombre).
+  const isId: boolean = isUuid(value as unknown);
+  if (isId) return findOwnedSiteById(userId, value);
   const slug = value.replace(/^.*\/s\//, "").replace(/[/?#].*$/, "").toLowerCase();
   if (SLUG_PATTERN.test(slug)) {
     const bySlug = await prisma.site.findFirst({ where: { userId, slug } });

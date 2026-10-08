@@ -16,8 +16,18 @@ const JOBS = [
   { name: "omniagent-finanzas", schedule: "0 11 * * *", path: "/api/cron/finance", what: "finanzas, cada día 11:00 UTC" },
   { name: "omniagent-devoluciones", schedule: "45 * * * *", path: "/api/cron/returns", what: "devoluciones, cada hora" },
   { name: "omniagent-cobros", schedule: "25 * * * *", path: "/api/cron/billing", what: "vencimientos y avisos de Binance Pay, cada hora" },
-  // Motor en segundo plano: lo que quedó en cola, reintentos, aprobaciones vencidas y trabajos a medias.
-  { name: "omniagent-motor", schedule: "* * * * *", path: "/api/cron/engine", what: "motor de ejecución autónoma, cada minuto" },
+  // Motor en segundo plano: lo que quedó en cola, reintentos, aprobaciones vencidas y trabajos a medias. Solo llama a
+  // la app si hay algo que hacer (la consulta corre en la base): sin trabajos pendientes no gasta invocaciones.
+  {
+    name: "omniagent-motor",
+    schedule: "* * * * *",
+    path: "/api/cron/engine",
+    what: "motor de ejecución autónoma, cada minuto si hay trabajos pendientes",
+    when: `exists (
+    select 1 from public.engine_jobs
+    where (status in ('QUEUED', 'WAITING') and run_after <= now()) or (status = 'RUNNING' and locked_until < now())
+  )`,
+  },
 ];
 const URL_SECRET = "omniagent_app_url";
 const CRON_SECRET_NAME = "omniagent_cron_secret";
@@ -40,13 +50,13 @@ if (!remove) {
   }
 }
 
-/** Comando que corre cada trabajo: lee la URL y el secreto de Vault en el momento de llamar. */
-function command(path) {
+/** Comando que corre cada trabajo: lee la URL y el secreto de Vault en el momento de llamar (y solo si `when`). */
+function command(path, when) {
   return `select net.http_get(
   url := (select decrypted_secret from vault.decrypted_secrets where name = '${URL_SECRET}') || '${path}',
   headers := jsonb_build_object('Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = '${CRON_SECRET_NAME}')),
   timeout_milliseconds := 60000
-);`;
+)${when ? `\nwhere ${when}` : ""};`;
 }
 
 async function upsertSecret(client, name, value, description) {
@@ -81,7 +91,7 @@ try {
     await upsertSecret(client, URL_SECRET, appUrl, "URL pública de OmniAgent para las tareas programadas");
     await upsertSecret(client, CRON_SECRET_NAME, secret, "CRON_SECRET de OmniAgent");
     for (const job of JOBS) {
-      await client.query("select cron.schedule($1, $2, $3)", [job.name, job.schedule, command(job.path)]);
+      await client.query("select cron.schedule($1, $2, $3)", [job.name, job.schedule, command(job.path, job.when)]);
       console.log(`✔ ${job.name}: ${job.what} → ${appUrl}${job.path}`);
     }
     console.log("\nHistorial:  select * from cron.job_run_details order by start_time desc limit 10;");
