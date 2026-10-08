@@ -103,6 +103,7 @@ enum ActionType {
   CREATE_CALENDAR_EVENT
   SUBMIT_FORM
   PURCHASE
+  PUBLISH_SITE // publicar una página web que armó Omni (o un cambio a una ya publicada)
 
   @@map("action_type")
 }
@@ -421,6 +422,27 @@ enum ReturnChannel {
   @@map("return_channel")
 }
 
+/// Estado de un trabajo del motor de ejecución autónoma (src/modules/engine).
+enum JobStatus {
+  QUEUED // en cola, o esperando su próximo reintento (run_after)
+  RUNNING // un ejecutor lo tiene tomado (locked_by / locked_until)
+  WAITING // espera que la persona decida una aprobación (waiting_for)
+  SUCCEEDED
+  FAILED
+  CANCELED
+
+  @@map("job_status")
+}
+
+/// Estado de una página web que armó Omni.
+enum SiteStatus {
+  DRAFT // vista previa: solo la ve su dueño
+  PUBLISHED // pública en /s/{slug}
+  ARCHIVED // retirada: el enlace ya no abre
+
+  @@map("site_status")
+}
+
 // ───────────────────────── Usuarios y planes ─────────────────────────
 
 model Profile {
@@ -469,6 +491,8 @@ model Profile {
   returnCases       ReturnCase[]
   contentReports    ContentReport[]
   memories          AgentMemory[]
+  engineJobs        EngineJob[]
+  sites             Site[]
 
   @@map("profiles")
 }
@@ -697,6 +721,77 @@ model AgentAction {
 
   @@index([userId, status, createdAt(sort: Desc)])
   @@map("agent_actions")
+}
+
+// ───────────────── Motor de ejecución autónoma ─────────────────
+
+/// Trabajo del motor: una petición del asistente ("crea mi página web", "analiza mis finanzas") convertida en pasos
+/// que llaman a los módulos uno detrás de otro, en segundo plano. Los pasos van dentro del trabajo (`steps`, JSON
+/// validado en src/modules/engine/engine.types.ts) porque siempre se leen y se guardan juntos: cada cambio de estado
+/// es una sola escritura atómica y Realtime entrega el trabajo completo a la tarjeta en vivo. Solo el ejecutor que
+/// tiene el turno (`locked_by`, hasta `locked_until`) puede escribir los pasos.
+model EngineJob {
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String      @map("user_id") @db.Uuid
+  playbook          String
+  module            AgentModule
+  title             String
+  status            JobStatus   @default(QUEUED)
+  input             Json        @default("{}")
+  steps             Json        @default("[]")
+  currentStep       Int         @default(0) @map("current_step")
+  result            Json?
+  errorMessage      String?     @map("error_message")
+  /// Quién lo pidió: agent (chat o asistente), api o schedule.
+  source            String      @default("agent")
+  /// Conversación donde se pidió (sin llave foránea: la conversación se puede borrar).
+  conversationId    String?     @map("conversation_id") @db.Uuid
+  /// "Ya estoy en eso": la misma petición mientras el trabajo sigue activo. Se borra al terminar.
+  activeKey         String?     @map("active_key")
+  /// Aprobaciones (agent_actions) que espera para seguir.
+  waitingFor        String[]    @default([]) @map("waiting_for") @db.Uuid
+  runAfter          DateTime    @default(now()) @map("run_after") @db.Timestamptz(6)
+  lockedBy          String?     @map("locked_by")
+  lockedUntil       DateTime?   @map("locked_until") @db.Timestamptz(6)
+  cancelRequestedAt DateTime?   @map("cancel_requested_at") @db.Timestamptz(6)
+  startedAt         DateTime?   @map("started_at") @db.Timestamptz(6)
+  finishedAt        DateTime?   @map("finished_at") @db.Timestamptz(6)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, activeKey])
+  @@index([status, runAfter])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("engine_jobs")
+}
+
+/// Página web que Omni armó para la persona (su negocio, su proyecto). Se ve en /s/{slug} solo publicada; publicarla
+/// (y publicar cada cambio) pasa por Aprobaciones. `content` sigue el esquema de src/modules/sites/sites.types.ts y
+/// `pendingContent` es un cambio que espera aprobación. Solo el servidor la lee y la escribe.
+model Site {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  slug           String     @unique
+  name           String
+  status         SiteStatus @default(DRAFT)
+  content        Json
+  pendingContent Json?      @map("pending_content")
+  /// Lo que pidió la persona (sin datos sensibles), para rehacerla o cambiarla.
+  brief          Json       @default("{}")
+  /// ai | rules
+  generator      String     @default("rules")
+  model          String?
+  publishedAt    DateTime?  @map("published_at") @db.Timestamptz(6)
+  archivedAt     DateTime?  @map("archived_at") @db.Timestamptz(6)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("sites")
 }
 
 // ───────────────────── Módulo financiero ─────────────────────

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookmarkPlus, Inbox, ListChecks, Tag, Truck, Wallet, type LucideIcon } from "lucide-react";
+import { Globe, Inbox, ListChecks, RefreshCw, Tag, Truck, Wallet, type LucideIcon } from "lucide-react";
 import { plural } from "@/lib/format";
 
 /** Lo que hay en vivo en cada área (los mismos contadores del menú). */
@@ -25,6 +25,14 @@ export interface QuickOrder {
 }
 
 export const QUICK_ORDERS: QuickOrder[] = [
+  {
+    // El motor en segundo plano: bancos, correo, precios y pedidos, uno detrás de otro.
+    id: "al-dia",
+    label: "Pon todo al día",
+    prompt: "Ponme al día con todo",
+    icon: RefreshCw,
+    mode: "send",
+  },
   {
     id: "pendiente",
     label: "¿Qué tengo pendiente?",
@@ -69,10 +77,10 @@ export const QUICK_ORDERS: QuickOrder[] = [
     countText: (n) => `${n} por revisar`,
   },
   {
-    id: "recuerda",
-    label: "Recuerda algo",
-    prompt: "Recuerda que ",
-    icon: BookmarkPlus,
+    id: "pagina",
+    label: "Crea una página web",
+    prompt: "Crea una página web para mi negocio: ",
+    icon: Globe,
     mode: "draft",
   },
 ];

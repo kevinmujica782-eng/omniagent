@@ -7,6 +7,7 @@ export const ACTION_KIND_LABEL: Record<ActionKind, string> = {
   SEND_EMAIL: "Correo",
   CREATE_CALENDAR_EVENT: "Evento",
   SUBMIT_FORM: "Formulario",
+  PUBLISH_SITE: "Página web",
 };
 
 /** Frase que antecede al título en la boleta: "Omni quiere comprar en SonidoMax". */
@@ -22,6 +23,8 @@ export function actionIntro(type: ActionKind, merchant: string | null): string {
       return "Omni quiere agendar";
     case "SUBMIT_FORM":
       return "Omni quiere enviar un formulario";
+    case "PUBLISH_SITE":
+      return "Omni quiere publicar";
   }
 }
 

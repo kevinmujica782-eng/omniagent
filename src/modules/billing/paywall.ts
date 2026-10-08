@@ -4,7 +4,7 @@
 import type { PlanLimitDetails } from "@/lib/errors";
 import { cadenceText, PLANS, type AgentFeatureId, type PlanLimits } from "./plans";
 
-export type PaywallRowId = "messages" | "mail" | "prices" | "analysis" | "alerts" | "forms" | "goals" | "model" | "approvals";
+export type PaywallRowId = "messages" | "mail" | "prices" | "analysis" | "alerts" | "forms" | "sites" | "goals" | "model" | "approvals";
 
 export interface PaywallRow {
   id: PaywallRowId;
@@ -31,6 +31,7 @@ export function paywallRows(free: PlanLimits = PLANS.FREE, pro: PlanLimits = PLA
     { id: "analysis", label: "Análisis de gastos", free: analysis(free), pro: analysis(pro) },
     { id: "alerts", label: "Alertas de ofertas", free: alerts(free), pro: alerts(pro) },
     { id: "forms", label: "Formularios con IA", free: `${n(free.monthlyFormReads)} al mes`, pro: `${n(pro.monthlyFormReads)} al mes` },
+    { id: "sites", label: "Páginas web hechas por Omni", free: `${n(free.monthlySites)} al mes`, pro: `${n(pro.monthlySites)} al mes` },
     { id: "goals", label: "Metas activas", free: n(free.activeGoals), pro: n(pro.activeGoals) },
     { id: "model", label: "Modelo de IA", free: model(free), pro: model(pro) },
     // En los dos planes: ninguna compra sale sin Permitir.
@@ -72,6 +73,8 @@ export function rowForLimit(limit: PlanLimitDetails["reason"] | string | null | 
       return "goals";
     case "form_reads":
       return "forms";
+    case "sites":
+      return "sites";
   }
   return feature && feature in FEATURE_ROW ? FEATURE_ROW[feature as AgentFeatureId] : null;
 }

@@ -164,7 +164,9 @@ alter default privileges for role postgres in schema public
 -- (correos, datos personales cifrados, secretos del feed y binarios de documentos), price_points
 -- (se lee por la API junto con su producto) y return_cases (el texto de los reclamos, las respuestas
 -- de las tiendas y el historial: se leen por la API, que arma la vista con la aprobación pendiente),
--- push_subscriptions (las llaves de cada aparato) y app_settings (ajustes internos, como las llaves VAPID).
+-- push_subscriptions (las llaves de cada aparato), app_settings (ajustes internos, como las llaves VAPID),
+-- agent_memories (la memoria de Omni: se ve y se borra en Cuenta, por la API) y sites (las páginas web que armó Omni:
+-- la pública se sirve en /s/{slug} desde el servidor y la vista previa solo a su dueño).
 
 do $$
 declare
@@ -174,7 +176,7 @@ declare
     'calendar_events', 'watchlist_items', 'suggestions', 'recurring_charges',
     'financial_accounts', 'transactions', 'goals', 'documents',
     'financial_analyses', 'savings_recommendations', 'category_budgets',
-    'price_alerts', 'purchase_orders', 'tracked_orders'
+    'price_alerts', 'purchase_orders', 'tracked_orders', 'engine_jobs'
   ];
 begin
   foreach tbl in array owner_tables loop
@@ -214,7 +216,7 @@ create policy "documents_owner_read" on storage.objects
 drop policy if exists "documents_owner_insert" on storage.objects;
 drop policy if exists "documents_owner_delete" on storage.objects;
 
--- ─── 6. Realtime: aprobaciones y notificaciones en vivo ────────────────
+-- ─── 6. Realtime: aprobaciones, notificaciones y trabajos del motor en vivo ───
 
 do $$
 begin
@@ -230,6 +232,13 @@ begin
       where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notifications'
     ) then
       alter publication supabase_realtime add table public.notifications;
+    end if;
+    -- La tarjeta de cada trabajo del motor (chat y asistente) muestra sus pasos en vivo.
+    if to_regclass('public.engine_jobs') is not null and not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'engine_jobs'
+    ) then
+      alter publication supabase_realtime add table public.engine_jobs;
     end if;
   end if;
 end $$;

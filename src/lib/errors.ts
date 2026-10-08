@@ -19,7 +19,7 @@ export class AppError extends Error {
  */
 export type PlanLimitDetails = {
   plan: "FREE" | "PRO";
-  reason: "messages" | "watchlist" | "goals" | "form_reads" | "page_reads" | "feature";
+  reason: "messages" | "watchlist" | "goals" | "form_reads" | "page_reads" | "sites" | "jobs" | "feature";
   /** Función avanzada que pide Pro (ver AgentFeatureId en modules/billing/plans.ts). */
   feature?: string;
   limit?: number;

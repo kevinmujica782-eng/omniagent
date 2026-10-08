@@ -2,8 +2,9 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { supabaseEnv } from "./config";
 
-// Las páginas legales y la de descarga de la app son públicas: se comparten y deben abrir sin sesión.
-const PUBLIC_PREFIXES = ["/login", "/auth", "/bot", "/privacidad", "/terminos", "/eliminar-cuenta", "/descargar"];
+// Las páginas legales, la de descarga de la app y las páginas web que arma Omni (/s/{slug}) son públicas: se comparten
+// y deben abrir sin sesión. La vista previa de una página sin publicar la valida la propia página (solo su dueño).
+const PUBLIC_PREFIXES = ["/login", "/auth", "/bot", "/privacidad", "/terminos", "/eliminar-cuenta", "/descargar", "/s"];
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;

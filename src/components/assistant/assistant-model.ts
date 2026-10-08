@@ -1,6 +1,7 @@
 // Modelo del asistente interactivo de Omni: estados, transiciones y textos. Sin React ni navegador
 // (se prueba en tests/unit/assistant.test.ts).
 import type { ChatMessageView, ModuleKind } from "@/types/cards";
+import type { JobView } from "@/types/engine";
 
 /** En espera, escuchando, procesando, activo (respondiendo) o con un error. */
 export type AssistantPhase = "idle" | "listening" | "processing" | "active" | "error";
@@ -14,6 +15,8 @@ export interface AssistantReply {
   approvals: number;
   /** Tarjetas con detalle, que se ven completas en el chat. */
   cards: number;
+  /** Trabajos que Omni empezó en segundo plano (el asistente muestra su avance en vivo). */
+  jobs: JobView[];
   conversationId: string;
 }
 
@@ -104,6 +107,8 @@ interface Intent {
 
 const INTENTS: { pattern: RegExp; intent: Intent }[] = [
   { pattern: /\b(recuerda|acuerdate|no olvides|olvida)\b/, intent: { hint: "Guardándolo en tu memoria" } },
+  { pattern: /\b(pagina web|sitio web|landing|mi web|una web)\b/, intent: { hint: "Preparando tu página web" } },
+  { pattern: /\b(al dia|pon todo|revisa todo|que hay de nuevo|novedades)\b/, intent: { hint: "Poniendo todo al día" } },
   { pattern: /\b(pedido|paquete|envio|devolucion|devolver|reclam\w*|llego|reembolso)/, intent: { module: "CONCIERGE", hint: "Revisando tus pedidos" } },
   { pattern: /\b(correo|tramite|formulario|permiso|cita|vence|vencen|pendiente)/, intent: { module: "PROCEDURES", hint: "Revisando tu correo y tus trámites" } },
   { pattern: /\b(precio|vigila|compra|comprar|oferta|vuelo|boleto|entrada|hotel)/, intent: { module: "CONCIERGE", hint: "Buscando precios" } },
@@ -145,6 +150,7 @@ export function summarizeReply(message: ChatMessageView, conversationId: string)
     suggestions: (message.suggestions ?? []).slice(0, 3),
     approvals: cards.filter((card) => NEEDS_APPROVAL.has(card.kind)).length,
     cards: cards.length,
+    jobs: cards.flatMap((card) => (card.kind === "job" ? [card.job] : [])),
     conversationId,
   };
 }

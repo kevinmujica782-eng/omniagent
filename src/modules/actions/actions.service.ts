@@ -26,6 +26,8 @@ export interface ProposeActionInput {
   amount?: number | null;
   currency?: string | null;
   lines?: { label: string; value: string }[];
+  /** Algo que conviene ver antes de decidir (ruta interna de la app, por ejemplo la vista previa de una página). */
+  link?: { label: string; href: string } | null;
   payload: Record<string, unknown>;
   ttlHours?: number;
   /** Avisar con una notificación (no hace falta si el usuario mismo la acaba de pedir). */
@@ -38,7 +40,14 @@ type StoredPayload = {
   merchant?: string | null;
   cadence?: string | null;
   lines?: { label: string; value: string }[];
+  link?: { label?: unknown; href?: unknown } | null;
 };
+
+/** Enlace para revisar antes de decidir: solo rutas internas de la app (las arma el servidor). */
+function internalLink(link: StoredPayload["link"]): ApprovalCard["link"] {
+  if (!link || typeof link.label !== "string" || typeof link.href !== "string") return null;
+  return /^\/(?!\/)/.test(link.href) ? { label: link.label, href: link.href } : null;
+}
 
 export async function proposeAction(input: ProposeActionInput): Promise<ApprovalCard> {
   const action = await prisma.agentAction.create({
@@ -55,6 +64,7 @@ export async function proposeAction(input: ProposeActionInput): Promise<Approval
         ...input.payload,
         merchant: input.merchant ?? null,
         lines: input.lines ?? [],
+        link: input.link ?? null,
       } as Prisma.InputJsonValue,
       expiresAt: new Date((input.now ?? new Date()).getTime() + (input.ttlHours ?? DEFAULT_TTL_HOURS) * 3_600_000),
       ...(input.now ? { createdAt: input.now } : {}),
@@ -100,6 +110,7 @@ export function toApprovalCard(action: AgentAction): ApprovalCard {
     amountPeriod: payload.cadence ? CADENCE_PHRASE[payload.cadence] ?? null : null,
     currency: action.currency,
     lines: Array.isArray(payload.lines) ? payload.lines : [],
+    link: internalLink(payload.link),
     resultMessage: action.errorMessage ?? result?.message ?? null,
     createdAt: action.createdAt.toISOString(),
   };
@@ -171,9 +182,11 @@ export async function decideAction(
   });
 
   if (decision === "reject") {
+    await resumeWaitingJobs(actionId);
     return toApprovalCard({ ...action, status: "REJECTED", decidedAt: new Date() });
   }
 
+  let card: ApprovalCard;
   try {
     const result = await executeAction(action);
     const updated = await prisma.agentAction.update({
@@ -181,7 +194,7 @@ export async function decideAction(
       data: { status: "EXECUTED", executedAt: new Date(), result: result as unknown as Prisma.InputJsonValue },
     });
     await audit({ userId, actor: "system", action: "action.executed", entity: "agent_action", entityId: actionId });
-    return toApprovalCard(updated);
+    card = toApprovalCard(updated);
   } catch (error) {
     if (!(error instanceof AppError)) console.error("[actions] fallo al ejecutar", error);
     const message = error instanceof AppError ? error.message : "No se pudo completar la acción.";
@@ -189,6 +202,22 @@ export async function decideAction(
       where: { id: actionId },
       data: { status: "FAILED", errorMessage: message },
     });
-    return toApprovalCard(updated);
+    card = toApprovalCard(updated);
+  }
+  await resumeWaitingJobs(actionId);
+  return card;
+}
+
+/**
+ * Si un trabajo del motor esperaba esta decisión (por ejemplo, publicar una página), sigue en segundo plano. Se importa
+ * al usarlo para no crear una dependencia circular (el motor también propone acciones). Si falla, la tarea programada
+ * lo retoma: la decisión de la persona ya quedó guardada.
+ */
+async function resumeWaitingJobs(actionId: string): Promise<void> {
+  try {
+    const { resumeAfterDecision } = await import("@/modules/engine/engine.service");
+    await resumeAfterDecision(actionId);
+  } catch (error) {
+    console.error("[actions] no se pudo reanudar el trabajo que esperaba la decisión", error);
   }
 }

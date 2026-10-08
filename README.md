@@ -81,6 +81,9 @@ omniagent/
     ├── modules/                 # dominio: un módulo por área
     │   ├── agent/               # bucle de function calling, prompt y registro de herramientas
     │   ├── actions/             # Proponer → Aprobar → Ejecutar
+    │   ├── engine/              # motor de ejecución autónoma: tipos, reglas, almacén, ejecutor, servicio, pasos y playbooks
+    │   ├── sites/               # páginas web que arma Omni: esquemas, revisión, IA, servicio y herramientas
+    │   ├── memory/              # memoria de Omni: recuerdos tipados y contexto de cada turno
     │   ├── dashboard/           # rules.ts (saludo, gasto del mes, lo pendiente, agentes: puro) y dashboard.service.ts
     │   ├── finance/
     │   │   ├── providers/       # contrato tipo Plaid: sandbox.ts, plaid.ts y catálogo del sandbox
@@ -536,6 +539,8 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 
 **Agente (`modules/agent/run-agent.ts`).** Cada turno guarda el mensaje, llama a Claude con las 36 herramientas (esquemas zod convertidos a JSON Schema), ejecuta las llamadas en un bucle de hasta 6 rondas y guarda la respuesta con sus tarjetas y preguntas sugeridas (`{ text, cards, suggestions }`). Cada llamada a herramienta queda registrada como mensaje `TOOL`. El consumo se guarda en `ai_usage_logs` y alimenta la cuota mensual. La parte fija del prompt de sistema usa prompt caching.
 
+**Motor de ejecución autónoma (`modules/engine`).** Las peticiones de varios pasos («créame una página web», «analiza mis finanzas», «ponme al día») se convierten en un trabajo con pasos que llaman a los servicios de cada módulo, uno detrás de otro, en segundo plano: después de responder (`after()`), en otra invocación si no alcanza el tiempo y con una tarea programada cada minuto que retoma lo pendiente. Cada paso se guarda antes de seguir; un turno atómico evita que dos ejecutores corran el mismo trabajo; los reintentos son solo para fallos pasajeros; y lo que publica, gasta, envía o cancela espera la aprobación de la persona. Detalle en `docs/MOTOR.md`.
+
 **Proponer → Aprobar → Ejecutar (`modules/actions`).** Las herramientas `*_propose_*` solo crean una `agent_action` en estado `PENDING` y una notificación. Al aprobar, un `updateMany` atómico (`PENDING → APPROVED`) evita dobles ejecuciones; luego el ejecutor corre y la acción queda `EXECUTED` o `FAILED`. Las compras son la excepción: no se aprueban con la boleta genérica sino en la hoja de pago (**Permitir** con la huella de la cotización, precio reconfirmado en la tienda y límites). Las propuestas vencen solas (72 h; compras, 24 h).
 
 **Seguridad.**
@@ -625,6 +630,13 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 | GET, PATCH | `/api/v1/returns/cases/:id` | Ver un reclamo; `{ action: "sent" \| "propose" \| "edit" \| "reply" \| "package_sent" \| "info_sent" \| "refund_received" \| "close" \| "reopen", … }` |
 | POST | `/api/v1/returns/cases/:id/simulate-reply` | Respuesta simulada (solo tiendas de prueba) |
 | GET | `/api/cron/returns` | Pedidos y devoluciones en segundo plano (requiere `CRON_SECRET`) |
+| GET, POST | `/api/v1/engine/jobs` | Trabajos en segundo plano (`?active=1`); empezar uno `{ playbook, input }` → responde al instante (`created: false` si ya estaba en marcha) |
+| GET | `/api/v1/engine/jobs/:id` | Un trabajo con sus pasos |
+| POST | `/api/v1/engine/jobs/:id/cancel` | Detenerlo (si corre, al terminar el paso actual) |
+| GET, POST | `/api/cron/engine` | Motor: tarea de cada minuto (GET) y continuación de un trabajo (POST `{ jobId }`), con `CRON_SECRET` |
+| GET | `/api/v1/sites` | Páginas web que armó Omni |
+| DELETE | `/api/v1/sites/:id` | Retirar una página (su enlace deja de abrir) |
+| GET | `/s/:slug` | Página web pública (con `?vista=previa`, la versión que espera aprobación, solo para su dueño) |
 | POST | `/api/v1/billing/checkout` y `/api/v1/billing/portal` | Stripe Checkout para Pro y portal de clientes (devuelven `{ url }`) |
 | POST | `/api/v1/billing/sync` | Al volver de Checkout: `{ sessionId }` → activa Pro sin esperar al webhook |
 | POST | `/api/webhooks/stripe` y `/api/webhooks/revenuecat` | Webhooks de pago |
@@ -638,6 +650,9 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 | Compras | `concierge_search_offers`, `concierge_track_item`, `concierge_list_tracking`, `concierge_price_history`, `concierge_check_now`, `concierge_update_tracking`, `concierge_list_alerts`, `concierge_propose_purchase` (prepara la hoja de pago; nunca cobra), `concierge_list_orders` |
 | Pedidos y devoluciones | `returns_list_orders`, `returns_add_order`, `returns_report_problem` (prepara el reclamo; nunca lo envía), `returns_update_case`, `returns_update_order` |
 | Metas | `goals_create`, `goals_list`, `goals_add_progress` |
+| Memoria | `memory_save_preference`, `memory_save_finance`, `memory_save_website`, `memory_save_goal`, `memory_save_note`, `memory_recall`, `memory_forget` |
+| Motor en segundo plano | `engine_analyze_finances`, `engine_daily_sweep`, `engine_create_website`, `engine_update_website` (responden al instante con la tarjeta del trabajo), `engine_job_status`, `engine_cancel_job` |
+| Páginas web | `sites_list`, `sites_unpublish` |
 
 Para agregar una herramienta: defínela con `defineTool()` en su módulo (esquema zod + `run`) y súmala al arreglo del módulo. `modules/agent/tools.ts` las reúne todas. Una herramienta puede devolver `cards` (lo que ve el usuario) y `suggestions` (botones con preguntas de seguimiento).
 

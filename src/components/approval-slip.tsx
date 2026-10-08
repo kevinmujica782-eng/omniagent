@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert, Clock, X } from "lucide-react";
+import { Check, CircleAlert, Clock, ExternalLink, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { CheckoutButton } from "@/components/concierge/payment-sheet";
@@ -125,6 +125,17 @@ export function ApprovalSlip({ card: initial, demo = false }: { card: ApprovalCa
               ),
             )}
           </dl>
+        ) : null}
+        {card.link ? (
+          <a
+            href={card.link.href}
+            target="_blank"
+            rel="noopener"
+            className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-primary underline-offset-4 hover:underline"
+          >
+            {card.link.label}
+            <ExternalLink className="size-3.5" aria-hidden />
+          </a>
         ) : null}
       </div>
 

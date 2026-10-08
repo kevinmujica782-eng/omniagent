@@ -231,6 +231,11 @@ export async function syncConnection(userId: string, connectionId: string) {
   return counts;
 }
 
+/** Bancos conectados y activos (el motor salta la sincronización si no hay ninguno). */
+export async function countActiveBankConnections(userId: string): Promise<number> {
+  return prisma.integrationConnection.count({ where: { userId, provider: { in: [...BANK_PROVIDERS] }, status: "ACTIVE" } });
+}
+
 export async function syncAllConnections(userId: string) {
   const connections = await prisma.integrationConnection.findMany({
     where: { userId, provider: { in: [...BANK_PROVIDERS] }, status: "ACTIVE" },

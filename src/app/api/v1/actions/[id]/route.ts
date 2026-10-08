@@ -4,6 +4,10 @@ import { decideAction, getActionCard } from "@/modules/actions/actions.service";
 
 type Context = { params: Promise<{ id: string }> };
 
+// Al decidir, un trabajo del motor que esperaba esta aprobación sigue después de responder (por ejemplo, guardar en la
+// memoria la página que se acaba de publicar): se le da el tiempo completo de la función.
+export const maxDuration = 60;
+
 const decisionSchema = z.object({ decision: z.enum(["approve", "reject"]) });
 
 export async function GET(request: Request, { params }: Context) {

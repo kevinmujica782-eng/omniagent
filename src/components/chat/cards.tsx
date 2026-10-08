@@ -9,6 +9,7 @@ import {
   PriceHistoryCardView,
   TrackedItemCardView,
 } from "@/components/concierge/chat-cards";
+import { JobCard } from "@/components/engine/job-card";
 import { InsightsCardView } from "@/components/finance/insights-card";
 import { TransactionRow } from "@/components/finance/transaction-row";
 import { GOAL_ICON, TASK_ICON } from "@/components/icons";
@@ -53,6 +54,8 @@ const CHAT_WIDTH = "max-w-md";
 
 export function AgentCardView({ card, timeZone, demo }: { card: AgentCard; timeZone?: string; demo?: boolean }) {
   switch (card.kind) {
+    case "job":
+      return <JobCard job={card.job} demo={demo} timeZone={timeZone} />;
     case "insights":
       return <InsightsCardView card={card} demo={demo} inChat className="max-w-xl" />;
     case "finance_summary":

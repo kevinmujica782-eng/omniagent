@@ -4,9 +4,12 @@ import { MessageCircle, ShieldCheck, Volume2, VolumeX, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useReducer, useRef, useState, type KeyboardEvent } from "react";
+import { JobCard } from "@/components/engine/job-card";
+import { demoJob } from "@/components/preview/demo-engine";
 import { ApiError, apiFetch, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import type { ChatMessageView } from "@/types/cards";
+import type { JobView } from "@/types/engine";
 import {
   INITIAL_ASSISTANT,
   PHASE_LABEL,
@@ -55,7 +58,17 @@ const DOT: Record<AssistantPhase, string> = {
   error: "bg-danger",
 };
 
-const DEMO_REPLIES: { match: RegExp; reply: string; approvals?: number; suggestions?: string[] }[] = [
+const DEMO_REPLIES: { match: RegExp; reply: string; approvals?: number; suggestions?: string[]; job?: () => JobView }[] = [
+  {
+    match: /p[aá]gina web|sitio web|landing/i,
+    reply: "La estoy armando en segundo plano. Cuando la vista previa esté lista, te pido que la apruebes para publicarla.",
+    job: () => demoJob("website", 1),
+  },
+  {
+    match: /al d[ií]a|revisa todo|novedades/i,
+    reply: "Estoy en eso: reviso tus bancos, tu correo, tus precios y tus pedidos, uno por uno. Te aviso al terminar.",
+    job: () => demoJob("sweep", 2),
+  },
   {
     match: /correo|tramite|trámite/i,
     reply: "Encontré 2 trámites en tu correo. El permiso de la excursión vence el viernes: te propuse llenarlo mañana a las 6 p. m.",
@@ -85,7 +98,8 @@ function demoReply(text: string): Promise<AssistantReply> {
           text: found?.reply ?? "Esto es una vista previa: con tu cuenta, Omni hace esto de verdad.",
           suggestions: found?.suggestions ?? [],
           approvals: found?.approvals ?? 0,
-          cards: found?.approvals ?? 0,
+          cards: (found?.approvals ?? 0) + (found?.job ? 1 : 0),
+          jobs: found?.job ? [found.job()] : [],
           conversationId: "demo",
         }),
       1400,
@@ -393,6 +407,14 @@ export function OmniAssistant({
           {state.reply ? (
             <div className="assistant-reveal mt-3">
               <p className="text-[17px] leading-relaxed text-ink">{state.reply.text}</p>
+              {state.reply.jobs.length > 0 ? (
+                // Lo que Omni hace en segundo plano, paso por paso: sigue aunque cierres el asistente.
+                <div className="mt-4 flex flex-col gap-3">
+                  {state.reply.jobs.map((job) => (
+                    <JobCard key={job.id} job={job} demo={demo} className="max-w-none bg-surface/80" />
+                  ))}
+                </div>
+              ) : null}
               {state.reply.approvals > 0 ? (
                 <Link
                   href={links.approvals}
@@ -406,7 +428,7 @@ export function OmniAssistant({
                   <span>Revisar</span>
                 </Link>
               ) : null}
-              {state.reply.cards > state.reply.approvals ? (
+              {state.reply.cards > state.reply.approvals + state.reply.jobs.length ? (
                 <Link href={chatHref} onClick={onClose} className="mt-3 inline-flex text-sm font-semibold text-primary underline-offset-4 hover:underline">
                   Ver el detalle en el chat
                 </Link>

@@ -172,6 +172,30 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 - **Órdenes rápidas:** seis, con los contadores en vivo de cada área. Se ocultan mientras escucha o procesa. Las órdenes van al mismo agente del chat (`/api/v1/agent/chat`, con el módulo según la intención). Lo nuevo por aprobar llega en vivo por Supabase Realtime.
 - **Código:** el modelo de estados es puro y está probado (`assistant-model.ts`, `tests/unit/assistant.test.ts`). El ojo, el panel, la lista, el campo, el proveedor y los hooks de voz van en archivos separados. Las capturas en teléfono y compu salen del workflow «Capturas de la interfaz» (rama `ui-checks`).
 
+### Motor de ejecución autónoma (8 oct 2026)
+- **Qué es:** recibe peticiones del asistente y las corre en segundo plano como un trabajo con pasos que llaman, uno detrás de otro, a los servicios de cada módulo (`docs/MOTOR.md`, `src/modules/engine/`). Responde al instante con una tarjeta en vivo (`JobCard`, en chat y asistente) y avisa al terminar.
+- **Playbooks:**
+  - `finance.analyze`: cuentas, suscripciones, gastos hormiga e informe con IA.
+  - `daily.sweep`: bancos, correo, precios, pedidos y resumen.
+  - `website.create` y `website.update`: escribir, revisar, vista previa, aprobación para publicar y memoria.
+  - Cada uno tiene su herramienta `engine_*`, además de `engine_job_status` y `engine_cancel_job`.
+- **Cómo corre:** `after()` de Next después de responder. Si no alcanza el tiempo, sigue en otra invocación (`POST /api/cron/engine`) y pg_cron lo retoma cada minuto (`GET /api/cron/engine`, job `omniagent-motor`). Una invocación tiene 54 s y ningún paso pasa de 45 s.
+- **Seguridad:**
+  - Turno atómico con fencing (`locked_by`).
+  - Reintentos solo ante fallos pasajeros (10 s, 1 min y 5 min).
+  - Tope de tiempo con `AbortSignal`.
+  - Lo que publica, gasta, envía o cancela pasa por Aprobaciones: el trabajo queda en `WAITING` y `decideAction` lo despierta.
+  - 12 trabajos nuevos por hora; a la vez, 1 en Gratis y 3 en Pro.
+  - Auditoría `engine.job.*`.
+- **Páginas web** (`src/modules/sites/`, página pública `/s/{slug}`):
+  - La IA solo escribe textos. Los enlaces salen del contacto que dio la persona.
+  - La revisión quita cifras que no dio y rechaza pedir claves.
+  - Publicar es una aprobación `PUBLISH_SITE`. La vista previa solo la ve su dueño.
+  - Las páginas no se indexan.
+  - Gratis: 1 página nueva al mes. Pro: 20 (`monthlySites`).
+- **Datos:** tablas `engine_jobs` (los pasos van en JSON dentro del trabajo; tiene RLS `owner_select` y Realtime) y `sites` (solo servidor); enums `job_status` y `site_status`; valor `PUBLISH_SITE` en `action_type`.
+- **Pruebas:** `tests/unit/engine.test.ts` (ejecutor con un almacén en memoria), `engine-playbooks.test.ts` y `sites.test.ts`. En la vista previa: `asistente-motor`, `chat-motor`, `pagina-web` y `pagina-web-grafito`.
+
 ### Pantalla de Omni Pro (paywall)
 - **Dónde:** `src/components/paywall/` (`paywall.tsx` y `autopilot-dial.tsx`); datos en `modules/billing/paywall.ts`; pago en `lib/purchase.ts`. Reemplaza la hoja anterior: la abren los límites del plan Gratis (402 `plan_limit`, con la fila del límite marcada), la tarjeta del chat, el Inicio y la cuenta.
 - **Diseño:** siempre oscura (clase `theme-dark`, que reutiliza los tokens oscuros), a pantalla completa en el teléfono con el botón fijo abajo y en dos columnas desde 1024 px. La órbita de 24 horas (la marca de Omni) muestra las revisiones de un día con Pro y da una sola vuelta al abrir. La columna de Pro tiene el anillo brillante, la luna ámbar y la etiqueta "Recomendado".
@@ -207,16 +231,17 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - Google Play ya no es el plan; `docs/GOOGLE_PLAY.md` queda como referencia.
 
 ### Cómo retomar
-1. `npm install` (Node 22+; sube el `package-lock.json`), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`, `asistente`, `asistente-escuchando`, `asistente-procesando`, `asistente-activo`...).
+1. `npm install` (Node 22+; sube el `package-lock.json`), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`, `asistente`, `asistente-escuchando`, `asistente-procesando`, `asistente-activo`, `asistente-motor`, `chat-motor`, `pagina-web`...).
 2. Configurar `.env.local` y correr las migraciones:
    - Instalación nueva: `npx prisma migrate dev --name init`.
    - Si ya tenías la fase 4: `npx prisma migrate dev --name plan_pro_y_panel`.
    - Si ya tenías la fase 5: `npx prisma migrate dev --name devoluciones` (crea `tracked_orders` y `return_cases`).
    - Si ya tenías Devoluciones: `npx prisma migrate dev --name estados_de_cuenta` (cuentas manuales y movimientos ligados a cada importación).
+   - Si ya tenías la memoria de Omni: `npx prisma migrate dev --name motor` (crea `engine_jobs` y `sites`, y agrega `PUBLISH_SITE`).
 
    Después, `npm run db:security` y `npm test`. Para los agentes en segundo plano: `CRON_SECRET` y `npm run db:cron`, o los crons de Vercel.
 3. El detalle completo está en `README.md` (puesta en marcha, módulos, Inicio y planes, arquitectura, endpoints y hoja de ruta). El despliegue a producción y la lista de Google Play están en `docs/DEPLOY.md`.
-4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real, el `.apk` para clientes, la memoria de Omni y el asistente interactivo están hechos (ver «Cobros, notificaciones, correo real y app para clientes», «Memoria de Omni» y «Asistente interactivo de Omni»). Lo siguiente, sin orden fijo:
+4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real, el `.apk` para clientes, la memoria de Omni, el asistente interactivo y el motor de ejecución autónoma (con páginas web) están hechos (ver «Cobros, notificaciones, correo real y app para clientes», «Memoria de Omni», «Asistente interactivo de Omni» y «Motor de ejecución autónoma»). Lo siguiente, sin orden fijo:
    - Publicar la web con todo lo nuevo (requiere conectar el repositorio en Netlify).
    - Outlook con OAuth (Microsoft Graph) y Google Calendar con OAuth.
    - Medios de pago reales para las compras del concierge.

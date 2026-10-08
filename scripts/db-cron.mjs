@@ -1,6 +1,6 @@
 // Programa las tareas periódicas de OmniAgent dentro de Supabase (pg_cron + pg_net). Sirve con cualquier
-// hosting y con el plan Hobby de Vercel, que solo permite crons diarios: compras, trámites y devoluciones cada hora,
-// finanzas cada día. Uso: npm run db:cron   ·   para quitarlas: npm run db:cron -- --remove
+// hosting y con el plan Hobby de Vercel, que solo permite crons diarios: el motor cada minuto; compras, trámites y
+// devoluciones cada hora; finanzas cada día. Uso: npm run db:cron   ·   para quitarlas: npm run db:cron -- --remove
 //
 // Lee de .env.local / .env: DIRECT_URL, CRON_SECRET (el mismo de la app desplegada) y la URL pública
 // (CRON_TARGET_URL o NEXT_PUBLIC_APP_URL). La URL y el secreto se guardan cifrados en Supabase Vault: el texto de
@@ -16,6 +16,8 @@ const JOBS = [
   { name: "omniagent-finanzas", schedule: "0 11 * * *", path: "/api/cron/finance", what: "finanzas, cada día 11:00 UTC" },
   { name: "omniagent-devoluciones", schedule: "45 * * * *", path: "/api/cron/returns", what: "devoluciones, cada hora" },
   { name: "omniagent-cobros", schedule: "25 * * * *", path: "/api/cron/billing", what: "vencimientos y avisos de Binance Pay, cada hora" },
+  // Motor en segundo plano: lo que quedó en cola, reintentos, aprobaciones vencidas y trabajos a medias.
+  { name: "omniagent-motor", schedule: "* * * * *", path: "/api/cron/engine", what: "motor de ejecución autónoma, cada minuto" },
 ];
 const URL_SECRET = "omniagent_app_url";
 const CRON_SECRET_NAME = "omniagent_cron_secret";

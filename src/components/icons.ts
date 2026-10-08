@@ -7,6 +7,7 @@ import {
   CreditCard,
   FileText,
   Flag,
+  Globe,
   HandCoins,
   HeartPulse,
   House,
@@ -73,6 +74,7 @@ export const ACTION_ICON: Record<ActionKind, LucideIcon> = {
   SEND_EMAIL: Mail,
   CREATE_CALENDAR_EVENT: CalendarDays,
   SUBMIT_FORM: FileText,
+  PUBLISH_SITE: Globe,
 };
 
 export const TASK_ICON: Record<string, LucideIcon> = {

@@ -4,9 +4,11 @@
  * renderiza src/components/chat/cards.tsx. Sin dependencias de servidor: lo importan cliente y servidor.
  */
 
+import type { JobView } from "./engine";
+
 export type Cadence = "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY";
 
-export type ActionKind = "CANCEL_SUBSCRIPTION" | "SEND_EMAIL" | "CREATE_CALENDAR_EVENT" | "SUBMIT_FORM" | "PURCHASE";
+export type ActionKind = "CANCEL_SUBSCRIPTION" | "SEND_EMAIL" | "CREATE_CALENDAR_EVENT" | "SUBMIT_FORM" | "PURCHASE" | "PUBLISH_SITE";
 
 export type ActionState = "PENDING" | "APPROVED" | "REJECTED" | "EXECUTED" | "FAILED" | "EXPIRED";
 
@@ -138,6 +140,8 @@ export type ApprovalCard = {
   amountPeriod: string | null;
   currency: string | null;
   lines: { label: string; value: string }[];
+  /** Algo que conviene ver antes de decidir (la vista previa de una página web). Las tarjetas viejas no lo traen. */
+  link?: { label: string; href: string } | null;
   resultMessage: string | null;
   createdAt: string;
 };
@@ -698,7 +702,11 @@ export interface UpgradeCard {
   priceLabel: string;
 }
 
+/** Trabajo del motor en segundo plano: sus pasos en vivo (ver src/types/engine.ts). */
+export type JobCard = { kind: "job"; job: JobView };
+
 export type AgentCard =
+  | JobCard
   | FinanceSummaryCard
   | SubscriptionsCard
   | AntExpensesCard

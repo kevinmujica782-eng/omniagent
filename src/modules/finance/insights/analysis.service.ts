@@ -85,7 +85,7 @@ const REPORT_ATTEMPTS = 2;
  * Si alguno no sale de ellos, le pide una corrección; si sigue mal, lanza y se usa el informe por reglas.
  * Exportada para probarla con un cliente simulado.
  */
-export async function generateWithClaude(snapshot: FinancialSnapshot, candidates: Candidate[], model: string) {
+export async function generateWithClaude(snapshot: FinancialSnapshot, candidates: Candidate[], model: string, signal?: AbortSignal) {
   const schema = z.toJSONSchema(reportSchema, { io: "input" }) as Record<string, unknown>;
   delete schema.$schema;
   const tool: Anthropic.Tool = {
@@ -97,15 +97,19 @@ export async function generateWithClaude(snapshot: FinancialSnapshot, candidates
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: buildAnalysisPrompt(snapshot, candidates) }];
   const usage = { input: 0, output: 0 };
   for (let attempt = 1; ; attempt++) {
-    const response = await anthropic().messages.create({
-      model,
-      max_tokens: 2000,
-      system: [{ type: "text", text: ANALYST_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-      tools: [tool],
-      // Salida estructurada: el modelo debe responder llamando a la herramienta con el esquema del informe.
-      tool_choice: { type: "tool", name: REPORT_TOOL_NAME },
-      messages,
-    });
+    const response = await anthropic().messages.create(
+      {
+        model,
+        max_tokens: 2000,
+        system: [{ type: "text", text: ANALYST_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
+        tools: [tool],
+        // Salida estructurada: el modelo debe responder llamando a la herramienta con el esquema del informe.
+        tool_choice: { type: "tool", name: REPORT_TOOL_NAME },
+        messages,
+      },
+      // El motor en segundo plano corta la llamada si el paso se pasa de su tiempo.
+      { signal },
+    );
     usage.input += response.usage.input_tokens;
     usage.output += response.usage.output_tokens;
 
@@ -137,7 +141,7 @@ function waitLabel(minutes: number): string {
 
 export async function runFinancialAnalysis(
   userId: string,
-  opts: { trigger: AnalysisTrigger; force?: boolean },
+  opts: { trigger: AnalysisTrigger; force?: boolean; signal?: AbortSignal },
 ): Promise<{ analysisId: string; card: InsightsCard }> {
   const [profile, entitlements, last] = await Promise.all([
     prisma.profile.findUnique({ where: { id: userId }, select: { timezone: true } }),
@@ -172,14 +176,17 @@ export async function runFinancialAnalysis(
   let usage = { input: 0, output: 0 };
   if (env().ANTHROPIC_API_KEY) {
     try {
-      const result = await generateWithClaude(snapshot, candidates, entitlements.model);
+      const result = await generateWithClaude(snapshot, candidates, entitlements.model, opts.signal);
       draft = result.draft;
       usage = result.usage;
       model = entitlements.model;
     } catch (error) {
+      // Si quien pidió el análisis lo canceló (el motor cortó el paso por tiempo), no se guarda nada a medias.
+      if (opts.signal?.aborted) throw opts.signal.reason ?? error;
       console.error("[finance] el análisis con IA falló; se usa el informe por reglas", error);
     }
   }
+  opts.signal?.throwIfAborted();
 
   const analysis = await persistAnalysis(userId, snapshot, draft, { trigger: opts.trigger, model, usage });
   return { analysisId: analysis.id, card: toInsightsCard(analysis) };

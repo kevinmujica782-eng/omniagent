@@ -205,12 +205,20 @@ export type CheckRunSummary = { due: number; checked: number; alerts: number; fa
 
 /** Revisa en lote los productos que ya tocan (los más atrasados primero), con varias a la vez y un tiempo máximo. */
 export async function runPriceChecks(
-  opts: { now?: Date; limit?: number; budgetMs?: number; concurrency?: number; fetchOptions?: Partial<FetchOptions> } = {},
+  opts: {
+    now?: Date;
+    limit?: number;
+    budgetMs?: number;
+    concurrency?: number;
+    fetchOptions?: Partial<FetchOptions>;
+    /** Solo los productos de esta persona (el motor, al poner todo al día). */
+    userId?: string;
+  } = {},
 ): Promise<CheckRunSummary> {
   const now = opts.now ?? new Date();
   const started = Date.now();
   const due = await prisma.watchlistItem.findMany({
-    where: { status: "ACTIVE", source: { in: ["sandbox", "web"] }, nextCheckAt: { lte: now } },
+    where: { ...(opts.userId ? { userId: opts.userId } : {}), status: "ACTIVE", source: { in: ["sandbox", "web"] }, nextCheckAt: { lte: now } },
     orderBy: { nextCheckAt: "asc" },
     take: opts.limit ?? 40,
     select: { id: true },

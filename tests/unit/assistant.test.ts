@@ -13,11 +13,12 @@ import {
   type AssistantReply,
   type AssistantState,
 } from "@/components/assistant/assistant-model";
+import { demoJob } from "@/components/preview/demo-engine";
 import type { ChatMessageView } from "@/types/cards";
 
 // Asistente interactivo: estados (en espera, escuchando, procesando, activo, error), textos y respuesta resumida.
 
-const reply: AssistantReply = { text: "Listo.", suggestions: [], approvals: 0, cards: 0, conversationId: "c1" };
+const reply: AssistantReply = { text: "Listo.", suggestions: [], approvals: 0, cards: 0, jobs: [], conversationId: "c1" };
 
 function run(...actions: AssistantAction[]): AssistantState {
   return actions.reduce(assistantReducer, INITIAL_ASSISTANT);
@@ -72,6 +73,8 @@ describe("asistente: textos", () => {
     expect(detectIntent("Vigila el precio de unos audífonos")).toEqual({ module: "CONCIERGE", hint: "Buscando precios" });
     expect(detectIntent("¿Dónde están mis pedidos?")).toEqual({ module: "CONCIERGE", hint: "Revisando tus pedidos" });
     expect(detectIntent("Recuerda que cobro el día 30")).toEqual({ hint: "Guardándolo en tu memoria" });
+    expect(detectIntent("Créame una página web para mi repostería")).toEqual({ hint: "Preparando tu página web" });
+    expect(detectIntent("Ponme al día con todo")).toEqual({ hint: "Poniendo todo al día" });
     expect(detectIntent("Hola")).toEqual({ hint: "Pensando en tu orden" });
   });
 
@@ -100,8 +103,15 @@ describe("asistente: respuesta y voz", () => {
       suggestions: ["a", "b", "c"],
       approvals: 2,
       cards: 3,
+      jobs: [],
       conversationId: "c9",
     });
+  });
+
+  it("los trabajos en segundo plano van aparte, con su avance", () => {
+    const job = demoJob("sweep", 2);
+    const message: ChatMessageView = { id: "m2", role: "assistant", text: "Estoy en eso.", cards: [{ kind: "job", job }], createdAt: "2026-10-08T00:00:00Z" };
+    expect(summarizeReply(message, "c1")).toMatchObject({ approvals: 0, cards: 1, jobs: [job] });
   });
 
   it("lee sin formato ni enlaces y corta en una frase", () => {

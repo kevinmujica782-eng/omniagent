@@ -6,9 +6,11 @@ import { ChatView } from "@/components/chat/chat-view";
 import { demoConcierge } from "@/components/preview/demo-concierge";
 import { demoDashboard, type DemoDashboardVariant } from "@/components/preview/demo-dashboard";
 import { DEMO_TIME_ZONE, demoData } from "@/components/preview/demo-data";
+import { demoEngineConversation, demoJob, demoSiteContent } from "@/components/preview/demo-engine";
 import { demoProcedures } from "@/components/preview/demo-procedures";
 import { demoReturns } from "@/components/preview/demo-returns";
 import { FormReview } from "@/components/procedures/form-review";
+import { SitePage } from "@/components/sites/site-page";
 import { AccountView } from "@/components/views/account-view";
 import { ApprovalsView } from "@/components/views/approvals-view";
 import { ConciergeView } from "@/components/views/concierge-view";
@@ -71,6 +73,12 @@ export const PREVIEW_SCREENS = [
   "asistente-escuchando",
   "asistente-procesando",
   "asistente-activo",
+  // Motor en segundo plano: el asistente con un trabajo en marcha, el chat con sus tarjetas y una página web hecha
+  // por Omni (en dos paletas).
+  "asistente-motor",
+  "chat-motor",
+  "pagina-web",
+  "pagina-web-grafito",
 ] as const;
 export type PreviewScreenKey = (typeof PREVIEW_SCREENS)[number];
 
@@ -115,6 +123,10 @@ const NAV_FOR: Record<PreviewScreenKey, NavKey> = {
   "asistente-escuchando": "inicio",
   "asistente-procesando": "inicio",
   "asistente-activo": "inicio",
+  "asistente-motor": "inicio",
+  "chat-motor": "chat",
+  "pagina-web": "inicio",
+  "pagina-web-grafito": "inicio",
 };
 
 /** El asistente abierto en cada pantalla de ejemplo. */
@@ -141,6 +153,24 @@ function assistantPreset(screen: PreviewScreenKey): AssistantPreset | null {
             suggestions: ["Aprueba la compra de los audífonos", "¿Qué vence esta semana?"],
             approvals: 3,
             cards: 3,
+            jobs: [],
+            conversationId: "demo",
+          },
+        },
+      };
+    case "asistente-motor":
+      return {
+        state: {
+          ...INITIAL_ASSISTANT,
+          phase: "active",
+          via: "voice",
+          heard: "Créame una página web para mi repostería",
+          reply: {
+            text: "La estoy armando en segundo plano. Cuando la vista previa esté lista, te pido que la apruebes para publicarla.",
+            suggestions: [],
+            approvals: 0,
+            cards: 1,
+            jobs: [demoJob("website", 1)],
             conversationId: "demo",
           },
         },
@@ -301,6 +331,19 @@ export function PreviewScreen({ screen, emptyChat = false }: { screen: PreviewSc
         />
       );
       break;
+    case "chat-motor":
+      body = (
+        <ChatView
+          conversationId="demo-engine"
+          initialMessages={demoEngineConversation()}
+          starters={CHAT_STARTERS}
+          userName="Laura"
+          timeZone={DEMO_TIME_ZONE}
+          module="GENERAL"
+          demo
+        />
+      );
+      break;
     case "chat-compras":
       body = (
         <ChatView
@@ -404,8 +447,20 @@ export function PreviewScreen({ screen, emptyChat = false }: { screen: PreviewSc
     case "asistente-escuchando":
     case "asistente-procesando":
     case "asistente-activo":
+    case "asistente-motor":
       body = <DashboardView data={dashboard} preview />;
       break;
+    case "pagina-web":
+    case "pagina-web-grafito":
+      // La página pública va sola, sin la app alrededor (así la ve quien abre el enlace).
+      return (
+        <SitePage
+          content={demoSiteContent(screen === "pagina-web-grafito" ? "grafito" : "atardecer")}
+          preview={false}
+          reportHref="#"
+          year={new Date().getFullYear()}
+        />
+      );
     case "cuenta":
     case "cuenta-gratis":
     case "eliminar-cuenta":

@@ -295,6 +295,7 @@ const ACTION_LABEL: Record<ActionType, string> = {
   CREATE_CALENDAR_EVENT: "Evento",
   SUBMIT_FORM: "Formulario",
   PURCHASE: "Compra",
+  PUBLISH_SITE: "Publicar página web",
 };
 
 const STATUS_LABEL: Partial<Record<ActionStatus, string>> = {

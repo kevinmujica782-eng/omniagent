@@ -22,7 +22,9 @@ Pasados 6 s, Activo vuelve a En espera (si Omni no está hablando), y la respues
 
 ## Órdenes rápidas
 
-Hay seis: «¿Qué tengo pendiente?», «Revisa mi correo», «Analiza mis gastos», «Vigila un precio», «Rastrea mis pedidos» y «Recuerda algo». Cada una muestra lo que hay en vivo en su área («3 por aprobar», «4 por confirmar», «1 oferta nueva»). Las que necesitan un dato («Vigila el precio de…», «Recuerda que…») quedan escritas en el campo para completarlas; las demás se envían al tocarlas.
+Hay siete: «Pon todo al día», «¿Qué tengo pendiente?», «Revisa mi correo», «Analiza mis gastos», «Vigila un precio», «Rastrea mis pedidos» y «Crea una página web». Cada una muestra lo que hay en vivo en su área («3 por aprobar», «4 por confirmar», «1 oferta nueva»). Las que necesitan un dato («Vigila el precio de…», «Crea una página web para mi negocio: …») quedan escritas en el campo para completarlas; las demás se envían al tocarlas.
+
+«Pon todo al día» y «Crea una página web» usan el motor de ejecución autónoma (`docs/MOTOR.md`): Omni responde al instante y, debajo de la respuesta, la tarjeta del trabajo muestra cada paso en vivo, aunque cierres el asistente.
 
 ## Voz
 

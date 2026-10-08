@@ -5,8 +5,9 @@ import { Errors } from "@/lib/errors";
 import { isUuid } from "@/lib/validation";
 
 // Ejecutores: se llaman SOLO después de que el usuario aprueba (ver actions.service.ts).
-// Cancelación asistida, eventos de calendario y envío de correos (con el PDF rellenado). Las compras van por
-// la hoja de pago del módulo de compras, que vuelve a confirmar el precio y cobra con el proveedor de pagos.
+// Cancelación asistida, eventos de calendario, envío de correos (con el PDF rellenado) y publicación de páginas web.
+// Las compras van por la hoja de pago del módulo de compras, que vuelve a confirmar el precio y cobra con el
+// proveedor de pagos.
 // Los módulos de trámites se importan al ejecutar para no crear dependencias circulares.
 
 type Payload = Record<string, unknown>;
@@ -28,6 +29,8 @@ export async function executeAction(action: AgentAction): Promise<ExecutionResul
       return sendEmail(action.userId, payload);
     case "SUBMIT_FORM":
       throw Errors.badRequest("El envío directo a portales aún no está disponible: Omni puede enviarlo por correo.");
+    case "PUBLISH_SITE":
+      return publishSite(action.userId, payload);
     default:
       throw Errors.badRequest("Tipo de acción no soportado.");
   }
@@ -135,5 +138,17 @@ async function sendEmail(userId: string, p: Payload): Promise<ExecutionResult> {
     message: `Correo enviado a ${sent.to}${where}.${completed ? " Marqué el trámite como hecho." : ""}`,
     messageId: sent.messageId,
     sandbox: sent.sandbox,
+  };
+}
+
+async function publishSite(userId: string, p: Payload): Promise<ExecutionResult> {
+  const siteId = str(p, "siteId");
+  if (!siteId || !isUuid(siteId)) throw Errors.notFound("La página");
+  const { publishSite: publish } = await import("@/modules/sites/sites.service");
+  const site = await publish(userId, siteId);
+  return {
+    message: str(p, "mode") === "update" ? `Cambios publicados en ${site.url}` : `Tu página ya está en línea: ${site.url}`,
+    siteId: site.id,
+    url: site.url,
   };
 }
