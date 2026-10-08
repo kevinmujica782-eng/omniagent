@@ -166,6 +166,12 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - Máximo 200 recuerdos; con la memoria llena se descarta lo menos útil que guardó Omni.
 - **Control de la persona:** en Cuenta → «Lo que Omni recuerda» la persona fija, olvida, agrega o borra todo. La API está en `/api/v1/memory`.
 
+### Asistente interactivo de Omni (7 oct 2026)
+- **Qué es:** un panel siempre oscuro para darle órdenes a Omni con la voz o escribiendo (`docs/ASISTENTE.md`, `src/components/assistant/`). Se abre con la pestaña Omni del teléfono, con la identidad de Omni en el encabezado o con Ctrl+K / ⌘K.
+- **El ojo:** es el avatar, hecho con la marca (anillo, pupila y luna ámbar) y con un estado en vivo: En espera, Escuchando (late con el volumen real del micrófono), Procesando (la luna corre con su estela), Activo (responde y, si le hablaste, habla) y Error. La etiqueta del estado siempre está escrita y con `prefers-reduced-motion` no hay movimiento.
+- **Órdenes rápidas:** seis, con los contadores en vivo de cada área. Se ocultan mientras escucha o procesa. Las órdenes van al mismo agente del chat (`/api/v1/agent/chat`, con el módulo según la intención). Lo nuevo por aprobar llega en vivo por Supabase Realtime.
+- **Código:** el modelo de estados es puro y está probado (`assistant-model.ts`, `tests/unit/assistant.test.ts`). El ojo, el panel, la lista, el campo, el proveedor y los hooks de voz van en archivos separados. Las capturas en teléfono y compu salen del workflow «Capturas de la interfaz» (rama `ui-checks`).
+
 ### Pantalla de Omni Pro (paywall)
 - **Dónde:** `src/components/paywall/` (`paywall.tsx` y `autopilot-dial.tsx`); datos en `modules/billing/paywall.ts`; pago en `lib/purchase.ts`. Reemplaza la hoja anterior: la abren los límites del plan Gratis (402 `plan_limit`, con la fila del límite marcada), la tarjeta del chat, el Inicio y la cuenta.
 - **Diseño:** siempre oscura (clase `theme-dark`, que reutiliza los tokens oscuros), a pantalla completa en el teléfono con el botón fijo abajo y en dos columnas desde 1024 px. La órbita de 24 horas (la marca de Omni) muestra las revisiones de un día con Pro y da una sola vuelta al abrir. La columna de Pro tiene el anillo brillante, la luna ámbar y la etiqueta "Recomendado".
@@ -201,7 +207,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - Google Play ya no es el plan; `docs/GOOGLE_PLAY.md` queda como referencia.
 
 ### Cómo retomar
-1. `npm install` (Node 22+; sube el `package-lock.json`), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`...).
+1. `npm install` (Node 22+; sube el `package-lock.json`), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`, `asistente`, `asistente-escuchando`, `asistente-procesando`, `asistente-activo`...).
 2. Configurar `.env.local` y correr las migraciones:
    - Instalación nueva: `npx prisma migrate dev --name init`.
    - Si ya tenías la fase 4: `npx prisma migrate dev --name plan_pro_y_panel`.
@@ -210,7 +216,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 
    Después, `npm run db:security` y `npm test`. Para los agentes en segundo plano: `CRON_SECRET` y `npm run db:cron`, o los crons de Vercel.
 3. El detalle completo está en `README.md` (puesta en marcha, módulos, Inicio y planes, arquitectura, endpoints y hoja de ruta). El despliegue a producción y la lista de Google Play están en `docs/DEPLOY.md`.
-4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real y el `.apk` para clientes están hechos (ver «Cobros, notificaciones, correo real y app para clientes»). Lo siguiente, sin orden fijo:
+4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real, el `.apk` para clientes, la memoria de Omni y el asistente interactivo están hechos (ver «Cobros, notificaciones, correo real y app para clientes», «Memoria de Omni» y «Asistente interactivo de Omni»). Lo siguiente, sin orden fijo:
    - Publicar la web con todo lo nuevo (requiere conectar el repositorio en Netlify).
    - Outlook con OAuth (Microsoft Graph) y Google Calendar con OAuth.
    - Medios de pago reales para las compras del concierge.

@@ -41,7 +41,7 @@ export const QUICK_ORDERS: QuickOrder[] = [
     icon: Inbox,
     mode: "send",
     count: "procedures",
-    countText: (n) => plural(n, "trámite por confirmar", "trámites por confirmar"),
+    countText: (n) => `${n} por confirmar`,
   },
   {
     id: "gastos",
@@ -61,7 +61,7 @@ export const QUICK_ORDERS: QuickOrder[] = [
   },
   {
     id: "pedidos",
-    label: "¿Dónde están mis pedidos?",
+    label: "Rastrea mis pedidos",
     prompt: "¿Dónde están mis pedidos?",
     icon: Truck,
     mode: "send",
@@ -77,18 +77,13 @@ export const QUICK_ORDERS: QuickOrder[] = [
   },
 ];
 
-/** Órdenes rápidas: una lista (no tarjetas sueltas) donde cada orden trae lo que hay en vivo en su área. */
-export function QuickOrders({
-  counts,
-  disabled,
-  onOrder,
-}: {
-  counts: LiveCounts;
-  disabled: boolean;
-  onOrder: (order: QuickOrder) => void;
-}) {
+/**
+ * Órdenes rápidas: una lista (no tarjetas sueltas) donde cada orden trae lo que hay en vivo en su área.
+ * Solo se muestran cuando Omni puede recibir una orden (no mientras escucha ni mientras procesa).
+ */
+export function QuickOrders({ counts, onOrder }: { counts: LiveCounts; onOrder: (order: QuickOrder) => void }) {
   return (
-    <section aria-labelledby="omni-quick-orders" className="mt-8">
+    <section aria-labelledby="omni-quick-orders" className="assistant-reveal mt-8">
       <h3 id="omni-quick-orders" className="px-1 text-sm font-medium text-muted">
         Órdenes rápidas
       </h3>
@@ -100,9 +95,8 @@ export function QuickOrders({
             <li key={order.id}>
               <button
                 type="button"
-                disabled={disabled}
                 onClick={() => onOrder(order)}
-                className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2 focus-visible:bg-surface-2 disabled:opacity-50"
+                className="flex min-h-14 w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-2 focus-visible:bg-surface-2"
               >
                 <Icon className="size-5 shrink-0 text-primary" aria-hidden />
                 <span className="min-w-0 flex-1 text-[15px] font-medium text-ink">{order.label}</span>

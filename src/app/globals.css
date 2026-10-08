@@ -346,6 +346,27 @@
     var(--canvas);
 }
 
+/* Lo que sigue más abajo se desvanece al borde: se nota que hay más sin cortar una fila a la mitad. */
+.assistant-scroll {
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.75rem), transparent);
+}
+
+/* La respuesta y las órdenes rápidas entran suaves cuando vuelven (responden a lo que hiciste). */
+.assistant-reveal {
+  animation: assistant-reveal 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes assistant-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-reveal {
+    animation: none;
+  }
+}
+
 .omni-eye {
   --level: 0;
   overflow: visible;

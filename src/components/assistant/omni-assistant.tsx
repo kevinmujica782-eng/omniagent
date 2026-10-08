@@ -101,11 +101,12 @@ async function askOmni(message: string, conversationId: string | null): Promise<
   return summarizeReply(data.message, data.conversationId);
 }
 
+/** La voz viene encendida: si le hablas a Omni, te responde hablando. Apagada, responde solo con texto. */
 function readVoicePreference(): boolean {
   try {
-    return window.localStorage.getItem(VOICE_KEY) === "1";
+    return window.localStorage.getItem(VOICE_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -131,7 +132,9 @@ export function OmniAssistant({
   const [state, dispatch] = useReducer(assistantReducer, preset?.state ?? INITIAL_ASSISTANT);
   const [draft, setDraft] = useState(preset?.draft ?? "");
   const [news, setNews] = useState<LiveApproval | null>(preset?.news ?? null);
-  const [voiceReplies, setVoiceReplies] = useState(false);
+  const [voice, setVoice] = useState(true);
+  // La respuesta llega después de enviar: se lee la preferencia de ese momento, no la de cuando se envió.
+  const voiceRef = useRef(true);
   const conversationRef = useRef<string | null>(null);
   const lastReplyAt = useRef(0);
   const speechErrored = useRef(false);
@@ -169,13 +172,18 @@ export function OmniAssistant({
     },
   });
 
-  // Foco en el panel al abrir y de vuelta al botón que lo abrió al cerrar.
+  // Al abrir: en la compu, el foco va directo al campo (Ctrl+K y a escribir); en el teléfono, al panel, porque el
+  // teclado taparía el ojo. Al cerrar, el foco vuelve al botón que lo abrió.
+  const fixedState = Boolean(preset);
   useEffect(() => {
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.focus();
-    setVoiceReplies(readVoicePreference());
+    const typeFirst = !fixedState && window.matchMedia("(pointer: fine)").matches;
+    (typeFirst ? inputRef.current : panelRef.current)?.focus();
+    const preferred = readVoicePreference();
+    voiceRef.current = preferred;
+    setVoice(preferred);
     return () => previous?.focus();
-  }, []);
+  }, [fixedState]);
 
   // Activo mientras responde; después vuelve a esperar (la respuesta sigue a la vista).
   useEffect(() => {
@@ -204,7 +212,7 @@ export function OmniAssistant({
       lastReplyAt.current = Date.now();
       dispatch({ type: "reply", reply });
       if (reply.cards > 0 && !demo) router.refresh();
-      if (via === "voice" || voiceReplies) {
+      if (via === "voice" && voiceRef.current) {
         speechOut.speak(reply.text, {
           onStart: () => dispatch({ type: "speaking", on: true }),
           onEnd: () => dispatch({ type: "speaking", on: false }),
@@ -254,10 +262,15 @@ export function OmniAssistant({
     });
   }
 
+  /** Apagarla mientras Omni habla lo calla en el acto, y sigue apagada para las próximas órdenes. */
   function toggleVoice() {
-    const next = !voiceReplies;
-    setVoiceReplies(next);
-    if (!next) speechOut.cancel();
+    const next = !voice;
+    voiceRef.current = next;
+    setVoice(next);
+    if (!next) {
+      speechOut.cancel();
+      dispatch({ type: "speaking", on: false });
+    }
     try {
       window.localStorage.setItem(VOICE_KEY, next ? "1" : "0");
     } catch {
@@ -324,15 +337,15 @@ export function OmniAssistant({
           <button
             type="button"
             onClick={toggleVoice}
-            aria-pressed={voiceReplies}
-            aria-label="Leer las respuestas en voz alta"
-            title={voiceReplies ? "Omni lee sus respuestas en voz alta" : "Omni responde solo con texto (y en voz si le hablas)"}
+            aria-pressed={voice}
+            aria-label="Responder en voz alta"
+            title={state.speaking ? "Callar a Omni" : voice ? "Si le hablas, Omni te responde en voz alta" : "Omni responde solo con texto"}
             className={cn(
               "grid size-11 place-items-center rounded-full transition-colors hover:bg-surface",
-              voiceReplies ? "text-primary" : "text-muted hover:text-ink",
+              voice ? "text-primary" : "text-muted hover:text-ink",
             )}
           >
-            {voiceReplies ? <Volume2 className="size-5" aria-hidden /> : <VolumeX className="size-5" aria-hidden />}
+            {voice ? <Volume2 className="size-5" aria-hidden /> : <VolumeX className="size-5" aria-hidden />}
           </button>
           <Link
             href={chatHref}
@@ -345,7 +358,7 @@ export function OmniAssistant({
           </Link>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-6">
+        <div className="assistant-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-10">
           <div className="flex flex-col items-center pt-1">
             <OmniEye
               phase={state.phase}
@@ -378,7 +391,7 @@ export function OmniAssistant({
           ) : null}
 
           {state.reply ? (
-            <div className="mt-3">
+            <div className="assistant-reveal mt-3">
               <p className="text-[17px] leading-relaxed text-ink">{state.reply.text}</p>
               {state.reply.approvals > 0 ? (
                 <Link
@@ -430,7 +443,8 @@ export function OmniAssistant({
             </Link>
           ) : null}
 
-          <QuickOrders counts={counts} disabled={busy} onOrder={runOrder} />
+          {/* Mientras escucha o procesa, la pantalla es solo el ojo y tus palabras. */}
+          {live ? null : <QuickOrders counts={counts} onOrder={runOrder} />}
         </div>
 
         <div className="border-t border-line bg-canvas/85 px-4 pb-[max(env(safe-area-inset-bottom),1rem)] pt-3 backdrop-blur">

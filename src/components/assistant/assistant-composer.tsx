@@ -70,18 +70,12 @@ export function AssistantComposer({
           aria-pressed={listening}
           aria-label={listening ? "Dejar de escuchar" : "Hablarle a Omni"}
           className={cn(
-            "relative grid size-14 shrink-0 place-items-center rounded-full transition-transform active:scale-95 disabled:opacity-40",
-            listening ? "bg-ink text-canvas" : "bg-primary text-on-primary",
+            "grid size-14 shrink-0 place-items-center rounded-full transition-transform active:scale-95 disabled:opacity-40",
+            // El ojo ya late con la voz: el botón solo cambia a «detener», con un aro quieto del color de Omni.
+            listening ? "bg-ink text-canvas ring-4 ring-primary/35" : "bg-primary text-on-primary",
           )}
         >
-          {listening ? (
-            <>
-              <span className="absolute inset-0 animate-ping rounded-full bg-primary/30 motion-reduce:hidden" aria-hidden />
-              <Square className="relative size-5 fill-current" aria-hidden />
-            </>
-          ) : (
-            <Mic className="size-6" aria-hidden />
-          )}
+          {listening ? <Square className="size-5 fill-current" aria-hidden /> : <Mic className="size-6" aria-hidden />}
         </button>
       )}
     </form>
