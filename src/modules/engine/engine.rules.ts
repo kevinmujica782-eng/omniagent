@@ -1,5 +1,5 @@
 // Reglas puras del motor: tiempos, reintentos, qué paso sigue, cómo se ve un trabajo. Sin base de datos ni Next.
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { AppError } from "@/lib/errors";
 import { classify } from "@/lib/error-mapping";
 import { isJobActive, PLAYBOOK_IDS, type JobStatusId, type JobView, type PlaybookId } from "@/types/engine";
@@ -150,6 +150,18 @@ export interface JobViewSource {
   finishedAt: Date | null;
 }
 
+/** Enlace que deja un paso en espera en `waitState.data` ({ link: { label, href } }). Solo rutas de la propia app. */
+const waitLinkSchema = z.object({
+  link: z.object({ label: z.string().min(1).max(60), href: z.string().max(300).regex(/^\/(?![/\\])/) }),
+});
+
+/** Lo que conviene mirar antes de decidir la aprobación que espera el trabajo (por ejemplo, la vista previa). */
+export function waitingLinkOf(steps: readonly StepRecord[]): { label: string; href: string } | null {
+  const waiting = steps.find((step) => step.status === "WAITING");
+  const parsed = waitLinkSchema.safeParse(waiting?.waitState?.data);
+  return parsed.success ? parsed.data.link : null;
+}
+
 export function toJobView(row: JobViewSource, now = new Date()): JobView {
   const steps = readSteps(row.steps) ?? [];
   const result = jobResultSchema.safeParse(row.result);
@@ -166,6 +178,7 @@ export function toJobView(row: JobViewSource, now = new Date()): JobView {
     result: result.success ? result.data : null,
     error: row.errorMessage,
     waitingHref: row.status === "WAITING" ? "/aprobaciones" : null,
+    waitingLink: row.status === "WAITING" ? waitingLinkOf(steps) : null,
     retryAt: retrying ? row.runAfter.toISOString() : null,
     cancellable: isJobActive(row.status) && row.cancelRequestedAt === null,
     createdAt: row.createdAt.toISOString(),

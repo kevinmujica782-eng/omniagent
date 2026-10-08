@@ -42,6 +42,8 @@ export interface JobView {
   error: string | null;
   /** Mientras espera una aprobación: dónde decidirla. */
   waitingHref: string | null;
+  /** Mientras espera una aprobación: algo que conviene mirar antes de decidir (la vista previa de la página). */
+  waitingLink: { label: string; href: string } | null;
   /** Después de un fallo pasajero: cuándo lo vuelve a intentar. */
   retryAt: string | null;
   cancellable: boolean;

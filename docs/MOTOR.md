@@ -6,7 +6,7 @@ El motor recibe una petición del asistente, como «créame una página web», �
 
 - **Chat y asistente:** el agente tiene una herramienta por playbook: `engine_analyze_finances`, `engine_daily_sweep`, `engine_create_website` y `engine_update_website`. Además, `engine_job_status` dice cómo va un trabajo y `engine_cancel_job` lo detiene.
 - **API:** `POST /api/v1/engine/jobs` con `{ playbook, input }`. Si ya hay un trabajo igual en marcha, devuelve ese con `created: false` («ya estoy en eso»).
-- **Tarjeta en vivo:** `JobCard`, en `src/components/engine/`. Escucha la fila del trabajo por Supabase Realtime y, si Realtime no conecta, pregunta cada pocos segundos mientras el trabajo siga activo. Tiene un botón para detenerlo.
+- **Tarjeta en vivo:** `JobCard`, en `src/components/engine/`. Escucha la fila del trabajo por Supabase Realtime y, si Realtime no conecta, pregunta cada pocos segundos mientras el trabajo siga activo. Tiene un botón para detenerlo. Mientras espera una aprobación, lleva a Aprobaciones y, si el paso dejó algo que mirar antes de decidir (`waitFor({ data: { link } })`, solo rutas de la app), también ahí: en las páginas web, «Ver la vista previa».
 
 ## Qué sabe hacer
 

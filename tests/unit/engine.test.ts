@@ -23,6 +23,7 @@ import {
   retryDelayMs,
   stepsMatch,
   toJobView,
+  waitingLinkOf,
   warningsOf,
 } from "@/modules/engine/engine.rules";
 import { drainJob, type JobAuditEntry, type JobNotice, type RunnerDeps } from "@/modules/engine/engine.runner";
@@ -191,6 +192,31 @@ describe("motor: reglas", () => {
     expect(toJobView({ ...base, status: "RUNNING", cancelRequestedAt: T0 }, T0).cancellable).toBe(false);
     expect(toJobView({ ...base, status: "SUCCEEDED" }, T0).cancellable).toBe(false);
     expect(toJobView({ ...base, playbook: "algo-viejo", status: "FAILED" }, T0).playbook).toBe("daily.sweep");
+  });
+
+  it("mientras espera, ofrece lo que conviene mirar antes de decidir (solo rutas de la app)", () => {
+    const waiting = (data: unknown): StepRecord[] => [
+      { ...initialSteps([{ key: "a", title: "A" }])[0], status: "WAITING", waitState: { actionIds: ["x"], data } },
+    ];
+    const preview = { label: "Ver la vista previa", href: "/s/dulce-hogar-k3x9?vista=previa" };
+    expect(waitingLinkOf(waiting({ link: preview }))).toEqual(preview);
+    expect(waitingLinkOf(waiting(null))).toBeNull();
+    expect(waitingLinkOf(waiting({ link: { label: "Abrir", href: "https://otro-sitio.com" } }))).toBeNull();
+    expect(waitingLinkOf(waiting({ link: { label: "Abrir", href: "//otro-sitio.com" } }))).toBeNull();
+    expect(waitingLinkOf(waiting({ link: { label: "Abrir", href: "/\\otro-sitio.com" } }))).toBeNull();
+    const base = {
+      id: "j2",
+      playbook: "website.create",
+      title: "Crear tu página",
+      result: null,
+      errorMessage: null,
+      runAfter: T0,
+      cancelRequestedAt: null,
+      createdAt: T0,
+      finishedAt: null,
+    };
+    expect(toJobView({ ...base, status: "WAITING", steps: waiting({ link: preview }) }, T0).waitingLink).toEqual(preview);
+    expect(toJobView({ ...base, status: "RUNNING", steps: waiting({ link: preview }) }, T0).waitingLink).toBeNull();
   });
 });
 

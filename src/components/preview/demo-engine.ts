@@ -89,6 +89,8 @@ export function demoJob(kind: DemoKind, done: number, opts: { waiting?: boolean;
       : null,
     error: null,
     waitingHref: waiting ? "/aprobaciones" : null,
+    // En la vista previa, la «vista previa» de la página es la plantilla de ejemplo.
+    waitingLink: waiting && kind === "website" ? { label: "Ver la vista previa", href: "/preview?screen=pagina-web" } : null,
     retryAt: null,
     cancellable: !finished,
     createdAt: new Date(now.getTime() - 40_000).toISOString(),

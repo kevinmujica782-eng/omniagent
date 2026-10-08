@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, Check, Circle, Globe, Hourglass, LoaderCircle, Minus, RefreshCw, Wallet, X, type LucideIcon } from "lucide-react";
+import { CircleAlert, Check, Circle, ExternalLink, Globe, Hourglass, LoaderCircle, Minus, RefreshCw, Wallet, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { Chip, IconTile, type ChipTone } from "@/components/ui";
@@ -141,13 +141,37 @@ export function JobCard({
       </ol>
 
       {job.status === "WAITING" && job.waitingHref ? (
-        <Link
-          href={job.waitingHref}
-          className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-attention-soft px-3.5 py-2.5 text-sm font-semibold text-attention"
-        >
-          <span>Te espera una aprobación</span>
-          <span>Revisar</span>
-        </Link>
+        job.waitingLink ? (
+          // Algo que mirar antes de decidir (la vista previa de la página): se abre aparte, como la verá cualquiera.
+          <div className="mt-4 rounded-xl bg-attention-soft p-3.5">
+            <p className="text-sm font-semibold text-attention">Te espera una aprobación</p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <a
+                href={job.waitingLink.href}
+                target="_blank"
+                rel="noopener"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-attention px-3.5 text-sm font-semibold text-surface transition-opacity hover:opacity-90"
+              >
+                <ExternalLink className="size-3.5" aria-hidden />
+                {job.waitingLink.label}
+              </a>
+              <Link
+                href={job.waitingHref}
+                className="inline-flex h-9 items-center rounded-full bg-surface px-3.5 text-sm font-semibold text-ink transition-colors hover:bg-surface-2"
+              >
+                Revisar
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <Link
+            href={job.waitingHref}
+            className="mt-4 flex items-center justify-between gap-3 rounded-xl bg-attention-soft px-3.5 py-2.5 text-sm font-semibold text-attention"
+          >
+            <span>Te espera una aprobación</span>
+            <span>Revisar</span>
+          </Link>
+        )
       ) : null}
 
       {job.status === "SUCCEEDED" && job.result ? (

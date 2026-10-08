@@ -1,6 +1,8 @@
 // Capturas de pantallas de la vista previa (/preview) para revisar el diseño sin desplegar: teléfono y compu.
 // Lo corre el workflow «Capturas de la interfaz» (.github/workflows/ui-preview.yml) contra `next start` local.
 // Variables: APP_URL (por defecto http://127.0.0.1:3000), SCREENS (lista separada por comas) y OUT_DIR.
+// Una pantalla terminada en «:completa» (por ejemplo «pagina-web:completa») se captura además de arriba abajo, para
+// revisar páginas largas; la foto extra se llama «{pantalla}-completa-{equipo}.png».
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
@@ -10,7 +12,11 @@ const OUT_DIR = process.env.OUT_DIR || "ui-checks";
 const SCREENS = (process.env.SCREENS || "asistente,asistente-escuchando,asistente-procesando,asistente-activo")
   .split(",")
   .map((s) => s.trim())
-  .filter(Boolean);
+  .filter(Boolean)
+  .map((entry) => {
+    const [name, mode] = entry.split(":");
+    return { name, full: mode === "completa" };
+  });
 
 const DEVICES = [
   { name: "telefono", viewport: { width: 390, height: 844 }, scale: 2, mobile: true },
@@ -36,11 +42,14 @@ try {
       if (message.type() === "error") errors.push(message.text());
     });
     for (const screen of SCREENS) {
-      const response = await page.goto(`${APP_URL}/preview?screen=${screen}`, { waitUntil: "networkidle" });
-      console.log(`${device.name} ${screen} → HTTP ${response?.status()}`);
+      const response = await page.goto(`${APP_URL}/preview?screen=${screen.name}`, { waitUntil: "networkidle" });
+      console.log(`${device.name} ${screen.name} → HTTP ${response?.status()}`);
       // La luna da su vuelta de entrada (1,2 s) antes de la captura.
       await page.waitForTimeout(1800);
-      await page.screenshot({ path: join(OUT_DIR, `${screen}-${device.name}.png`) });
+      await page.screenshot({ path: join(OUT_DIR, `${screen.name}-${device.name}.png`) });
+      if (screen.full) {
+        await page.screenshot({ path: join(OUT_DIR, `${screen.name}-completa-${device.name}.png`), fullPage: true });
+      }
     }
     if (errors.length) console.log(`Errores en ${device.name}:\n${errors.slice(0, 20).join("\n")}`);
     await context.close();

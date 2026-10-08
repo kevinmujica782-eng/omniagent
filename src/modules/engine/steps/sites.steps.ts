@@ -164,6 +164,9 @@ export function approvePublication<I>(stage: StepDefinition<never, z.output<type
     async run(ctx) {
       const staged = requireOutput(ctx, stage);
       const waitNote = staged.mode === "create" ? "Mira la vista previa y apruébala para publicarla." : "Mira la vista previa y aprueba los cambios.";
+      // La tarjeta del trabajo y la aprobación llevan a la misma vista previa (solo la ve su dueño).
+      const preview = { label: "Ver la vista previa", href: sitePaths(staged.slug).previewPath };
+      const wait = { note: waitNote, data: { link: preview } };
       const actionId = ctx.resumed?.actionIds[0] ?? (await openProposal(ctx.userId, ctx.jobId));
 
       if (!actionId) {
@@ -178,13 +181,13 @@ export function approvePublication<I>(stage: StepDefinition<never, z.output<type
               ? "Tu página nueva queda pública en este enlace. Mira la vista previa antes de decidir."
               : "Los cambios se publican en tu página. Mira la vista previa antes de decidir.",
           lines: [{ label: "Enlace", value: siteUrl(staged.slug) }],
-          link: { label: "Ver la vista previa", href: sitePaths(staged.slug).previewPath },
+          link: preview,
           payload: { siteId: staged.siteId, mode: staged.mode, jobId: ctx.jobId },
           ttlHours: APPROVAL_TTL_HOURS,
           now: ctx.now,
         });
         return waitFor({
-          note: waitNote,
+          ...wait,
           actionIds: [card.actionId],
           recheckAt: new Date(ctx.now.getTime() + APPROVAL_TTL_HOURS * 60 * MINUTE + MINUTE),
         });
@@ -209,10 +212,10 @@ export function approvePublication<I>(stage: StepDefinition<never, z.output<type
           if (action.decidedAt && ctx.now.getTime() - action.decidedAt.getTime() > 10 * MINUTE) {
             throw new AppError(409, "publish_stuck", "La publicación se quedó a medias. Pídemela de nuevo.");
           }
-          return waitFor({ note: waitNote, actionIds: [actionId], recheckAt: new Date(ctx.now.getTime() + 2 * MINUTE) });
+          return waitFor({ ...wait, actionIds: [actionId], recheckAt: new Date(ctx.now.getTime() + 2 * MINUTE) });
         default:
           return waitFor({
-            note: waitNote,
+            ...wait,
             actionIds: [actionId],
             recheckAt: action.expiresAt ? new Date(action.expiresAt.getTime() + MINUTE) : new Date(ctx.now.getTime() + 60 * MINUTE),
           });

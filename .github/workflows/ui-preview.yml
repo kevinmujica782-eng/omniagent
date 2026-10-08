@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       screens:
-        description: "Pantallas de /preview, separadas por comas"
+        description: "Pantallas de /preview, separadas por comas (con «:completa» se captura también de arriba abajo)"
         required: true
         default: "asistente,asistente-escuchando,asistente-procesando,asistente-activo,inicio"
 
