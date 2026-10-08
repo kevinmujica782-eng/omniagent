@@ -277,7 +277,7 @@ export function SitePage({
       ) : null}
 
       <header className="sticky top-0 z-10 border-b border-[var(--s-line)] bg-[color-mix(in_oklab,var(--s-bg)_88%,transparent)] backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-5">
+        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-5 sm:px-8">
           <a href="#inicio" className="truncate text-lg font-semibold tracking-tight">
             {content.name}
           </a>
@@ -310,8 +310,12 @@ export function SitePage({
               <a {...linkProps(ctaHref)} className={PRIMARY_BUTTON}>
                 {content.hero.ctaLabel}
               </a>
+              {/* En el teléfono basta con deslizar: el enlace quedaría suelto debajo del botón. */}
               {content.sections.length > 0 && primary ? (
-                <a href="#contenido" className="inline-flex min-h-12 items-center px-3 text-base font-semibold text-[var(--s-ink)] underline-offset-4 hover:underline">
+                <a
+                  href="#contenido"
+                  className="hidden min-h-12 items-center px-3 text-base font-semibold text-[var(--s-ink)] underline-offset-4 hover:underline sm:inline-flex"
+                >
                   Ver más
                 </a>
               ) : null}

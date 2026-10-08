@@ -6,6 +6,7 @@ import {
   contactLinks,
   copyText,
   ctaLabelFor,
+  formatIntlNumber,
   normalizeContact,
   pickPalette,
   primaryLink,
@@ -90,6 +91,15 @@ describe("páginas web: contacto y enlaces", () => {
       ["instagram", "https://instagram.com/dulcehogar.ccs"],
     ]);
     expect(primaryLink(normalizeContact({}))).toBeNull();
+  });
+
+  it("el WhatsApp se muestra fácil de leer, con el código de país aparte", () => {
+    expect(contactLinks(normalizeContact({ whatsapp: "+584145550101" }))[0]?.detail).toBe("+58 414 555 0101");
+    expect(formatIntlNumber("13055550101")).toBe("+1 305 555 0101");
+    expect(formatIntlNumber("34612345678")).toBe("+34 612 345 678");
+    expect(formatIntlNumber("50688889999")).toBe("+506 8888 9999");
+    expect(formatIntlNumber("573001234567")).toBe("+57 300 123 4567");
+    expect(formatIntlNumber("5491112345678")).toBe("+54 911 1234 5678");
   });
 
   it("el botón dice qué pasa al tocarlo", () => {

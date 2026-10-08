@@ -4,7 +4,7 @@ import type { JobStatusId, JobView, StepStatusId } from "@/types/engine";
 export const JOB_STATUS_LABEL: Record<JobStatusId, string> = {
   QUEUED: "En cola",
   RUNNING: "Trabajando",
-  WAITING: "Espera tu aprobación",
+  WAITING: "Por aprobar",
   SUCCEEDED: "Listo",
   FAILED: "No se pudo terminar",
   CANCELED: "Detenido",

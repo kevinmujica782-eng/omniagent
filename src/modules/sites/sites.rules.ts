@@ -42,6 +42,33 @@ export function slugFor(name: string, suffix: string): string {
 
 const digitsOf = (value: string | undefined) => (value ?? "").replace(/\D/g, "");
 
+/** Códigos de país de dos cifras (UIT-T E.164); el 1 y el 7 tienen una y el resto, tres. */
+const TWO_DIGIT_COUNTRY_CODES = new Set(
+  "20 27 30 31 32 33 34 36 39 40 41 43 44 45 46 47 48 49 51 52 53 54 55 56 57 58 60 61 62 63 64 65 66 81 82 84 86 90 91 92 93 94 95 98".split(" "),
+);
+
+/** Grupos para leer el número nacional: 3-4, 4-4, 3-3-3, 3-3-4, 3-4-4 y, más largo, de a tres. */
+function groupNational(digits: string): string[] {
+  const sizes: Record<number, number[]> = { 7: [3, 4], 8: [4, 4], 9: [3, 3, 3], 10: [3, 3, 4], 11: [3, 4, 4] };
+  const plan = sizes[digits.length];
+  if (!plan) return digits.match(/.{1,3}/g) ?? [digits];
+  const groups: string[] = [];
+  let at = 0;
+  for (const size of plan) {
+    groups.push(digits.slice(at, at + size));
+    at += size;
+  }
+  return groups;
+}
+
+/** Un número internacional solo con dígitos, fácil de leer: "584145550101" → "+58 414 555 0101". */
+export function formatIntlNumber(digits: string): string {
+  const clean = digits.replace(/\D/g, "");
+  if (clean.length < 8) return `+${clean}`;
+  const ccLength = /^[17]/.test(clean) ? 1 : TWO_DIGIT_COUNTRY_CODES.has(clean.slice(0, 2)) ? 2 : 3;
+  return `+${clean.slice(0, ccLength)} ${groupNational(clean.slice(ccLength)).join(" ")}`;
+}
+
 function instagramHandle(value: string | undefined): string | null {
   if (!value) return null;
   const handle = value
@@ -98,7 +125,7 @@ export interface ContactLink {
 export function contactLinks(contact: SiteContact): ContactLink[] {
   const links: ContactLink[] = [];
   if (contact.whatsapp) {
-    links.push({ kind: "whatsapp", label: "WhatsApp", detail: `+${contact.whatsapp}`, href: `https://wa.me/${contact.whatsapp}` });
+    links.push({ kind: "whatsapp", label: "WhatsApp", detail: formatIntlNumber(contact.whatsapp), href: `https://wa.me/${contact.whatsapp}` });
   }
   if (contact.phone) {
     const tel = `${contact.phone.trim().startsWith("+") ? "+" : ""}${digitsOf(contact.phone)}`;
