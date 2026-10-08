@@ -169,7 +169,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 ### Asistente interactivo de Omni (7 oct 2026)
 - **Qué es:** un panel siempre oscuro para darle órdenes a Omni con la voz o escribiendo (`docs/ASISTENTE.md`, `src/components/assistant/`). Se abre con la pestaña Omni del teléfono, con la identidad de Omni en el encabezado o con Ctrl+K / ⌘K.
 - **El ojo:** es el avatar, hecho con la marca (anillo, pupila y luna ámbar) y con un estado en vivo: En espera, Escuchando (late con el volumen real del micrófono), Procesando (la luna corre con su estela), Activo (responde y, si le hablaste, habla) y Error. La etiqueta del estado siempre está escrita y con `prefers-reduced-motion` no hay movimiento.
-- **Órdenes rápidas:** seis, con los contadores en vivo de cada área. Se ocultan mientras escucha o procesa. Las órdenes van al mismo agente del chat (`/api/v1/agent/chat`, con el módulo según la intención). Lo nuevo por aprobar llega en vivo por Supabase Realtime.
+- **Órdenes rápidas:** siete (desde el motor: «Pon todo al día» y «Crea una página web»), con los contadores en vivo de cada área. Se ocultan mientras escucha o procesa. Las órdenes van al mismo agente del chat (`/api/v1/agent/chat`, con el módulo según la intención). Lo nuevo por aprobar llega en vivo por Supabase Realtime.
 - **Código:** el modelo de estados es puro y está probado (`assistant-model.ts`, `tests/unit/assistant.test.ts`). El ojo, el panel, la lista, el campo, el proveedor y los hooks de voz van en archivos separados. Las capturas en teléfono y compu salen del workflow «Capturas de la interfaz» (rama `ui-checks`).
 
 ### Motor de ejecución autónoma (8 oct 2026)
@@ -194,7 +194,8 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - Las páginas no se indexan.
   - Gratis: 1 página nueva al mes. Pro: 20 (`monthlySites`).
 - **Datos:** tablas `engine_jobs` (los pasos van en JSON dentro del trabajo; tiene RLS `owner_select` y Realtime) y `sites` (solo servidor); enums `job_status` y `site_status`; valor `PUBLISH_SITE` en `action_type`.
-- **Pruebas:** `tests/unit/engine.test.ts` (ejecutor con un almacén en memoria), `engine-playbooks.test.ts` y `sites.test.ts`. En la vista previa: `asistente-motor`, `chat-motor`, `pagina-web` y `pagina-web-grafito`.
+- **Pruebas:** `tests/unit/engine.test.ts` (ejecutor con un almacén en memoria), `engine-playbooks.test.ts` y `sites.test.ts`. En la vista previa: `asistente-motor`, `chat-motor`, `pagina-web` y `pagina-web-grafito` (en el workflow de capturas, `pagina-web:completa` la fotografía de arriba abajo).
+- **Producción:** las migraciones ya están en Supabase (`engine_jobs`, `sites` y `PUBLISH_SITE`, con RLS y Realtime) y el job `omniagent-motor` de pg_cron ya existe; solo llama a la app cuando hay un trabajo pendiente. El código queda activo en la web cuando el repositorio esté enlazado en Netlify.
 
 ### Pantalla de Omni Pro (paywall)
 - **Dónde:** `src/components/paywall/` (`paywall.tsx` y `autopilot-dial.tsx`); datos en `modules/billing/paywall.ts`; pago en `lib/purchase.ts`. Reemplaza la hoja anterior: la abren los límites del plan Gratis (402 `plan_limit`, con la fila del límite marcada), la tarjeta del chat, el Inicio y la cuenta.
