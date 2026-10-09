@@ -79,6 +79,8 @@ omniagent/
     │       ├── cron/            # finance/, procedures/, concierge/ y returns/ (tareas programadas)
     │       └── webhooks/        # stripe y revenuecat
     ├── modules/                 # dominio: un módulo por área
+    │   ├── ai/                  # router de IA: OpenAI, Claude, Gemini y Grok con la misma respuesta (docs/ROUTER-IA.md)
+    │   │   └── providers/       # un adaptador por API oficial: openai.ts, anthropic.ts, gemini.ts, openai-compatible.ts (xAI)
     │   ├── agent/               # bucle de function calling, prompt y registro de herramientas
     │   ├── actions/             # Proponer → Aprobar → Ejecutar
     │   ├── engine/              # motor de ejecución autónoma: tipos, reglas, almacén, ejecutor, servicio, pasos y playbooks
@@ -87,14 +89,14 @@ omniagent/
     │   ├── dashboard/           # rules.ts (saludo, gasto del mes, lo pendiente, agentes: puro) y dashboard.service.ts
     │   ├── finance/
     │   │   ├── providers/       # contrato tipo Plaid: sandbox.ts, plaid.ts y catálogo del sandbox
-    │   │   ├── insights/        # snapshot de 3 meses, candidatas por reglas, informe con Claude
+    │   │   ├── insights/        # snapshot de 3 meses, candidatas por reglas, informe con IA (router)
     │   │   ├── sync.service.ts  # conectar, sincronizar (cursor) y desconectar
     │   │   ├── statement-import/ # estados de cuenta PDF/CSV: lectores, validación, categorías, deduplicación y servicio
     │   │   ├── finance.service.ts, budgets.service.ts, cancellation.ts, jobs.ts
     │   │   └── finance.tools.ts # 11 herramientas del asistente financiero
     │   ├── procedures/          # trámites, correo, documentos y calendario
-    │   │   ├── mail/            # providers/ (contrato Gmail/Outlook + sandbox), triage/ (reglas + Claude), mail.service
-    │   │   ├── documents/       # pdf.ts (inspección), fill.ts (llenado), extract.ts (Claude/reglas), Mis datos, storage
+    │   │   ├── mail/            # providers/ (contrato Gmail/Outlook + sandbox), triage/ (reglas + IA), mail.service
+    │   │   ├── documents/       # pdf.ts (inspección), fill.ts (llenado), extract.ts (IA/reglas), Mis datos, storage
     │   │   ├── calendar/        # scheduler (fechas sugeridas), ics.ts (RFC 5545), calendar y feed services
     │   │   ├── time/            # zonas horarias y fechas en español ("a más tardar el viernes 2 de octubre")
     │   │   ├── plan-rules.ts    # pasos, eventos y vista de cada trámite (puro)
@@ -124,7 +126,7 @@ omniagent/
     │   ├── paywall/             # pantalla de Omni Pro: órbita de 24 h, comparación Gratis / Pro y botón de pago
     │   └── ...                  # shell con pestañas, hoja de Pro, eliminar cuenta, tema, chat, boleta, tarjetas, landing
     ├── lib/                     # auth, db, env, http y error-mapping (errores), log, rate-limit, config-check, tema, cifrado, purchase (Stripe / Google Play)...
-    └── types/                   # cards.ts, dashboard.ts y billing.ts: contratos entre servicios, API y UI
+    └── types/                   # cards.ts, dashboard.ts, billing.ts, engine.ts y ai.ts: contratos entre servicios, API y UI
 ```
 
 ## Puesta en marcha
@@ -149,6 +151,7 @@ npm run dev
    - `DATABASE_URL`: cadena del **transaction pooler** (puerto 6543), para la app.
    - `DIRECT_URL`: cadena del **session pooler** (puerto 5432) o la conexión directa, para migraciones.
    - `ANTHROPIC_API_KEY` y `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`).
+   - Opcional: `OPENAI_API_KEY`, `GEMINI_API_KEY` y `XAI_API_KEY` para que el router de IA use también ChatGPT, Gemini y Grok, y responda con otro si uno falla (`docs/ROUTER-IA.md`).
 3. Crea las tablas y aplica la seguridad:
 
 ```bash
@@ -445,7 +448,7 @@ Cada sección carga por separado: si una falla, muestra **Reintentar** y las dem
 | Metas activas | 2 | 20 |
 | Análisis financiero | Cuando lo pides (1 cada 12 h) | Informe mensual automático, y 1 a mano cada 30 min |
 | Alertas de ofertas | Estándar (reglas) | Redactadas por Omni y validadas cifra por cifra |
-| Modelo | Rápido (`ANTHROPIC_MODEL_FREE`) | Más capaz (`ANTHROPIC_MODEL_PRO`) |
+| Modelo | Rápido de cada proveedor (`ANTHROPIC_MODEL_FREE`, `*_MODEL_FAST`) | Más capaz (`ANTHROPIC_MODEL_PRO`, `*_MODEL_SMART`) |
 
 Todo se valida en el servidor (`modules/billing`):
 
@@ -539,6 +542,8 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 
 **Agente (`modules/agent/run-agent.ts`).** Cada turno guarda el mensaje, llama a Claude con las 36 herramientas (esquemas zod convertidos a JSON Schema), ejecuta las llamadas en un bucle de hasta 6 rondas y guarda la respuesta con sus tarjetas y preguntas sugeridas (`{ text, cards, suggestions }`). Cada llamada a herramienta queda registrada como mensaje `TOOL`. El consumo se guarda en `ai_usage_logs` y alimenta la cuota mensual. La parte fija del prompt de sistema usa prompt caching.
 
+**Router de IA (`modules/ai`).** Un solo punto para hablar con OpenAI, Anthropic, Google y xAI con sus APIs oficiales (sin SDK: `fetch` con tope de tiempo). Todo pedido entra como `AIRequestPrompt` y sale como `AIResponse`, igual para los cuatro; los errores salen normalizados (red, tiempo, límite de tasa, cuota...). El router reintenta lo pasajero, responde con otro proveedor si uno falla, aparta por un rato al que viene fallando y solo manda a cada proveedor lo que puede atender (PDF, tipos de imagen, herramientas). Las salidas estructuradas de los módulos (informe de finanzas, páginas web, formularios, correo, precios y alertas) van por aquí. El chat del agente sigue en Claude con su SDK. Detalle en `docs/ROUTER-IA.md`.
+
 **Motor de ejecución autónoma (`modules/engine`).** Las peticiones de varios pasos («créame una página web», «analiza mis finanzas», «ponme al día») se convierten en un trabajo con pasos que llaman a los servicios de cada módulo, uno detrás de otro, en segundo plano: después de responder (`after()`), en otra invocación si no alcanza el tiempo y con una tarea programada cada minuto que retoma lo pendiente. Cada paso se guarda antes de seguir; un turno atómico evita que dos ejecutores corran el mismo trabajo; los reintentos son solo para fallos pasajeros; y lo que publica, gasta, envía o cancela espera la aprobación de la persona. Detalle en `docs/MOTOR.md`.
 
 **Proponer → Aprobar → Ejecutar (`modules/actions`).** Las herramientas `*_propose_*` solo crean una `agent_action` en estado `PENDING` y una notificación. Al aprobar, un `updateMany` atómico (`PENDING → APPROVED`) evita dobles ejecuciones; luego el ejecutor corre y la acción queda `EXECUTED` o `FAILED`. Las compras son la excepción: no se aprueban con la boleta genérica sino en la hoja de pago (**Permitir** con la huella de la cotización, precio reconfirmado en la tienda y límites). Las propuestas vencen solas (72 h; compras, 24 h).
@@ -630,6 +635,8 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 | GET, PATCH | `/api/v1/returns/cases/:id` | Ver un reclamo; `{ action: "sent" \| "propose" \| "edit" \| "reply" \| "package_sent" \| "info_sent" \| "refund_received" \| "close" \| "reopen", … }` |
 | POST | `/api/v1/returns/cases/:id/simulate-reply` | Respuesta simulada (solo tiendas de prueba) |
 | GET | `/api/cron/returns` | Pedidos y devoluciones en segundo plano (requiere `CRON_SECRET`) |
+| POST | `/api/v1/ai/chat` | Router de IA: un turno con `{ messages, provider?: "auto" \| "openai" \| "anthropic" \| "gemini" \| "xai", tier?: "fast" \| "smart", responseFormat?, maxOutputTokens?, instructions?, fallback? }` → siempre `AIResponse` (20 por minuto; cuenta como mensaje; `smart` es de Pro) |
+| GET | `/api/v1/ai/models` | Proveedores y modelos del router: cuáles hay, cuáles responden y cuáles permite el plan |
 | GET, POST | `/api/v1/engine/jobs` | Trabajos en segundo plano (`?active=1`); empezar uno `{ playbook, input }` → responde al instante (`created: false` si ya estaba en marcha) |
 | GET | `/api/v1/engine/jobs/:id` | Un trabajo con sus pasos |
 | POST | `/api/v1/engine/jobs/:id/cancel` | Detenerlo (si corre, al terminar el paso actual) |

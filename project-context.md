@@ -197,6 +197,17 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 - **Pruebas:** `tests/unit/engine.test.ts` (ejecutor con un almacén en memoria), `engine-playbooks.test.ts` y `sites.test.ts`. En la vista previa: `asistente-motor`, `chat-motor`, `pagina-web` y `pagina-web-grafito` (en el workflow de capturas, `pagina-web:completa` la fotografía de arriba abajo).
 - **Producción:** las migraciones ya están en Supabase (`engine_jobs`, `sites` y `PUBLISH_SITE`, con RLS y Realtime) y el job `omniagent-motor` de pg_cron ya existe; solo llama a la app cuando hay un trabajo pendiente. El código queda activo en la web cuando el repositorio esté enlazado en Netlify.
 
+### Router de IA centralizado (9 oct 2026)
+- **Qué es:** un solo punto para OpenAI (ChatGPT), Anthropic (Claude), Google (Gemini) y xAI (Grok), en `src/modules/ai/` (`docs/ROUTER-IA.md`). Todo pedido entra como `AIRequestPrompt` y sale como `AIResponse` (`src/types/ai.ts`), igual para los cuatro; cada proveedor implementa `ModelProvider`.
+- **Adaptadores (sin SDK, `fetch` a las APIs oficiales):** OpenAI con la Responses API (con GPT-6 las herramientas solo funcionan ahí), Claude con Messages, Gemini con generateContent (firmas de pensamiento de Gemini 3 incluidas) y Grok con Chat Completions (compatible con OpenAI). Texto, imágenes, PDF, herramientas y JSON con esquema.
+- **Modelos por nivel** (`fast` en Gratis, `smart` en Pro), configurables por variables: Claude Haiku 4.5 / Sonnet 5.5 (`ANTHROPIC_MODEL_FREE/PRO`), gpt-6-luna / gpt-6.1-sol, gemini-3.5-flash-lite / gemini-3.8-flash y grok-4.3 / grok-4.7. Orden de proveedores en `AI_PROVIDER_ORDER`.
+- **Fallas:** errores normalizados (`network_error`, `timeout`, `rate_limited`, `quota_exceeded`, `auth_failed`, `provider_unavailable`, `invalid_request`, `context_too_long`, `content_blocked`, `bad_response`...). Reintenta lo pasajero (con el Retry-After si es corto), responde con otro proveedor si uno falla, aparta por un rato al que viene fallando (cortacircuitos) y no prueba con otro lo que fallaría igual. A la app le llegan como `{ error: { code: "ai_*", message, details: { retryAfterSeconds, attempts } } }`.
+- **API para la app:** `POST /api/v1/ai/chat` (proveedor `auto` o elegido, nivel según el plan, cuenta como mensaje, 20 por minuto) y `GET /api/v1/ai/models`.
+- **Arreglo de Pro:** el informe de finanzas, las páginas web, los formularios PDF, la clasificación de correos, la lectura de precios y las alertas forzaban una herramienta, que Sonnet 5.5 (el modelo de Pro) rechaza con 400; en Pro el informe, las páginas y los formularios pasaban a las reglas o fallaban. Ahora usan `generateStructured` (JSON con esquema, validado con zod, con corrección y respaldo). El chat del agente sigue en Claude con su SDK.
+- **Datos:** columna `provider` en `ai_usage_logs` (ya aplicada en Supabase).
+- **Pruebas:** `ai-providers`, `ai-router`, `ai-schema` y `ai-service` (`tests/unit/`), con respuestas como las de la documentación de cada API.
+- **Para activarlo en producción:** enlazar el repositorio en Netlify (como todo lo nuevo). Para sumar proveedores, agregar en Netlify `OPENAI_API_KEY`, `GEMINI_API_KEY` o `XAI_API_KEY`; sin ellas el router usa solo Claude.
+
 ### Pantalla de Omni Pro (paywall)
 - **Dónde:** `src/components/paywall/` (`paywall.tsx` y `autopilot-dial.tsx`); datos en `modules/billing/paywall.ts`; pago en `lib/purchase.ts`. Reemplaza la hoja anterior: la abren los límites del plan Gratis (402 `plan_limit`, con la fila del límite marcada), la tarjeta del chat, el Inicio y la cuenta.
 - **Diseño:** siempre oscura (clase `theme-dark`, que reutiliza los tokens oscuros), a pantalla completa en el teléfono con el botón fijo abajo y en dos columnas desde 1024 px. La órbita de 24 horas (la marca de Omni) muestra las revisiones de un día con Pro y da una sola vuelta al abrir. La columna de Pro tiene el anillo brillante, la luna ámbar y la etiqueta "Recomendado".
@@ -239,11 +250,13 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
    - Si ya tenías la fase 5: `npx prisma migrate dev --name devoluciones` (crea `tracked_orders` y `return_cases`).
    - Si ya tenías Devoluciones: `npx prisma migrate dev --name estados_de_cuenta` (cuentas manuales y movimientos ligados a cada importación).
    - Si ya tenías la memoria de Omni: `npx prisma migrate dev --name motor` (crea `engine_jobs` y `sites`, y agrega `PUBLISH_SITE`).
+   - Si ya tenías el motor: `npx prisma migrate dev --name router_ia` (agrega `provider` a `ai_usage_logs`).
 
    Después, `npm run db:security` y `npm test`. Para los agentes en segundo plano: `CRON_SECRET` y `npm run db:cron`, o los crons de Vercel.
 3. El detalle completo está en `README.md` (puesta en marcha, módulos, Inicio y planes, arquitectura, endpoints y hoja de ruta). El despliegue a producción y la lista de Google Play están en `docs/DEPLOY.md`.
-4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real, el `.apk` para clientes, la memoria de Omni, el asistente interactivo y el motor de ejecución autónoma (con páginas web) están hechos (ver «Cobros, notificaciones, correo real y app para clientes», «Memoria de Omni», «Asistente interactivo de Omni» y «Motor de ejecución autónoma»). Lo siguiente, sin orden fijo:
+4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real, el `.apk` para clientes, la memoria de Omni, el asistente interactivo, el motor de ejecución autónoma (con páginas web) y el router de IA centralizado están hechos (ver «Cobros, notificaciones, correo real y app para clientes», «Memoria de Omni», «Asistente interactivo de Omni», «Motor de ejecución autónoma» y «Router de IA centralizado»). Lo siguiente, sin orden fijo:
    - Publicar la web con todo lo nuevo (requiere conectar el repositorio en Netlify).
+   - Pasar el chat del agente al router de IA (respaldo también ahí) y un selector de modelo en la app.
    - Outlook con OAuth (Microsoft Graph) y Google Calendar con OAuth.
    - Medios de pago reales para las compras del concierge.
    - Estados de cuenta: OCR de los escaneados y leer los PDF en un proceso aparte con límite de memoria.
