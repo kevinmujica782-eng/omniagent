@@ -26,7 +26,6 @@
     "cap:open": "cap open android"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
     "@capacitor/core": "^8.0.0",
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.0.0",

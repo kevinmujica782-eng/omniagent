@@ -140,6 +140,13 @@ export function parseProviderOrder(value: string | undefined): AIProviderId[] {
   return [...new Set([...named, ...DEFAULT_PROVIDER_ORDER])];
 }
 
+/** El modelo que eligió la persona (profiles.preferences.ai.provider); null = automático. */
+export function preferredProviderOf(preferences: unknown): AIProviderId | null {
+  const ai = preferences && typeof preferences === "object" ? (preferences as { ai?: unknown }).ai : null;
+  const provider = ai && typeof ai === "object" ? (ai as { provider?: unknown }).provider : null;
+  return typeof provider === "string" && (AI_PROVIDER_IDS as readonly string[]).includes(provider) ? (provider as AIProviderId) : null;
+}
+
 // ── Qué necesita un pedido ───────────────────────────────────────────────────
 
 export interface RequestNeeds {

@@ -17,7 +17,7 @@ import {
   type JsonReply,
 } from "../ai.http";
 import { cleanSchema, isStrictCompatible, objectRoot, unwrapJson } from "../ai.schema";
-import type { AIContentPart, AIMessage, AIToolChoice, ModelProvider, ProviderCall, ProviderResult } from "../ai.types";
+import { systemText, type AIContentPart, type AIMessage, type AIToolChoice, type ModelProvider, type ProviderCall, type ProviderResult } from "../ai.types";
 
 export interface OpenAIConfig {
   apiKey?: string;
@@ -89,7 +89,8 @@ function toolChoiceOf(choice: AIToolChoice): unknown {
 export function buildOpenAIRequest(call: ProviderCall): { body: Item; warnings: AIWarning[]; wrapped: boolean } {
   const { request, model } = call;
   const body: Item = { model: model.id, input: toOpenAIInput(request.messages), max_output_tokens: call.maxOutputTokens, store: false };
-  const instructions: string[] = request.system?.trim() ? [request.system.trim()] : [];
+  const system = systemText(request.system);
+  const instructions: string[] = system ? [system] : [];
   let wrapped = false;
 
   const format = request.responseFormat;

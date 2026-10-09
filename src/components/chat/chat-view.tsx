@@ -129,7 +129,7 @@ export function ChatView({
           {
             id: `demo-${Date.now()}`,
             role: "assistant",
-            text: "Esto es una vista previa. Configura Supabase y tu clave de Anthropic para hablar con Omni de verdad.",
+            text: "Esto es una vista previa. Configura Supabase y la clave de un modelo de IA (Claude, ChatGPT, Gemini o Grok) para hablar con Omni de verdad.",
             cards: [],
             createdAt: new Date().toISOString(),
           },

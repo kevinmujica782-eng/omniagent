@@ -8,12 +8,16 @@ export type ConfigReport = { critical: string[]; recommended: string[]; warnings
 
 const present = (env: Env, key: string) => Boolean(env[key] && env[key]!.trim() !== "");
 
+const AI_KEYS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "XAI_API_KEY"] as const;
+
 export function checkConfig(env: Env, production: boolean): ConfigReport {
   const report: ConfigReport = { critical: [], recommended: [], warnings: [] };
   for (const key of ["DATABASE_URL", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "TOKEN_ENCRYPTION_KEY"]) {
     if (!present(env, key)) report.critical.push(key);
   }
-  for (const key of ["ANTHROPIC_API_KEY", "CRON_SECRET"]) if (!present(env, key)) report.recommended.push(key);
+  // El router de IA usa cualquier proveedor con llave: basta una para que respondan el chat y los agentes.
+  if (!AI_KEYS.some((key) => present(env, key))) report.recommended.push(`${AI_KEYS[0]} (o ${AI_KEYS.slice(1).join(", ")})`);
+  if (!present(env, "CRON_SECRET")) report.recommended.push("CRON_SECRET");
   // Con los documentos en Supabase Storage, sin la llave secreta no se pueden subir ni leer. (Eliminar una
   // cuenta ya no la necesita: usa la función public.delete_auth_user de prisma/sql/supabase-setup.sql.)
   if (env.DOCUMENT_STORAGE === "supabase" && !present(env, "SUPABASE_SECRET_KEY")) {

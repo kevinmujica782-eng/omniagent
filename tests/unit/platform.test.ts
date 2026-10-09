@@ -116,6 +116,13 @@ describe("configuración al arrancar", () => {
     expect(checkConfig({ ...complete, NEXT_PUBLIC_APP_URL: "http://localhost:3000" }, false).critical).toEqual([]);
   });
 
+  it("basta la llave de cualquier proveedor de IA", () => {
+    const noAI = { ...complete, ANTHROPIC_API_KEY: "" };
+    expect(checkConfig(noAI, true).recommended).toEqual(["ANTHROPIC_API_KEY (o OPENAI_API_KEY, GEMINI_API_KEY, XAI_API_KEY)"]);
+    expect(checkConfig({ ...noAI, GEMINI_API_KEY: "g-x" }, true).recommended).toEqual([]);
+    expect(checkConfig({ ...noAI, CRON_SECRET: undefined, XAI_API_KEY: "xai-x" }, true).recommended).toEqual(["CRON_SECRET"]);
+  });
+
   it("la llave secreta de Supabase solo hace falta con los documentos en Storage", () => {
     expect(checkConfig(complete, true).critical).toEqual([]);
     expect(checkConfig({ ...complete, DOCUMENT_STORAGE: "supabase" }, true).critical).toEqual([

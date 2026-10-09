@@ -51,10 +51,19 @@ export type AIResponseFormat =
 
 export type AIReasoningEffort = "low" | "medium" | "high";
 
+/**
+ * Una parte de las instrucciones de sistema. `cache`: es igual entre pedidos (la parte fija del prompt) y Claude la
+ * guarda en su caché (más barato y rápido). Los demás proveedores reciben las partes unidas en un solo texto.
+ */
+export interface AISystemPart {
+  text: string;
+  cache?: boolean;
+}
+
 /** Un pedido normalizado para cualquier proveedor. */
 export interface AIRequestPrompt {
-  /** Instrucciones de sistema. */
-  system?: string;
+  /** Instrucciones de sistema: un texto o partes (para el caché de Claude). */
+  system?: string | readonly AISystemPart[];
   messages: AIMessage[];
 
   // ── Qué modelo ──
@@ -160,3 +169,13 @@ export interface ModelProvider {
 }
 
 export const EMPTY_USAGE: AIUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedInputTokens: 0, reasoningTokens: 0 };
+
+/** Las instrucciones de sistema en un solo texto (para los proveedores que no las reciben por partes). */
+export function systemText(system: AIRequestPrompt["system"]): string {
+  if (!system) return "";
+  if (typeof system === "string") return system.trim();
+  return system
+    .map((part) => part.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}

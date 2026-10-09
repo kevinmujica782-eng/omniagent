@@ -1,6 +1,7 @@
 import { Check, ChevronRight, FileText, Lock, LogOut, Mail, ShieldCheck, Sparkles, UserX, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { ActionButton } from "@/components/action-button";
+import { ModelPicker } from "@/components/ai/model-picker";
 import { BinanceRenewButton, BinanceReturn } from "@/components/binance-pay";
 import { UpgradeButton } from "@/components/upgrade-sheet";
 import { CheckoutReturn } from "@/components/checkout-return";
@@ -14,6 +15,7 @@ import { meterTone } from "@/lib/dashboard-copy";
 import { shortDate } from "@/lib/format";
 import { SUPPORT_EMAIL } from "@/lib/legal";
 import { PLANS } from "@/modules/billing/plans";
+import type { AIModelsView } from "@/types/ai";
 import type { BillingOverview } from "@/types/billing";
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -78,6 +80,7 @@ function Usage({ label, used, limit }: { label: string; used: number; limit: num
 export function AccountView({
   profile,
   billing,
+  models,
   notice = null,
   checkoutSessionId = null,
   binanceOrder = null,
@@ -86,6 +89,8 @@ export function AccountView({
 }: {
   profile: { name: string | null; email: string | null; timezone: string; currency: string };
   billing: BillingOverview;
+  /** Modelos de IA disponibles y el que eligió la persona (Cuenta → Modelo de IA). */
+  models: AIModelsView;
   notice?: "success" | "cancel" | null;
   checkoutSessionId?: string | null;
   /** Orden de Binance Pay al volver del pago (?binance=<orden>). */
@@ -163,6 +168,10 @@ export function AccountView({
             )}
           </div>
         </div>
+      </Section>
+
+      <Section title="Modelo de IA">
+        <ModelPicker initial={models} demo={preview} />
       </Section>
 
       <Section title="Lo que tus agentes hacen solos">

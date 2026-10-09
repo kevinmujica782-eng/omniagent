@@ -282,13 +282,27 @@ describe("router de IA: Anthropic (Messages API)", () => {
       callFor(sonnet, { system: "Eres Omni.", tools: [WEATHER_TOOL], toolChoice: "required" }),
     );
     expect(sent[0].body.tool_choice).toEqual({ type: "auto" });
-    expect((sent[0].body.system as { text: string }[])[0].text).toBe("Eres Omni.\n\nResponde usando una de las herramientas disponibles.");
+    expect(sent[0].body.system).toEqual([
+      { type: "text", text: "Eres Omni.", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "Responde usando una de las herramientas disponibles." },
+    ]);
     expect(result).toMatchObject({
       warnings: ["tool_choice_relaxed"],
       finishReason: "tool_calls",
       toolCalls: [{ id: "toolu_9", name: "clima", arguments: { ciudad: "Caracas" } }],
       state: { provider: "anthropic" },
     });
+  });
+
+  it("instrucciones por partes: punto de caché solo en las partes fijas", async () => {
+    const { fetch, sent } = fakeFetch([reply([{ type: "text", text: "Hola" }])]);
+    await anthropicProvider({ apiKey: "k", models: MODELS, fetch }).generate(
+      callFor(sonnet, { system: [{ text: "Reglas fijas de Omni.", cache: true }, { text: "Ahora son las 10:00." }] }),
+    );
+    expect(sent[0].body.system).toEqual([
+      { type: "text", text: "Reglas fijas de Omni.", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "Ahora son las 10:00." },
+    ]);
   });
 
   it("turnos alternados: resultados de herramientas al inicio del turno, imagen y PDF como bloques", async () => {

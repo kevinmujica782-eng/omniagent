@@ -144,6 +144,8 @@ export interface AIProviderOption {
 
 export interface AIModelsView {
   plan: "FREE" | "PRO";
+  /** El modelo que eligió la persona (null: automático, el router decide y cambia si uno falla). */
+  preference: AIProviderId | null;
   /** Orden en que el router prueba los proveedores con `provider: "auto"`. */
   order: AIProviderId[];
   providers: AIProviderOption[];

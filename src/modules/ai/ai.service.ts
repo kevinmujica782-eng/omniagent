@@ -1,14 +1,15 @@
 import "server-only";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import type { AgentModule } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
-import { Errors } from "@/lib/errors";
+import { AppError, Errors } from "@/lib/errors";
 import { log } from "@/lib/log";
 import { assertCanSendMessage, getEntitlements, requireFeature } from "@/modules/billing/entitlements";
 import type { PlanId } from "@/modules/billing/plans";
 import { AI_PROVIDER_IDS, AI_PROVIDER_LABEL, type AIModelsView, type AIProviderId, type AIResponse, type AITier } from "@/types/ai";
-import { parseProviderOrder } from "./ai.catalog";
+import { parseProviderOrder, preferredProviderOf } from "./ai.catalog";
 import { AIRouter, type AttemptEvent } from "./ai.router";
 import type { AIContentPart, AIMessage, AIReasoningEffort, AIResponseFormat, JsonSchema } from "./ai.types";
 import { anthropicProvider } from "./providers/anthropic";
@@ -257,6 +258,30 @@ export async function generateStructured<T>(input: StructuredRequest<T>): Promis
   }
 }
 
+// ── Modelo preferido ─────────────────────────────────────────────────────────
+
+/** El modelo que eligió la persona en Cuenta (null: automático). */
+export async function preferredProvider(userId: string): Promise<AIProviderId | null> {
+  const profile = await prisma.profile.findUnique({ where: { id: userId }, select: { preferences: true } });
+  return preferredProviderOf(profile?.preferences);
+}
+
+/**
+ * Guarda el modelo preferido (profiles.preferences.ai.provider). Solo uno que esté configurado; "auto" lo borra. El
+ * chat lo usa primero y, si no responde, contesta otro para no dejar a la persona sin respuesta.
+ */
+export async function setPreferredProvider(userId: string, provider: "auto" | AIProviderId): Promise<AIModelsView> {
+  if (provider !== "auto" && !aiRouter().provider(provider)?.isConfigured()) {
+    throw new AppError(409, "ai_provider_unavailable", `${AI_PROVIDER_LABEL[provider].assistant} no está disponible en Omni por ahora.`);
+  }
+  const profile = await prisma.profile.findUnique({ where: { id: userId }, select: { preferences: true } });
+  const preferences = { ...((profile?.preferences ?? {}) as Record<string, unknown>) };
+  const current = preferences.ai && typeof preferences.ai === "object" ? (preferences.ai as Record<string, unknown>) : {};
+  preferences.ai = { ...current, provider: provider === "auto" ? null : provider };
+  await prisma.profile.update({ where: { id: userId }, data: { preferences: preferences as unknown as Prisma.InputJsonValue } });
+  return modelsForApp(userId);
+}
+
 // ── API de la app ────────────────────────────────────────────────────────────
 
 /** Lo que permite cada plan en /api/v1/ai/chat. */
@@ -289,7 +314,7 @@ export interface AppChatInput {
  * `smart` es de Pro, cuota mensual de mensajes) y cuenta como un mensaje con Omni. Devuelve siempre AIResponse.
  */
 export async function chatForApp(userId: string, input: AppChatInput, opts: { signal?: AbortSignal } = {}): Promise<AIResponse> {
-  const entitlements = await getEntitlements(userId);
+  const [entitlements, preference] = await Promise.all([getEntitlements(userId), preferredProvider(userId)]);
   const limits = APP_AI_LIMITS[entitlements.plan];
   if (input.tier === "smart") requireFeature(entitlements, "advanced_model");
   const images = input.messages.reduce(
@@ -308,7 +333,8 @@ export async function chatForApp(userId: string, input: AppChatInput, opts: { si
     system,
     messages: input.messages,
     tier: input.tier,
-    ...(input.provider !== "auto" ? { provider: input.provider } : {}),
+    // "auto" usa el modelo que la persona eligió en Cuenta, si eligió uno.
+    ...(input.provider !== "auto" ? { provider: input.provider } : preference ? { provider: preference } : {}),
     fallback: input.fallback,
     maxOutputTokens: Math.min(input.maxOutputTokens ?? limits.maxOutputTokens, limits.maxOutputTokens),
     temperature: input.temperature,
@@ -332,11 +358,12 @@ export async function chatForApp(userId: string, input: AppChatInput, opts: { si
 
 /** Proveedores y modelos para la app: cuáles hay en este entorno y cuáles permite el plan. */
 export async function modelsForApp(userId: string): Promise<AIModelsView> {
-  const entitlements = await getEntitlements(userId);
+  const [entitlements, preference] = await Promise.all([getEntitlements(userId), preferredProvider(userId)]);
   const limits = APP_AI_LIMITS[entitlements.plan];
   const current = aiRouter();
   return {
     plan: entitlements.plan,
+    preference,
     order: [...current.providerOrder()],
     limits: { maxOutputTokens: limits.maxOutputTokens, maxImages: limits.maxImages, tiers: [...limits.tiers] },
     providers: AI_PROVIDER_IDS.map((id) => {

@@ -8,7 +8,7 @@ import { anthropicModel } from "../ai.catalog";
 import { AIProviderError } from "../ai.errors";
 import { errorMessageOf, isRecord, numberOf, parseRetryAfter, postJson, type FetchLike, type JsonReply } from "../ai.http";
 import { cleanSchema, objectRoot, toAnthropicOutputSchema, unwrapJson } from "../ai.schema";
-import type { AIContentPart, AIMessage, JsonSchema, ModelProvider, ProviderCall, ProviderResult } from "../ai.types";
+import type { AIContentPart, AIMessage, AIRequestPrompt, AISystemPart, JsonSchema, ModelProvider, ProviderCall, ProviderResult } from "../ai.types";
 
 export interface AnthropicConfig {
   apiKey?: string;
@@ -76,6 +76,19 @@ export function toAnthropicMessages(messages: readonly AIMessage[]): AnthropicMe
   return out;
 }
 
+/**
+ * Instrucciones como bloques: las partes marcadas `cache` (o un texto único) con punto de caché, y al final lo que
+ * agrega el adaptador. Claude guarda en caché todo lo anterior a cada punto (herramientas incluidas).
+ */
+function systemBlocks(system: AIRequestPrompt["system"], extra: string[]): Block[] {
+  const parts: readonly AISystemPart[] = !system ? [] : typeof system === "string" ? [{ text: system, cache: true }] : system;
+  const blocks: Block[] = parts
+    .filter((part) => part.text.trim())
+    .map((part) => ({ type: "text", text: part.text.trim(), ...(part.cache ? { cache_control: { type: "ephemeral" } } : {}) }));
+  if (extra.length) blocks.push({ type: "text", text: extra.join("\n\n") });
+  return blocks;
+}
+
 /** Nombre de la herramienta del JSON: letras, números, guion y guion bajo (máx. 64). */
 function jsonToolName(name: string | undefined): string {
   const clean = (name ?? "").replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
@@ -96,7 +109,8 @@ export function anthropicJsonMode(call: ProviderCall, opts: { avoidForcedTool?: 
 export function buildAnthropicRequest(call: ProviderCall, mode: AnthropicJsonMode): { body: Block; warnings: AIWarning[] } {
   const { request, model } = call;
   const warnings: AIWarning[] = [];
-  const system: string[] = request.system?.trim() ? [request.system.trim()] : [];
+  // Lo que agrega el adaptador (herramienta obligatoria pedida en palabras, JSON) va aparte, sin caché.
+  const extra: string[] = [];
   const body: Block = { model: model.id, max_tokens: call.maxOutputTokens, messages: toAnthropicMessages(request.messages) };
 
   const tools: Block[] = (request.tools ?? []).map((tool) => ({ name: tool.name, description: tool.description, input_schema: cleanSchema(tool.parameters) }));
@@ -111,7 +125,7 @@ export function buildAnthropicRequest(call: ProviderCall, mode: AnthropicJsonMod
       // Opus/Sonnet 5.5 no permiten obligar una herramienta: se pide en las instrucciones.
       toolChoice = { type: "auto" };
       warnings.push("tool_choice_relaxed");
-      system.push(choice === "required" ? "Responde usando una de las herramientas disponibles." : `Responde usando la herramienta ${choice.name}.`);
+      extra.push(choice === "required" ? "Responde usando una de las herramientas disponibles." : `Responde usando la herramienta ${choice.name}.`);
     }
   }
 
@@ -121,10 +135,11 @@ export function buildAnthropicRequest(call: ProviderCall, mode: AnthropicJsonMod
   } else if (mode.kind === "output") {
     body.output_config = { format: { type: "json_schema", schema: mode.schema } };
   } else if (mode.kind === "prompt") {
-    system.push("Responde solo con un objeto JSON válido, sin texto adicional.");
+    extra.push("Responde solo con un objeto JSON válido, sin texto adicional.");
   }
 
-  if (system.length) body.system = [{ type: "text", text: system.join("\n\n"), cache_control: { type: "ephemeral" } }];
+  const system = systemBlocks(request.system, extra);
+  if (system.length) body.system = system;
   if (tools.length) body.tools = tools;
   if (toolChoice) body.tool_choice = toolChoice;
   if (request.stop?.length && model.capabilities.stop) body.stop_sequences = [...request.stop];

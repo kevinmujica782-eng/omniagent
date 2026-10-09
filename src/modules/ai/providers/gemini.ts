@@ -10,7 +10,7 @@ import { geminiModel } from "../ai.catalog";
 import { AIProviderError } from "../ai.errors";
 import { errorMessageOf, isRecord, numberOf, parseDuration, parseRetryAfter, postJson, type FetchLike, type JsonReply } from "../ai.http";
 import { cleanSchema, objectRoot, toGeminiSchema, unwrapJson } from "../ai.schema";
-import type { AIContentPart, AIMessage, AIToolChoice, ModelProvider, ProviderCall, ProviderResult } from "../ai.types";
+import { systemText, type AIContentPart, type AIMessage, type AIToolChoice, type ModelProvider, type ProviderCall, type ProviderResult } from "../ai.types";
 
 export interface GeminiConfig {
   apiKey?: string;
@@ -116,7 +116,8 @@ export function buildGeminiRequest(call: ProviderCall, style: GeminiSchemaStyle 
     }
   }
   body.generationConfig = generationConfig;
-  if (request.system?.trim()) body.systemInstruction = { parts: [{ text: request.system.trim() }] };
+  const system = systemText(request.system);
+  if (system) body.systemInstruction = { parts: [{ text: system }] };
 
   if (request.tools?.length) {
     body.tools = [

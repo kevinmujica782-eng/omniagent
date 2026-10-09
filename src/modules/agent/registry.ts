@@ -1,6 +1,6 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import type { AIToolDefinition } from "@/modules/ai/ai.types";
 import type { AgentModule } from "@/generated/prisma/enums";
 import type { AgentCard } from "@/types/cards";
 
@@ -34,13 +34,9 @@ export function defineTool<S extends z.ZodType>(tool: AgentTool<S>): AgentTool<S
   return tool;
 }
 
-/** Convierte el esquema zod en el JSON Schema que espera la API de Claude (function calling). */
-export function toAnthropicTool(tool: AgentTool): Anthropic.Tool {
+/** La herramienta para el router de IA: el esquema zod como JSON Schema (cada adaptador lo ajusta a su API). */
+export function toAITool(tool: AgentTool): AIToolDefinition {
   const schema = z.toJSONSchema(tool.input, { io: "input" }) as Record<string, unknown>;
   delete schema.$schema;
-  return {
-    name: tool.name,
-    description: tool.description,
-    input_schema: schema as unknown as Anthropic.Tool["input_schema"],
-  };
+  return { name: tool.name, description: tool.description, parameters: schema };
 }

@@ -7,7 +7,16 @@ import { xaiModel } from "../ai.catalog";
 import { AIProviderError } from "../ai.errors";
 import { dataUrl, errorMessageOf, isRecord, numberOf, parseRetryAfter, parseToolArguments, postJson, type FetchLike, type JsonReply } from "../ai.http";
 import { cleanSchema, isStrictCompatible, objectRoot, unwrapJson } from "../ai.schema";
-import type { AIContentPart, AIRequestPrompt, AIToolChoice, ModelProvider, ModelSpec, ProviderCall, ProviderResult } from "../ai.types";
+import {
+  systemText,
+  type AIContentPart,
+  type AIRequestPrompt,
+  type AIToolChoice,
+  type ModelProvider,
+  type ModelSpec,
+  type ProviderCall,
+  type ProviderResult,
+} from "../ai.types";
 import { formatName } from "./openai";
 
 export interface ChatCompletionsConfig {
@@ -32,7 +41,8 @@ function userContent(provider: AIProviderId, content: string | AIContentPart[]):
 
 export function toChatMessages(provider: AIProviderId, request: AIRequestPrompt): Item[] {
   const out: Item[] = [];
-  const system: string[] = request.system?.trim() ? [request.system.trim()] : [];
+  const text = systemText(request.system);
+  const system: string[] = text ? [text] : [];
   if (request.responseFormat?.type === "json" && !request.responseFormat.schema) system.push("Responde solo con un objeto JSON válido.");
   if (system.length) out.push({ role: "system", content: system.join("\n\n") });
   for (const message of request.messages) {

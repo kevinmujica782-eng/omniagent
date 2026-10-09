@@ -4,6 +4,7 @@
  * renderiza src/components/chat/cards.tsx. Sin dependencias de servidor: lo importan cliente y servidor.
  */
 
+import type { AIProviderId } from "./ai";
 import type { JobView } from "./engine";
 
 export type Cadence = "WEEKLY" | "MONTHLY" | "QUARTERLY" | "YEARLY";
@@ -739,7 +740,15 @@ export type ChatMessageView = {
   cards: AgentCard[];
   /** Respuestas rápidas sugeridas (se muestran bajo el último mensaje de Omni). */
   suggestions?: string[];
+  /** Qué modelo respondió (router de IA) y, si hubo respaldo, cuál falló. */
+  ai?: AnsweredBy;
   createdAt: string;
+};
+
+export type AnsweredBy = {
+  provider: AIProviderId;
+  model: string;
+  fallbackFrom: AIProviderId | null;
 };
 
 /** Idea proactiva (tabla suggestions o sugerencia inicial). */

@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { AgentCardView } from "@/components/chat/cards";
 import { ReportMessage } from "@/components/chat/report-message";
+import { answeredByLine } from "@/lib/ai-copy";
 import type { ChatMessageView } from "@/types/cards";
 
 /** Negritas simples (**texto**) sin HTML arbitrario. */
@@ -42,6 +43,9 @@ export function MessageBubble({
       </div>
     );
   }
+  // Quién respondió: solo si no fue el modelo de siempre (lo eligió la persona o contestó otro de respaldo).
+  const answeredBy = answeredByLine(message.ai);
+  const canReport = reportable && !message.id.startsWith("local-");
   return (
     <div className="flex flex-col items-start gap-2.5">
       {message.text ? (
@@ -52,7 +56,12 @@ export function MessageBubble({
       {message.cards.map((card, index) => (
         <AgentCardView key={`${card.kind}-${index}`} card={card} timeZone={timeZone} demo={demo} />
       ))}
-      {reportable && !message.id.startsWith("local-") ? <ReportMessage messageId={message.id} demo={demo} /> : null}
+      {answeredBy || canReport ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {answeredBy ? <p className="px-1 text-xs text-muted">{answeredBy}</p> : null}
+          {canReport ? <ReportMessage messageId={message.id} demo={demo} /> : null}
+        </div>
+      ) : null}
     </div>
   );
 }

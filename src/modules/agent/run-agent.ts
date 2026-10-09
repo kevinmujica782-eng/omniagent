@@ -1,24 +1,34 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import type { Prisma } from "@/generated/prisma/client";
 import type { AgentModule } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import { AppError, Errors, isFreePlanLimit, type PlanLimitDetails } from "@/lib/errors";
 import { log } from "@/lib/log";
+import { preferredProviderOf } from "@/modules/ai/ai.catalog";
+import { aiRouter, logAIUsage, tierForPlan } from "@/modules/ai/ai.service";
+import type { AIMessage, AISystemPart, AIToolDefinition } from "@/modules/ai/ai.types";
 import { assertCanSendMessage, getEntitlements } from "@/modules/billing/entitlements";
 import { upgradeCard } from "@/modules/billing/upgrade";
 import { buildAgentMemory } from "@/modules/memory/memory.service";
-import type { AgentCard, ChatMessageView } from "@/types/cards";
-import { anthropic } from "./anthropic";
+import type { AnsweredBy, ChatMessageView } from "@/types/cards";
 import { buildSystemPrompt } from "./prompts";
-import { toAnthropicTool, type ToolContext } from "./registry";
+import { toAITool, type ToolContext } from "./registry";
+import { runToolLoop, type ToolOutcome } from "./tool-loop";
 import { ALL_TOOLS, findTool } from "./tools";
 
 const MAX_TOOL_ROUNDS = 6;
 const HISTORY_LIMIT = 20;
 const MAX_OUTPUT_TOKENS = 1500;
+/** Tiempo del turno completo (la ruta tiene 60 s; queda margen para guardar y responder). */
+const TURN_BUDGET_MS = 52_000;
 
-type BlockParams = Exclude<Anthropic.MessageParam["content"], string>;
+let toolDefinitions: AIToolDefinition[] | undefined;
+
+/** Las herramientas de todos los módulos para el router (se arman una vez por instancia). */
+function agentTools(): AIToolDefinition[] {
+  toolDefinitions ??= ALL_TOOLS.map(toAITool);
+  return toolDefinitions;
+}
 
 export interface RunAgentInput {
   userId: string;
@@ -33,19 +43,20 @@ export interface RunAgentResult {
 }
 
 /**
- * Un turno del agente: guarda el mensaje del usuario, llama a Claude con las herramientas de todos los
- * módulos, ejecuta las llamadas a funciones (máx. MAX_TOOL_ROUNDS rondas), guarda la respuesta con sus
- * tarjetas y registra el consumo para la cuota del plan.
+ * Un turno del agente: guarda el mensaje del usuario, llama a la IA por el router (el modelo que eligió la persona o
+ * el del orden configurado, con respaldo si falla) con las herramientas de todos los módulos, ejecuta las llamadas a
+ * funciones (máx. MAX_TOOL_ROUNDS rondas), guarda la respuesta con sus tarjetas y registra el consumo para la cuota.
  */
 export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const { userId } = input;
   const text = input.message.trim();
   if (!text) throw Errors.badRequest("Escribe un mensaje.");
+  const deadline = Date.now() + TURN_BUDGET_MS;
 
   const [profile, entitlements] = await Promise.all([
     prisma.profile.findUnique({
       where: { id: userId },
-      select: { fullName: true, currency: true, timezone: true },
+      select: { fullName: true, currency: true, timezone: true, preferences: true },
     }),
     getEntitlements(userId),
   ]);
@@ -90,81 +101,47 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     log.warn("agent.memory_unavailable", { userId, error });
     return null;
   });
-  // Prompt caching: herramientas + parte fija del sistema se reutilizan entre turnos (menos costo y latencia). El
-  // segundo punto de caché (después de la memoria) sirve entre las rondas de herramientas de este mismo turno.
-  const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: prompt.stable, cache_control: { type: "ephemeral" } },
-    memory?.text
-      ? { type: "text", text: `${prompt.dynamic}\n\n${memory.text}`, cache_control: { type: "ephemeral" } }
-      : { type: "text", text: prompt.dynamic },
+  // Caché de Claude: herramientas + parte fija del sistema se reutilizan entre turnos (menos costo y latencia). El
+  // segundo punto de caché (después de la memoria) sirve entre las rondas de herramientas de este mismo turno. Los
+  // demás proveedores reciben las partes en un solo texto (OpenAI y Gemini guardan su caché solos).
+  const system: AISystemPart[] = [
+    { text: prompt.stable, cache: true },
+    memory?.text ? { text: `${prompt.dynamic}\n\n${memory.text}`, cache: true } : { text: prompt.dynamic },
   ];
-  const tools = ALL_TOOLS.map(toAnthropicTool);
 
-  const cards: AgentCard[] = [];
-  let suggestions: string[] = [];
-  const usage = { input: 0, output: 0, cacheRead: 0, toolCalls: 0 };
-  let finalText = "";
-
-  for (let round = 0; ; round++) {
-    const response = await anthropic().messages.create({
-      model: entitlements.model,
-      max_tokens: MAX_OUTPUT_TOKENS,
-      system,
-      tools,
-      messages,
-    });
-    usage.input += response.usage.input_tokens;
-    usage.output += response.usage.output_tokens;
-    usage.cacheRead += response.usage.cache_read_input_tokens ?? 0;
-
-    const texts = response.content.flatMap((block) => (block.type === "text" ? [block.text] : []));
-    const toolUses = response.content.flatMap((block) => (block.type === "tool_use" ? [block] : []));
-
-    if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
-      finalText = texts.join("\n").trim();
-      break;
-    }
-    if (round >= MAX_TOOL_ROUNDS) {
-      finalText = texts.join("\n").trim() || "Esto necesita más pasos de los que puedo dar de una vez. ¿Lo dividimos?";
-      break;
-    }
-
-    const assistantBlocks: BlockParams = [];
-    for (const block of response.content) {
-      if (block.type === "text") assistantBlocks.push({ type: "text", text: block.text });
-      if (block.type === "tool_use") {
-        assistantBlocks.push({ type: "tool_use", id: block.id, name: block.name, input: block.input });
-      }
-    }
-    messages.push({ role: "assistant", content: assistantBlocks });
-
-    const results: BlockParams = [];
-    for (const call of toolUses) {
-      usage.toolCalls += 1;
-      const outcome = await executeTool(call.name, call.input, ctx);
-      if (outcome.cards) cards.push(...outcome.cards);
-      if (outcome.suggestions?.length) suggestions = outcome.suggestions.slice(0, 3);
-      results.push({
-        type: "tool_result",
-        tool_use_id: call.id,
-        content: JSON.stringify(outcome.data),
-        is_error: outcome.isError,
-      });
+  const result = await runToolLoop({
+    complete: (request) => aiRouter().complete(request),
+    system,
+    messages,
+    tools: agentTools(),
+    tier: tierForPlan(entitlements.plan),
+    provider: preferredProviderOf(profile.preferences),
+    maxOutputTokens: MAX_OUTPUT_TOKENS,
+    maxRounds: MAX_TOOL_ROUNDS,
+    deadline,
+    execute: async (call) => {
+      const outcome = await executeTool(call.name, call.arguments, ctx);
       await prisma.message.create({
         data: {
           conversationId,
           userId,
           role: "TOOL",
-          content: { name: call.name, input: call.input, ok: !outcome.isError } as unknown as Prisma.InputJsonValue,
+          content: { name: call.name, input: call.arguments, ok: !outcome.isError } as unknown as Prisma.InputJsonValue,
         },
       });
-    }
-    messages.push({ role: "user", content: results });
-  }
+      return outcome;
+    },
+  });
 
+  if (result.interrupted) {
+    log.warn("agent.turn_interrupted", { userId, conversationId, provider: result.provider, code: result.interrupted, toolCalls: result.toolCalls });
+  }
+  const { cards, suggestions } = result;
+  let finalText = result.text;
   if (!finalText) {
     finalText = cards.length ? "Listo, aquí tienes el detalle." : "No tengo una respuesta para eso todavía.";
   }
+  const answeredBy: AnsweredBy = { provider: result.provider, model: result.model, fallbackFrom: result.fallbackFrom };
 
   const saved = await prisma.message.create({
     data: {
@@ -176,24 +153,24 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         text: finalText,
         cards,
         ...(suggestions.length ? { suggestions } : {}),
+        ai: answeredBy,
       } as unknown as Prisma.InputJsonValue,
     },
     select: { id: true, createdAt: true },
   });
 
   await Promise.all([
-    prisma.aiUsageLog.create({
-      data: {
-        userId,
-        conversationId,
-        module: input.module ?? "GENERAL",
-        model: entitlements.model,
-        inputTokens: usage.input,
-        outputTokens: usage.output,
-        cacheReadTokens: usage.cacheRead,
-        toolCalls: usage.toolCalls,
+    logAIUsage(
+      { userId, conversationId, module: input.module ?? "GENERAL", kind: "chat" },
+      {
+        provider: result.provider,
+        model: result.model,
+        inputTokens: result.usage.input,
+        outputTokens: result.usage.output,
+        cachedInputTokens: result.usage.cached,
+        toolCalls: result.toolCalls,
       },
-    }),
+    ),
     prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }),
   ]);
 
@@ -205,6 +182,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       text: finalText,
       cards,
       ...(suggestions.length ? { suggestions } : {}),
+      ai: answeredBy,
       createdAt: saved.createdAt.toISOString(),
     },
   };
@@ -228,11 +206,7 @@ async function resolveConversation(
   return created.id;
 }
 
-async function executeTool(
-  name: string,
-  rawInput: unknown,
-  ctx: ToolContext,
-): Promise<{ data: unknown; cards?: AgentCard[]; suggestions?: string[]; isError: boolean }> {
+async function executeTool(name: string, rawInput: unknown, ctx: ToolContext): Promise<ToolOutcome> {
   const tool = findTool(name);
   if (!tool) return { data: { error: `Herramienta desconocida: ${name}` }, isError: true };
 
@@ -262,23 +236,23 @@ async function executeTool(
   }
 }
 
-/** La API exige empezar con "user"; además unimos turnos consecutivos del mismo rol. */
-function normalizeHistory(items: { role: "user" | "assistant"; text: string }[]): Anthropic.MessageParam[] {
-  const out: Anthropic.MessageParam[] = [];
+/** Las APIs exigen empezar con la persona; además se unen turnos consecutivos del mismo rol. */
+function normalizeHistory(items: { role: "user" | "assistant"; text: string }[]): AIMessage[] {
+  const out: AIMessage[] = [];
   for (const item of items) {
     if (out.length === 0 && item.role !== "user") continue;
-    const last = out[out.length - 1];
+    const last = out.at(-1);
     if (last && last.role === item.role && typeof last.content === "string") {
       last.content = `${last.content}\n\n${item.text}`;
     } else {
-      out.push({ role: item.role, content: item.text });
+      out.push(item.role === "user" ? { role: "user", content: item.text } : { role: "assistant", content: item.text });
     }
   }
   return out;
 }
 
-function appendUserText(messages: Anthropic.MessageParam[], text: string) {
-  const last = messages[messages.length - 1];
+function appendUserText(messages: AIMessage[], text: string) {
+  const last = messages.at(-1);
   if (last && last.role === "user" && typeof last.content === "string") {
     last.content = `${last.content}\n\n${text}`;
   } else {

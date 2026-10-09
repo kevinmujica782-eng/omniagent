@@ -7,7 +7,17 @@ import { alertViewsByIds } from "@/modules/concierge/alerts.service";
 import { checkoutsByIds } from "@/modules/concierge/checkout.service";
 import { trackedViewsByIds } from "@/modules/concierge/tracking.service";
 import { proceduresByIds } from "@/modules/procedures/plan";
-import type { AgentCard, ChatMessageView } from "@/types/cards";
+import { AI_PROVIDER_IDS, type AIProviderId } from "@/types/ai";
+import type { AgentCard, AnsweredBy, ChatMessageView } from "@/types/cards";
+
+/** Qué modelo respondió, guardado con el mensaje (los mensajes de antes del router no lo tienen). */
+function answeredByOf(value: unknown): AnsweredBy | null {
+  if (!value || typeof value !== "object") return null;
+  const ai = value as { provider?: unknown; model?: unknown; fallbackFrom?: unknown };
+  const known = (id: unknown): id is AIProviderId => typeof id === "string" && (AI_PROVIDER_IDS as readonly string[]).includes(id);
+  if (!known(ai.provider) || typeof ai.model !== "string") return null;
+  return { provider: ai.provider, model: ai.model, fallbackFrom: known(ai.fallbackFrom) ? ai.fallbackFrom : null };
+}
 
 export async function getConversationView(userId: string, conversationId: string) {
   if (!isUuid(conversationId)) return null;
@@ -25,13 +35,15 @@ export async function getConversationView(userId: string, conversationId: string
   });
 
   const messages: ChatMessageView[] = rows.map((row) => {
-    const content = (row.content ?? {}) as unknown as { cards?: AgentCard[]; suggestions?: string[] };
+    const content = (row.content ?? {}) as unknown as { cards?: AgentCard[]; suggestions?: string[]; ai?: unknown };
+    const ai = answeredByOf(content.ai);
     return {
       id: row.id,
       role: row.role === "USER" ? "user" : "assistant",
       text: row.text ?? "",
       cards: Array.isArray(content.cards) ? content.cards : [],
       ...(Array.isArray(content.suggestions) ? { suggestions: content.suggestions } : {}),
+      ...(ai ? { ai } : {}),
       createdAt: row.createdAt.toISOString(),
     };
   });

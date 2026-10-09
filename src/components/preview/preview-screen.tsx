@@ -3,6 +3,7 @@ import { AppShell, type NavKey } from "@/components/app-shell";
 import { INITIAL_ASSISTANT } from "@/components/assistant/assistant-model";
 import type { AssistantPreset } from "@/components/assistant/omni-assistant";
 import { ChatView } from "@/components/chat/chat-view";
+import { demoAIModels, demoModelConversation } from "@/components/preview/demo-ai";
 import { demoConcierge } from "@/components/preview/demo-concierge";
 import { demoDashboard, type DemoDashboardVariant } from "@/components/preview/demo-dashboard";
 import { DEMO_TIME_ZONE, demoData } from "@/components/preview/demo-data";
@@ -79,6 +80,8 @@ export const PREVIEW_SCREENS = [
   "chat-motor",
   "pagina-web",
   "pagina-web-grafito",
+  // Router de IA: el chat cuando responde el modelo que eligió la persona y cuando contesta otro de respaldo.
+  "chat-modelos",
 ] as const;
 export type PreviewScreenKey = (typeof PREVIEW_SCREENS)[number];
 
@@ -127,6 +130,7 @@ const NAV_FOR: Record<PreviewScreenKey, NavKey> = {
   "chat-motor": "chat",
   "pagina-web": "inicio",
   "pagina-web-grafito": "inicio",
+  "chat-modelos": "chat",
 };
 
 /** El asistente abierto en cada pantalla de ejemplo. */
@@ -249,6 +253,18 @@ export function PreviewScreen({ screen, emptyChat = false }: { screen: PreviewSc
         <ChatView
           conversationId={emptyChat ? null : "demo"}
           initialMessages={emptyChat ? [] : demo.conversation}
+          starters={CHAT_STARTERS}
+          userName="Laura"
+          timeZone={DEMO_TIME_ZONE}
+          demo
+        />
+      );
+      break;
+    case "chat-modelos":
+      body = (
+        <ChatView
+          conversationId="demo"
+          initialMessages={demoModelConversation()}
           starters={CHAT_STARTERS}
           userName="Laura"
           timeZone={DEMO_TIME_ZONE}
@@ -468,6 +484,7 @@ export function PreviewScreen({ screen, emptyChat = false }: { screen: PreviewSc
         <AccountView
           profile={{ name: demo.user.name, email: demo.user.email, timezone: DEMO_TIME_ZONE, currency: "USD" }}
           billing={dashboard.billing}
+          models={demoAIModels(dashboard.billing.plan)}
           deleteOpen={screen === "eliminar-cuenta"}
           preview
         />
