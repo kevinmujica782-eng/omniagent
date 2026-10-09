@@ -10,7 +10,7 @@ Aplicación móvil (Android/Web) impulsada por Inteligencia Artificial y agentes
 ## 2. Stack Tecnológico
 - **Frontend/Backend:** Next.js (TypeScript), Tailwind CSS.
 - **Base de Datos y Auth:** Supabase (PostgreSQL + Row Level Security).
-- **Inteligencia Artificial:** Anthropic Claude API (SDK oficial con Function Calling para agentes autónomos).
+- **Inteligencia Artificial:** Anthropic Claude API (SDK oficial con Function Calling para agentes autónomos). *Cambio del 9 oct 2026:* router de IA propio, sin SDK, sobre las APIs oficiales de Claude, ChatGPT, Gemini y Grok; el chat del agente usa function calling a través del router, con respaldo si un proveedor falla.
 - **Pagos:** Stripe / RevenueCat para gestión de suscripciones Freemium/Pro ($19.99/mes). *Cambio del 6 oct 2026:* el cobro principal es **Binance Pay** (19.99 USDT por mes pagado por adelantado); Stripe queda para cuando exista la empresa con Stripe Atlas y RevenueCat ya no se usa.
 - **Empaquetado Móvil:** Capacitor (para convertir la app web en aplicación nativa de Android para Google Play). *Cambio del 6 oct 2026:* sin Google Play; los clientes instalan un `.apk` (Trusted Web Activity) desde `/descargar` o la web como app (PWA, también en iPhone).
 
@@ -202,10 +202,12 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 - **Adaptadores (sin SDK, `fetch` a las APIs oficiales):** OpenAI con la Responses API (con GPT-6 las herramientas solo funcionan ahí), Claude con Messages, Gemini con generateContent (firmas de pensamiento de Gemini 3 incluidas) y Grok con Chat Completions (compatible con OpenAI). Texto, imágenes, PDF, herramientas y JSON con esquema.
 - **Modelos por nivel** (`fast` en Gratis, `smart` en Pro), configurables por variables: Claude Haiku 4.5 / Sonnet 5.5 (`ANTHROPIC_MODEL_FREE/PRO`), gpt-6-luna / gpt-6.1-sol, gemini-3.5-flash-lite / gemini-3.8-flash y grok-4.3 / grok-4.7. Orden de proveedores en `AI_PROVIDER_ORDER`.
 - **Fallas:** errores normalizados (`network_error`, `timeout`, `rate_limited`, `quota_exceeded`, `auth_failed`, `provider_unavailable`, `invalid_request`, `context_too_long`, `content_blocked`, `bad_response`...). Reintenta lo pasajero (con el Retry-After si es corto), responde con otro proveedor si uno falla, aparta por un rato al que viene fallando (cortacircuitos) y no prueba con otro lo que fallaría igual. A la app le llegan como `{ error: { code: "ai_*", message, details: { retryAfterSeconds, attempts } } }`.
-- **API para la app:** `POST /api/v1/ai/chat` (proveedor `auto` o elegido, nivel según el plan, cuenta como mensaje, 20 por minuto) y `GET /api/v1/ai/models`.
-- **Arreglo de Pro:** el informe de finanzas, las páginas web, los formularios PDF, la clasificación de correos, la lectura de precios y las alertas forzaban una herramienta, que Sonnet 5.5 (el modelo de Pro) rechaza con 400; en Pro el informe, las páginas y los formularios pasaban a las reglas o fallaban. Ahora usan `generateStructured` (JSON con esquema, validado con zod, con corrección y respaldo). El chat del agente sigue en Claude con su SDK.
+- **API para la app:** `POST /api/v1/ai/chat` (proveedor `auto` o elegido, nivel según el plan, cuenta como mensaje, 20 por minuto), `GET /api/v1/ai/models` y `PUT /api/v1/ai/preference`.
+- **Arreglo de Pro:** el informe de finanzas, las páginas web, los formularios PDF, la clasificación de correos, la lectura de precios y las alertas forzaban una herramienta, que Sonnet 5.5 (el modelo de Pro) rechaza con 400; en Pro el informe, las páginas y los formularios pasaban a las reglas o fallaban. Ahora usan `generateStructured` (JSON con esquema, validado con zod, con corrección y respaldo).
+- **Chat del agente en el router (9 oct 2026):** las rondas de herramientas van por el router (`modules/agent/tool-loop.ts`). El proveedor queda fijo en el turno y, si falla, responde otro. Si se acaba el tiempo o nadie responde después de ejecutar herramientas, se guarda lo hecho. Las instrucciones van por partes para el caché de Claude. Se quitó `@anthropic-ai/sdk`.
+- **Selector de modelo (9 oct 2026):** Cuenta → Modelo de IA: Automático (recomendado) o un proveedor con llave, en `profiles.preferences.ai.provider` (`PUT /api/v1/ai/preference`). El chat dice quién respondió si no fue Claude o si contestó otro de respaldo. En la vista previa: `cuenta` y `chat-modelos`.
 - **Datos:** columna `provider` en `ai_usage_logs` (ya aplicada en Supabase).
-- **Pruebas:** `ai-providers`, `ai-router`, `ai-schema` y `ai-service` (`tests/unit/`), con respuestas como las de la documentación de cada API.
+- **Pruebas:** `ai-providers`, `ai-router`, `ai-schema`, `ai-service` y `agent-tool-loop` (`tests/unit/`), con respuestas como las de la documentación de cada API.
 - **Para activarlo en producción:** enlazar el repositorio en Netlify (como todo lo nuevo). Para sumar proveedores, agregar en Netlify `OPENAI_API_KEY`, `GEMINI_API_KEY` o `XAI_API_KEY`; sin ellas el router usa solo Claude.
 
 ### Pantalla de Omni Pro (paywall)
@@ -256,7 +258,6 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 3. El detalle completo está en `README.md` (puesta en marcha, módulos, Inicio y planes, arquitectura, endpoints y hoja de ruta). El despliegue a producción y la lista de Google Play están en `docs/DEPLOY.md`.
 4. Las cinco fases, Devoluciones, los estados de cuenta en PDF/CSV, Binance Pay, las notificaciones push, el correo real, el `.apk` para clientes, la memoria de Omni, el asistente interactivo, el motor de ejecución autónoma (con páginas web) y el router de IA centralizado están hechos (ver «Cobros, notificaciones, correo real y app para clientes», «Memoria de Omni», «Asistente interactivo de Omni», «Motor de ejecución autónoma» y «Router de IA centralizado»). Lo siguiente, sin orden fijo:
    - Publicar la web con todo lo nuevo (requiere conectar el repositorio en Netlify).
-   - Pasar el chat del agente al router de IA (respaldo también ahí) y un selector de modelo en la app.
    - Outlook con OAuth (Microsoft Graph) y Google Calendar con OAuth.
    - Medios de pago reales para las compras del concierge.
    - Estados de cuenta: OCR de los escaneados y leer los PDF en un proceso aparte con límite de memoria.

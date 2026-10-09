@@ -49,7 +49,7 @@ La plantilla completa, con comentarios, está en `.env.example`. Las variables m
 | `DIRECT_URL` | migraciones y scripts | Para migrar | Session pooler (5432) o conexión directa. |
 | `TOKEN_ENCRYPTION_KEY` | al correr | Sí | `openssl rand -base64 32`. **No la cambies después**: los tokens guardados quedarían ilegibles. |
 | `SUPABASE_SECRET_KEY` | al correr | Con `DOCUMENT_STORAGE=supabase` | `sb_secret_…`. Solo para Storage. **Eliminar cuenta** no la usa: llama a la función `public.delete_auth_user` (`npm run db:security`). |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL_FREE`, `ANTHROPIC_MODEL_PRO` | al correr | Recomendada | Sin la llave, el chat responde "no configurado". |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL_FREE`, `ANTHROPIC_MODEL_PRO` | al correr | Recomendada | Basta la llave de un proveedor (esta, `OPENAI_API_KEY`, `GEMINI_API_KEY` o `XAI_API_KEY`). Sin ninguna, el chat responde "no configurado". |
 | `OPENAI_API_KEY`, `GEMINI_API_KEY` (o `GOOGLE_API_KEY`), `XAI_API_KEY` | al correr | No | Router de IA (`docs/ROUTER-IA.md`): cada llave suma ese proveedor a `/api/v1/ai/chat` y como respaldo de las funciones con IA. Modelos en `OPENAI_MODEL_FAST/SMART`, `GEMINI_MODEL_FAST/SMART` y `XAI_MODEL_FAST/SMART`; orden en `AI_PROVIDER_ORDER`. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY` | al correr | Las tres o ninguna | Con solo una parte, el pago abre pero Pro nunca se activa: la app lo marca como error al arrancar. |
 | `BINANCE_PAY_API_KEY`, `BINANCE_PAY_SECRET_KEY` | al correr | Las dos o ninguna | Cobro de Pro con Binance Pay (19.99 USDT al mes). Ver `docs/BINANCE_PAY.md`. |

@@ -13,7 +13,7 @@ Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendacione
 | Área | Lo que ya funciona |
 | --- | --- |
 | **Inicio** | Panel central de los módulos: lo que espera tu permiso (cobro fallido, compras, aprobaciones, devoluciones, trámites urgentes y ofertas), ritmo de gasto del mes frente al anterior, próximos trámites, precios vigilados, ahorro logrado con Omni (con lo recuperado en devoluciones), estado de los agentes, actividad y consumo del plan. Claro, oscuro o del sistema, con barra de pestañas en el teléfono. |
-| **Chat con agente** | Claude con function calling (41 herramientas en 4 módulos), tarjetas ricas, preguntas sugeridas, historial, cuota mensual por plan y prompt caching. |
+| **Chat con agente** | Function calling (41 herramientas en 4 módulos) con Claude, ChatGPT, Gemini o Grok por el router de IA: si uno no responde, contesta otro. Tarjetas ricas, preguntas sugeridas, historial, cuota mensual por plan, prompt caching y **selector de modelo** en Cuenta. |
 | **Asistente financiero** | Conector de cuentas tipo Plaid (sandbox con bancos ficticios o Plaid real), **estados de cuenta en PDF o CSV** para bancos que no se pueden conectar (vista previa, corrección de columnas, fechas y signos, sin duplicados y con deshacer), sincronización incremental con cursor, análisis con IA de los últimos 3 meses, gastos hormiga, suscripciones inactivas, recomendaciones de ahorro que se aplican con un toque, presupuestos por categoría, buscador de movimientos y análisis mensual automático. |
 | **Trámites y productividad** | Conector de correo con el contrato de Gmail/Outlook (bandeja sandbox), detección de formularios adjuntos, citas, reembolsos, facturas y fechas límite (reglas + Claude), lectura de PDF con IA y llenado automático (AcroForm y PDF planos), "Mis datos" cifrados, fechas sugeridas sin choques con el calendario, **confirmación de un toque**, calendario sincronizado (calendario conectado + feed ICS privado con alarmas), recordatorios y respuesta con el PDF adjunto previa aprobación. |
 | **Compras y ofertas** | Seguir productos, boletos, vuelos y hoteles por enlace o búsqueda; lectura del precio con datos estructurados (JSON-LD, microdata, meta) o con Claude; **agente en segundo plano** que revisa precios con cron, respeta robots.txt y se identifica como OmniAgentBot; detección de **bajadas de verdad** frente a la mediana de 30 días; **alertas inteligentes** redactadas por Claude y validadas cifra por cifra, con botón de compra rápida; y **hoja de pago segura** con **Permitir / Denegar** que reconfirma el precio, respeta tus límites y nunca cobra dos veces (pagos simulados, sin cobro real). |
@@ -22,7 +22,7 @@ Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendacione
 | **Ideas** | Sugerencias proactivas a partir de tus datos (incluye las 3 mejores recomendaciones del análisis financiero). |
 | **Planes y pagos** | Gratis y **Pro ($19.99 al mes)**, que pone a los agentes en piloto automático: correo revisado cada 3 horas, precios cada hora, informe mensual, alertas redactadas por Omni y el modelo más capaz. Los límites se validan en el servidor. **Pantalla de Omni Pro** a pantalla completa, siempre oscura, con la comparación Gratis / Pro y el botón **Desbloquear Omni Pro**. Stripe en la web (Checkout en español, portal, activación al volver del pago, webhooks idempotentes y aviso de cobro fallido) y RevenueCat para Google Play. |
 | **Seguridad** | Supabase Auth, RLS en todas las tablas, tokens cifrados (AES-256-GCM), tokens del sandbox firmados (HMAC), webhooks idempotentes, bitácora de auditoría, límites de tasa, CSP y HSTS, y **eliminación de la cuenta** desde la app. |
-| **Producción** | Errores con formato estable e id de solicitud, logs JSON sin datos sensibles, `/api/health`, revisión de la configuración al arrancar, pantallas de error propias, 148 pruebas unitarias (`npm test`), Docker, CI/CD con GitHub Actions y guía de despliegue en [`docs/DEPLOY.md`](docs/DEPLOY.md). |
+| **Producción** | Errores con formato estable e id de solicitud, logs JSON sin datos sensibles, `/api/health`, revisión de la configuración al arrancar, pantallas de error propias, más de 300 pruebas unitarias (`npm test`), Docker, CI/CD con GitHub Actions y guía de despliegue en [`docs/DEPLOY.md`](docs/DEPLOY.md). |
 | **Android** | Capacitor 8 configurado (modo hosted, target API 36) y API lista para token Bearer. |
 | **Vista previa** | `/preview`: todas las pantallas con datos de ejemplo, **sin** configurar Supabase. |
 
@@ -31,7 +31,7 @@ Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendacione
 - **Next.js 16** (App Router, `proxy.ts`, React 19) + **TypeScript** estricto + **Tailwind CSS 4**
 - **Supabase**: PostgreSQL + Auth (`@supabase/ssr`, `getClaims()`)
 - **Prisma 7** (`prisma-client` generator, driver adapter `@prisma/adapter-pg`, `prisma.config.ts`)
-- **Anthropic SDK**: `claude-haiku-4-5-20251001` en el plan Gratis y `claude-sonnet-5-5` en Pro (configurable)
+- **Router de IA propio** (APIs oficiales con `fetch`, sin SDK): Claude (`claude-haiku-4-5-20251001` en Gratis y `claude-sonnet-5-5` en Pro), ChatGPT, Gemini y Grok, todos configurables
 - **zod 4**: validación de API y esquemas de las herramientas (se convierten a JSON Schema)
 - **Stripe** (web) + **RevenueCat** (Google Play Billing)
 - **Plaid** (opcional) para cuentas reales; sandbox propio por defecto
@@ -81,7 +81,7 @@ omniagent/
     ├── modules/                 # dominio: un módulo por área
     │   ├── ai/                  # router de IA: OpenAI, Claude, Gemini y Grok con la misma respuesta (docs/ROUTER-IA.md)
     │   │   └── providers/       # un adaptador por API oficial: openai.ts, anthropic.ts, gemini.ts, openai-compatible.ts (xAI)
-    │   ├── agent/               # bucle de function calling, prompt y registro de herramientas
+    │   ├── agent/               # rondas de function calling sobre el router de IA, prompt y registro de herramientas
     │   ├── actions/             # Proponer → Aprobar → Ejecutar
     │   ├── engine/              # motor de ejecución autónoma: tipos, reglas, almacén, ejecutor, servicio, pasos y playbooks
     │   ├── sites/               # páginas web que arma Omni: esquemas, revisión, IA, servicio y herramientas
@@ -228,7 +228,7 @@ npm run cap:open    # abre Android Studio → Build → Generate Signed App Bund
 ### 6. Pruebas y producción
 
 ```bash
-npm test             # 58 pruebas unitarias (Vitest)
+npm test             # pruebas unitarias (Vitest)
 npm run check        # tipos + pruebas
 npm run build        # compilación de producción
 ```
@@ -516,12 +516,13 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 
 ### Pruebas
 
-`npm test` corre 148 pruebas unitarias (Vitest) de las reglas puras. Cubren:
+`npm test` corre más de 300 pruebas unitarias (Vitest) de las reglas puras. Cubren:
 
 - el importador de estados de cuenta: montos y fechas de varios países, CSV de distintos bancos (Chase, BofA, ING, bancos mexicanos y chilenos) y PDF reales generados en la prueba (con columnas, sin encabezados, de varias páginas, protegidos, escaneados, dañados y que se expanden), resúmenes, signos, saldos y deduplicación;
 - planes y estados de suscripción, y la hoja de Pro;
 - el panel de Inicio: gasto del mes, lo pendiente y los agentes;
 - precios y bajadas, y la red segura del rastreador;
+- el router de IA y el chat del agente: las cuatro APIs, reintentos, respaldo, plazos y rondas de herramientas;
 - errores, logs, límites de tasa, configuración y redirecciones.
 
 `npm run check` suma la revisión de tipos, y CI corre ambas en cada cambio.
@@ -542,7 +543,7 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 
 **Agente (`modules/agent/run-agent.ts`).** Cada turno guarda el mensaje, llama a Claude con las 36 herramientas (esquemas zod convertidos a JSON Schema), ejecuta las llamadas en un bucle de hasta 6 rondas y guarda la respuesta con sus tarjetas y preguntas sugeridas (`{ text, cards, suggestions }`). Cada llamada a herramienta queda registrada como mensaje `TOOL`. El consumo se guarda en `ai_usage_logs` y alimenta la cuota mensual. La parte fija del prompt de sistema usa prompt caching.
 
-**Router de IA (`modules/ai`).** Un solo punto para hablar con OpenAI, Anthropic, Google y xAI con sus APIs oficiales (sin SDK: `fetch` con tope de tiempo). Todo pedido entra como `AIRequestPrompt` y sale como `AIResponse`, igual para los cuatro; los errores salen normalizados (red, tiempo, límite de tasa, cuota...). El router reintenta lo pasajero, responde con otro proveedor si uno falla, aparta por un rato al que viene fallando y solo manda a cada proveedor lo que puede atender (PDF, tipos de imagen, herramientas). Las salidas estructuradas de los módulos (informe de finanzas, páginas web, formularios, correo, precios y alertas) van por aquí. El chat del agente sigue en Claude con su SDK. Detalle en `docs/ROUTER-IA.md`.
+**Router de IA (`modules/ai`).** Un solo punto para hablar con OpenAI, Anthropic, Google y xAI con sus APIs oficiales (sin SDK: `fetch` con tope de tiempo). Todo pedido entra como `AIRequestPrompt` y sale como `AIResponse`, igual para los cuatro; los errores salen normalizados (red, tiempo, límite de tasa, cuota...). El router reintenta lo pasajero, responde con otro proveedor si uno falla, aparta por un rato al que viene fallando y solo manda a cada proveedor lo que puede atender (PDF, tipos de imagen, herramientas). Las salidas estructuradas de los módulos (informe de finanzas, páginas web, formularios, correo, precios y alertas) y el chat del agente, con sus rondas de herramientas, van por aquí. En Cuenta → Modelo de IA la persona elige Automático o un proveedor, y el chat dice quién respondió si no fue Claude o si contestó otro de respaldo. Detalle en `docs/ROUTER-IA.md`.
 
 **Motor de ejecución autónoma (`modules/engine`).** Las peticiones de varios pasos («créame una página web», «analiza mis finanzas», «ponme al día») se convierten en un trabajo con pasos que llaman a los servicios de cada módulo, uno detrás de otro, en segundo plano: después de responder (`after()`), en otra invocación si no alcanza el tiempo y con una tarea programada cada minuto que retoma lo pendiente. Cada paso se guarda antes de seguir; un turno atómico evita que dos ejecutores corran el mismo trabajo; los reintentos son solo para fallos pasajeros; y lo que publica, gasta, envía o cancela espera la aprobación de la persona. Detalle en `docs/MOTOR.md`.
 
@@ -636,7 +637,8 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 | POST | `/api/v1/returns/cases/:id/simulate-reply` | Respuesta simulada (solo tiendas de prueba) |
 | GET | `/api/cron/returns` | Pedidos y devoluciones en segundo plano (requiere `CRON_SECRET`) |
 | POST | `/api/v1/ai/chat` | Router de IA: un turno con `{ messages, provider?: "auto" \| "openai" \| "anthropic" \| "gemini" \| "xai", tier?: "fast" \| "smart", responseFormat?, maxOutputTokens?, instructions?, fallback? }` → siempre `AIResponse` (20 por minuto; cuenta como mensaje; `smart` es de Pro) |
-| GET | `/api/v1/ai/models` | Proveedores y modelos del router: cuáles hay, cuáles responden y cuáles permite el plan |
+| GET | `/api/v1/ai/models` | Proveedores y modelos del router: cuáles hay, cuáles responden, cuáles permite el plan y cuál eligió la persona (`preference`) |
+| PUT | `/api/v1/ai/preference` | `{ provider: "auto" \| "openai" \| "anthropic" \| "gemini" \| "xai" }`: el modelo del chat (Cuenta → Modelo de IA) → la vista de modelos actualizada (409 `ai_provider_unavailable` si ese proveedor no tiene llave) |
 | GET, POST | `/api/v1/engine/jobs` | Trabajos en segundo plano (`?active=1`); empezar uno `{ playbook, input }` → responde al instante (`created: false` si ya estaba en marcha) |
 | GET | `/api/v1/engine/jobs/:id` | Un trabajo con sus pasos |
 | POST | `/api/v1/engine/jobs/:id/cancel` | Detenerlo (si corre, al terminar el paso actual) |
@@ -691,11 +693,11 @@ Para agregar una herramienta: defínela con `defineTool()` en su módulo (esquem
 - **`prepared statement "s0" already exists`:** usa también el session pooler (5432) en `DATABASE_URL`.
 - **SSL obligatorio en Supabase:** si activas "Enforce SSL", configura el certificado de Supabase en el `PrismaPg` de `src/lib/db.ts`.
 - **"Supabase no está configurado":** faltan `NEXT_PUBLIC_SUPABASE_URL` o `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` en `.env.local`. Reinicia `npm run dev`.
-- **Error 503 "no está configurado":** falta la variable de esa integración (Anthropic, Stripe, RevenueCat, Plaid o `CRON_SECRET`).
-- **El informe dice "Informe básico, sin IA":** falta `ANTHROPIC_API_KEY` o el modelo falló; el análisis se hizo con reglas. Revisa los logs del servidor.
+- **Error 503 "no está configurado":** falta la variable de esa integración (la llave de algún proveedor de IA, Stripe, RevenueCat, Plaid o `CRON_SECRET`).
+- **El informe dice "Informe básico, sin IA":** no hay llave de IA (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` o `XAI_API_KEY`) o ningún modelo respondió; el análisis se hizo con reglas. Revisa los logs del servidor.
 - **"Ya tienes un análisis reciente":** es el límite de frecuencia del plan. Tras conectar una cuenta nueva el análisis se genera igual.
 - **"No encontré campos para llenar en este PDF":** es un PDF escaneado (imagen). Pídele ayuda a Omni en el chat; el OCR está en la hoja de ruta.
-- **El formulario dice "Leído con reglas":** falta `ANTHROPIC_API_KEY`, se acabaron las lecturas con IA del mes o el modelo falló (la pantalla lo indica).
+- **El formulario dice "Leído con reglas":** no hay llave de IA, se acabaron las lecturas con IA del mes o el modelo falló (la pantalla lo indica).
 - **El calendario del teléfono no muestra lo último:** Google Calendar actualiza los calendarios suscritos cada varias horas; Apple Calendar permite elegir la frecuencia.
 - **"Ya tienes una bandeja de prueba conectada":** desconéctala en Trámites para cambiar de estilo (Gmail u Outlook).
 - **"Esta tienda no permite revisiones automáticas (robots.txt)":** la tienda pidió que los bots no la visiten y OmniAgent lo respeta. Sigue el producto sin enlace o en otra tienda.

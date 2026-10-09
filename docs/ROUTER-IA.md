@@ -90,7 +90,7 @@ Con los errores pasa lo mismo: siempre `{ error: { code, message, details, reque
 }
 ```
 
-`GET /api/v1/ai/models` dice qué proveedores hay en este entorno, cuáles están respondiendo y qué niveles permite el plan. La app lo usa para el selector de modelo.
+`GET /api/v1/ai/models` dice qué proveedores hay en este entorno, cuáles están respondiendo, qué niveles permite el plan y cuál eligió la persona (`preference`, `null` si es automático). La app lo usa para el selector de modelo (ver «El modelo que elige la persona»).
 
 ### Desde el servidor
 
@@ -103,6 +103,8 @@ const { response, state } = await aiRouter().complete({ system, messages, tier: 
 // JSON validado con zod, con corrección y respaldo incluidos.
 const { value } = await generateStructured({ schema: alertSchema, name: "redactar_alerta", system, prompt, tier: "fast", maxOutputTokens: 500 });
 ```
+
+`system` puede ser un texto o partes (`[{ text, cache: true }, { text }]`): Claude guarda en caché las partes marcadas, y los demás proveedores las reciben unidas.
 
 `state` es el estado propio del proveedor y es necesario para seguir una ronda de herramientas. Puede ser:
 
@@ -219,7 +221,36 @@ Las tres primeras usan el nivel del plan de la persona: con Claude primero, Haik
 
 **Antes del router fallaban en Pro.** Estas funciones forzaban una herramienta, y Sonnet 5.5 (el modelo de Pro) lo rechaza con 400: según la función, la app pasaba a las reglas o la tarea fallaba. Ahora usan salida estructurada y, si Claude falla, responde otro proveedor configurado.
 
-**El chat del agente sigue en Claude** (`modules/agent/run-agent.ts`). Usa sus herramientas, el prompt caching y el historial con el SDK de Anthropic. El router ya admite herramientas y rondas de varias vueltas, así que pasarlo es el paso siguiente si se quiere respaldo también ahí.
+### El chat del agente
+
+El chat y el asistente de Omni también van por el router (`modules/agent/run-agent.ts` y `modules/agent/tool-loop.ts`), con las herramientas de todos los módulos:
+
+- **Rondas de herramientas:** el modelo pide herramientas, Omni las ejecuta y le devuelve los resultados, hasta 6 rondas. Si hace falta más, Omni pide dividir el pedido.
+- **Mismo proveedor en todo el turno:** después de la primera respuesta, las rondas siguientes van al proveedor que respondió, porque su estado (razonamiento, firmas) solo le sirve a él. Si ese proveedor falla a mitad del turno, el router sigue con otro.
+- **Respaldo:** si el primero no responde, contesta el siguiente del orden. El chat lo dice bajo la respuesta: «Respondió Gemini porque ChatGPT no estaba disponible».
+- **Tiempo:** el turno tiene 52 s (la ruta tiene 60). Cada ronda recibe lo que queda como plazo del router y no se empieza una con menos de 3 s.
+- **Nada se pierde:** si se acaba el tiempo o ningún proveedor responde después de ejecutar herramientas, el turno guarda lo que hicieron (sus tarjetas, por ejemplo una baja por aprobar) con un aviso para retomarlo. Queda en el log `agent.turn_interrupted`.
+- **Caché:** las instrucciones van por partes. Claude guarda en caché las herramientas y la parte fija del prompt entre turnos, y la memoria entre las rondas de un turno. OpenAI y Gemini reciben las partes unidas y hacen su caché solos.
+- **Consumo:** cada turno queda en `ai_usage_logs` con el proveedor y el modelo que respondieron, y cuenta como un mensaje del plan.
+- **Quién respondió:** se guarda con el mensaje (`content.ai`: proveedor, modelo y, si hubo respaldo, cuál falló) y vuelve en el historial como `ai` en `ChatMessageView`.
+
+### El modelo que elige la persona
+
+En Cuenta → Modelo de IA, la persona elige **Automático** (recomendado) o un proveedor configurado:
+
+- **Automático:** el router usa su orden (`AI_PROVIDER_ORDER`) y cambia de proveedor si uno falla.
+- **Un proveedor:** el chat lo usa primero y, si no responde, contesta otro para no dejar a la persona sin respuesta. El chat marca quién respondió cuando no es Claude.
+- **Nivel:** cada proveedor usa el nivel del plan: el rápido en Gratis y el capaz en Pro.
+
+`PUT /api/v1/ai/preference` guarda la elección en `profiles.preferences.ai.provider` (`null` es automático) y devuelve la vista de modelos actualizada:
+
+```json
+{ "provider": "openai" }
+```
+
+- **Valores:** `auto`, `openai`, `anthropic`, `gemini` o `xai`.
+- **Sin llave:** un proveedor sin llave en el entorno responde 409 `ai_provider_unavailable`. Si la llave se quita después de elegirlo, responde el automático, y la elección vuelve a valer cuando regrese la llave.
+- **En la API:** `POST /api/v1/ai/chat` con `provider: "auto"` también usa esta elección.
 
 ## Seguridad
 
@@ -257,6 +288,9 @@ Las tres primeras usan el nivel del plan de la persona: con Claude primero, Haik
 | `providers/` | Un adaptador por API: `openai.ts`, `anthropic.ts`, `gemini.ts`, `openai-compatible.ts` (xAI). |
 | `ai.service.ts` | El router con las llaves del entorno, `generateStructured`, el registro de consumo y la API de la app. |
 | `ai.validation.ts` | Lo que acepta `POST /api/v1/ai/chat`. |
+| `src/modules/agent/tool-loop.ts` | Las rondas de herramientas del chat sobre el router: proveedor fijo en el turno, respaldo y tiempo. |
+| `src/components/ai/model-picker.tsx` | Cuenta → Modelo de IA. |
+| `src/lib/ai-copy.ts` | Los textos de la interfaz: quién respondió y qué modelo usa cada proveedor según el plan. |
 
 Pruebas:
 
@@ -264,3 +298,6 @@ Pruebas:
 - `tests/unit/ai-router.test.ts`: reintentos, respaldo, plazos, cancelación y cortacircuitos.
 - `tests/unit/ai-schema.test.ts`: esquemas.
 - `tests/unit/ai-service.test.ts`: salida estructurada de punta a punta.
+- `tests/unit/agent-tool-loop.test.ts`: el chat del agente: rondas de herramientas, el modelo elegido, el respaldo a mitad del turno y el tiempo.
+
+En la vista previa, `cuenta` muestra el selector y `chat-modelos` el chat cuando responde el modelo elegido y cuando contesta otro de respaldo.
