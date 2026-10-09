@@ -172,7 +172,7 @@ El router solo manda a cada proveedor lo que este puede atender. Por ejemplo, un
 | Código | Ejemplo | Mismo proveedor | Otro proveedor | Respuesta de la API |
 | --- | --- | --- | --- | --- |
 | `network_error` | conexión cortada, DNS | reintenta | sí | 503 `ai_network_error` |
-| `timeout` | sin respuesta a tiempo | reintenta | sí | 504 `ai_timeout` |
+| `timeout` | sin respuesta a tiempo | no (pasa al siguiente) | sí | 504 `ai_timeout` |
 | `rate_limited` | 429 por minuto | espera el Retry-After si es corto (hasta 4 s) | sí | 429 `ai_rate_limited` + `Retry-After` |
 | `quota_exceeded` | sin saldo, tope de gasto, cuota diaria | no | sí | 503 `ai_quota_exceeded` |
 | `auth_failed` | llave inválida | no | sí | 503 `ai_unavailable` |
@@ -185,7 +185,7 @@ El router solo manda a cada proveedor lo que este puede atender. Por ejemplo, un
 | `aborted` | la persona cerró la app | no | no | 408 `ai_canceled` |
 
 - **Reintentos:**
-  - Hasta 2 intentos por proveedor ante fallas pasajeras.
+  - Hasta 2 intentos por proveedor ante fallas pasajeras. Un tiempo agotado no se reintenta con el mismo proveedor: pasa al siguiente.
   - Entre uno y otro se espera 250–500 ms (más en los siguientes), o lo que pida el proveedor si es corto.
   - El tiempo de espera se lee de `Retry-After`, de `x-ratelimit-reset-*` en OpenAI y de `RetryInfo` en Google.
 - **Cuota contra límite de tasa:** cada adaptador distingue un 429 por minuto (`rate_limited`) de una cuota que no vuelve en segundos (`quota_exceeded`). Por ejemplo:
@@ -199,7 +199,8 @@ El router solo manda a cada proveedor lo que este puede atender. Por ejemplo, un
   - Sin cuota, con la llave inválida o con un modelo inexistente, queda fuera 5 minutos, salvo que no haya otro.
   - Es por instancia del servidor.
 - **Plazos:**
-  - Cada intento tiene su tope: 30 s en el nivel rápido y 45–50 s en el capaz.
+  - Cada intento tiene su tope: 30 s en el nivel rápido y 45–50 s en el capaz. Si hay otro proveedor después, el intento deja 15 s del plazo total para el respaldo: uno colgado no se come todo el tiempo.
+  - En el motor (pasos de 45 s), el informe de finanzas y las páginas web usan un plazo de 42 s; la lectura de formularios, 55 s (su ruta tiene 60 s).
   - Todo el pedido tiene un plazo total: 50 s en la API, dentro de los 60 s de una función de Netlify.
   - Si la persona cierra la app, se corta la llamada al proveedor.
 
@@ -228,6 +229,7 @@ Las tres primeras usan el nivel del plan de la persona: con Claude primero, Haik
   - Máximo de tokens de salida: 1.024 en Gratis, 4.096 en Pro.
   - Imágenes por conversación: 2 en Gratis, 4 en Pro.
   - Cuerpo de hasta 4,5 MB, 40 mensajes y 100.000 caracteres.
+- **Esquemas de la app:** se expanden con tope (2.000 nodos, 32 niveles) y las referencias recursivas se cortan: un esquema malicioso no traba el servidor.
 - **Instrucciones de Omni:** van siempre primero. Lo que mande la app (`instructions`) va debajo y no las reemplaza. Imágenes, archivos y textos citados son datos, nunca instrucciones.
 - **Logs:** cada intento queda registrado (`ai.attempt` y `ai.attempt_failed`) con proveedor, modelo, código, estado HTTP y latencia, sin el contenido de la conversación.
 - **Consumo:** queda en `ai_usage_logs`, con la columna `provider`.

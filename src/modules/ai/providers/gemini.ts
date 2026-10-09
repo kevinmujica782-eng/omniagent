@@ -199,14 +199,19 @@ export function parseGeminiResponse(call: ProviderCall, body: unknown, wrapped: 
   };
 }
 
-/** Cuotas por día o de facturación (no se resuelven esperando unos segundos). */
-function isLongQuota(details: Record<string, unknown>[], detail: string): boolean {
+/**
+ * ¿Es una cuota que no vuelve en segundos (por día, créditos prepagados, tope de gasto)? Manda el detalle de Google
+ * (QuotaFailure, RetryInfo): el 429 por minuto también dice "check your plan and billing details" en el mensaje.
+ */
+function isLongQuota(details: Record<string, unknown>[], detail: string, hasRetryInfo: boolean): boolean {
   const ids = details.flatMap((item) =>
     Array.isArray(item.violations)
       ? item.violations.filter(isRecord).map((violation) => `${String(violation.quotaId ?? "")} ${String(violation.quotaMetric ?? "")}`)
       : [],
   );
-  return ids.some((id) => /PerDay|per_day|daily/i.test(id)) || /per day|daily|billing|prepaid|credits|spend/i.test(detail);
+  if (ids.some((id) => /PerDay|per_day|daily/i.test(id))) return true;
+  if (ids.some((id) => /PerMinute|per_minute|PerSecond|per_second/i.test(id)) || hasRetryInfo) return false;
+  return /per day|daily|prepaid|credits|spend(ing)? (cap|limit)/i.test(detail);
 }
 
 export function geminiError(reply: JsonReply): AIProviderError {
@@ -233,7 +238,9 @@ export function geminiError(reply: JsonReply): AIProviderError {
   if (code === 404) return new AIProviderError("model_not_found", base);
   if (code === 408 || code === 504) return new AIProviderError("timeout", base);
   if (code === 429) {
-    return isLongQuota(details, detail) ? new AIProviderError("quota_exceeded", base) : new AIProviderError("rate_limited", { ...base, retryAfterMs });
+    return isLongQuota(details, detail, retryInfo !== undefined)
+      ? new AIProviderError("quota_exceeded", base)
+      : new AIProviderError("rate_limited", { ...base, retryAfterMs });
   }
   if (code >= 500) {
     // Google documenta que una entrada demasiado larga puede llegar como 500 INTERNAL.

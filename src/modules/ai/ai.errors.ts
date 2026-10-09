@@ -24,7 +24,8 @@ export const AI_ERROR_POLICY: Record<AIErrorCode, ErrorPolicy> = {
     appCode: "ai_network_error",
     message: "No pudimos conectar con el servicio de IA. Inténtalo de nuevo.",
   },
-  timeout: { retry: true, fallback: true, status: 504, appCode: "ai_timeout", message: "La IA tardó demasiado en responder. Inténtalo de nuevo." },
+  // Un proveedor que no respondió a tiempo probablemente tampoco lo haga en el reintento: se pasa al siguiente.
+  timeout: { retry: false, fallback: true, status: 504, appCode: "ai_timeout", message: "La IA tardó demasiado en responder. Inténtalo de nuevo." },
   rate_limited: {
     retry: true,
     fallback: true,

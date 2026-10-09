@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AIProviderError } from "@/modules/ai/ai.errors";
 import {
   cleanSchema,
   isStrictCompatible,
@@ -56,6 +57,26 @@ describe("router de IA: esquemas para cada proveedor", () => {
       type: "object",
       properties: { a: { type: "string", maxLength: 10 }, b: { type: "array", items: { type: "string", maxLength: 10 } } },
     });
+  });
+
+  it("corta las referencias recursivas y rechaza un esquema que crece sin fin", () => {
+    const tree = {
+      $defs: { Nodo: { type: "object", properties: { nombre: { type: "string" }, hijos: { type: "array", items: { $ref: "#/$defs/Nodo" } } } } },
+      $ref: "#/$defs/Nodo",
+    };
+    expect(cleanSchema(tree)).toEqual({
+      type: "object",
+      properties: { nombre: { type: "string" }, hijos: { type: "array", items: { type: "object" } } },
+    });
+    // Cuatro referencias a sí mismo por nivel: sin tope serían 4^12 nodos (segundos de CPU y más de 1 GB).
+    const props = Object.fromEntries(["p0", "p1", "p2", "p3"].map((key) => [key, { $ref: "#/$defs/a" }]));
+    const bomb = { $defs: { a: { type: "object", properties: props } }, $ref: "#/$defs/a" };
+    const started = Date.now();
+    expect(cleanSchema(bomb)).toMatchObject({ type: "object", properties: { p0: { type: "object" } } });
+    expect(Date.now() - started).toBeLessThan(200);
+    // Un esquema enorme sin recursión también se rechaza.
+    const wide = { type: "object", properties: Object.fromEntries(Array.from({ length: 2_500 }, (_, i) => [`c${i}`, { type: "string" }])) };
+    expect(() => cleanSchema(wide)).toThrow(AIProviderError);
   });
 
   it("Anthropic: objetos cerrados y los límites pasan a la descripción", () => {

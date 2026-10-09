@@ -234,13 +234,37 @@ describe("router de IA: capacidades, plazos y cancelación", () => {
     await expect(routerWith([]).router.complete(ask)).rejects.toMatchObject({ code: "not_configured" });
   });
 
-  it("corta el intento que se pasa de su tiempo (aunque el adaptador no respete la señal) y sigue con otro", async () => {
-    const stuck = fakeProvider("anthropic", claude, [() => new Promise<ProviderResult>(() => undefined), () => new Promise<ProviderResult>(() => undefined)]);
+  it("corta el intento que se pasa de su tiempo (aunque el adaptador no respete la señal) y sigue con otro sin reintentar", async () => {
+    const stuck = fakeProvider("anthropic", claude, [() => new Promise<ProviderResult>(() => undefined)]);
     const openai = fakeProvider("openai", gpt, [result()]);
     const router = new AIRouter({ providers: [stuck, openai], sleep: async () => undefined });
     const { response } = await router.complete({ ...ask, timeoutMs: 30 });
+    expect(response).toMatchObject({ provider: "openai", fallback: true });
+    expect(response.attempts).toMatchObject([
+      { provider: "anthropic", ok: false, error: "timeout" },
+      { provider: "openai", ok: true },
+    ]);
+  });
+
+  it("un proveedor colgado deja tiempo para el respaldo dentro del plazo total", async () => {
+    // Plazo de 16,6 s: con 15 s guardados para el respaldo, el primero tiene 1,6 s (no sus 30 s).
+    const stuck = fakeProvider("anthropic", claude, [() => new Promise<ProviderResult>(() => undefined)]);
+    const openai = fakeProvider("openai", gpt, [result()]);
+    const { router } = routerWith([stuck, openai]);
+    const started = Date.now();
+    const { response } = await router.complete({ ...ask, deadlineMs: 16_600 });
     expect(response.provider).toBe("openai");
-    expect(response.attempts.slice(0, 2)).toMatchObject([{ error: "timeout" }, { error: "timeout" }]);
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("con provider auto y sin respaldo, usa el primero que está respondiendo", async () => {
+    const anthropic = fakeProvider("anthropic", claude, [err("auth_failed", "anthropic")]);
+    const openai = fakeProvider("openai", gpt, [result(), result()]);
+    const { router } = routerWith([anthropic, openai]);
+    await router.complete(ask);
+    const { response } = await router.complete({ ...ask, fallback: false });
+    expect(response.provider).toBe("openai");
+    expect(anthropic.calls).toHaveLength(1);
   });
 
   it("si quien pidió cancela, no hay reintentos ni respaldo", async () => {

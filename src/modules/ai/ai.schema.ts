@@ -5,6 +5,7 @@
 // - Gemini: el subconjunto de OpenAPI (nullable en vez de tipos con null, sin additionalProperties).
 // - OpenAI y xAI: el esquema tal cual; modo estricto solo si ya cumple sus reglas.
 // La validación final siempre la hace zod en quien pidió la respuesta.
+import { AIProviderError } from "./ai.errors";
 import type { JsonSchema } from "./ai.types";
 
 type Schema = Record<string, unknown>;
@@ -28,25 +29,38 @@ function mapChildren(schema: Schema, fn: (child: Schema) => Schema): Schema {
   return out;
 }
 
-/** Copia sin `$schema` y con las referencias locales (`#/$defs/...`) ya resueltas. */
+/** Tope de nodos de un esquema ya expandido: uno más grande (o recursivo sin fin) es un pedido inválido. */
+const MAX_SCHEMA_NODES = 2_000;
+const MAX_SCHEMA_DEPTH = 32;
+
+/**
+ * Copia sin `$schema` y con las referencias locales (`#/$defs/...`) ya resueltas. Una referencia recursiva se corta
+ * en su primera repetición (queda un objeto libre) y un esquema que crece demasiado al expandirse se rechaza: un
+ * esquema que manda la app no puede trabar el servidor.
+ */
 export function cleanSchema(schema: JsonSchema): JsonSchema {
   const defs: Schema = {
     ...(isSchema(schema.definitions) ? schema.definitions : {}),
     ...(isSchema(schema.$defs) ? schema.$defs : {}),
   };
-  const resolve = (node: Schema, depth: number): Schema => {
-    if (depth > 24) return { type: "object" };
+  let nodes = 0;
+  const resolve = (node: Schema, refs: readonly string[], depth: number): Schema => {
+    nodes += 1;
+    if (nodes > MAX_SCHEMA_NODES || depth > MAX_SCHEMA_DEPTH) {
+      throw new AIProviderError("invalid_request", { detail: "El esquema JSON es demasiado grande o anidado." });
+    }
     const ref = node.$ref;
     if (typeof ref === "string") {
+      const { $ref: _ref, ...rest } = node;
+      if (refs.includes(ref)) return { ...(typeof rest.description === "string" ? { description: rest.description } : {}), type: "object" };
       const name = /^#\/(?:\$defs|definitions)\/(.+)$/.exec(ref)?.[1];
       const target = name ? defs[decodeURIComponent(name)] : undefined;
-      const { $ref: _ref, ...rest } = node;
-      return isSchema(target) ? resolve({ ...target, ...rest }, depth + 1) : resolve(rest, depth + 1);
+      return isSchema(target) ? resolve({ ...target, ...rest }, [...refs, ref], depth + 1) : resolve(rest, refs, depth + 1);
     }
     const { $schema: _s, $id: _i, $defs: _d, definitions: _f, $comment: _c, ...rest } = node;
-    return mapChildren(rest, (child) => resolve(child, depth + 1));
+    return mapChildren(rest, (child) => resolve(child, refs, depth + 1));
   };
-  return resolve(schema, 0);
+  return resolve(schema, [], 0);
 }
 
 /** Los límites que se quitan del esquema, dichos en palabras para la descripción. */

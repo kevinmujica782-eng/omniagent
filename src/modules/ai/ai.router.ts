@@ -20,6 +20,8 @@ import type { AIProviderState, AIRequestPrompt, ModelProvider, ModelSpec, Provid
 export const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 /** No se empieza un intento con menos tiempo que esto. */
 const MIN_ATTEMPT_MS = 1_500;
+/** Tiempo que se guarda para el respaldo cuando hay otro proveedor después: uno colgado no se come todo el plazo. */
+const FALLBACK_RESERVE_MS = 15_000;
 const TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
 
 export interface AttemptEvent {
@@ -70,6 +72,8 @@ export type BreakerStatus = "closed" | "open" | "hard";
 
 /** Errores que no se arreglan en segundos: el proveedor queda al final por un rato largo. */
 const HARD_FAILURES = new Set<AIErrorCode>(["quota_exceeded", "auth_failed", "model_not_found", "not_configured"]);
+/** Fallas del proveedor que pasan solas: varias seguidas lo mandan al final de la fila. */
+const TRANSIENT_FAILURES = new Set<AIErrorCode>(["network_error", "timeout", "rate_limited", "provider_unavailable", "bad_response"]);
 
 export class CircuitBreaker {
   private readonly states = new Map<AIProviderId, { failures: number; openUntil: number; hard: boolean }>();
@@ -104,7 +108,7 @@ export class CircuitBreaker {
       return;
     }
     // Un pedido inválido o cancelado no es culpa del proveedor.
-    if (!error.retryable) return;
+    if (!TRANSIENT_FAILURES.has(error.code)) return;
     const failures = current.failures + 1;
     let openUntil = current.openUntil;
     if (failures >= this.threshold) openUntil = Math.max(openUntil, now + this.cooldownMs);
@@ -230,13 +234,15 @@ export class AIRouter {
       }
       list.push({ provider, spec });
     }
-    if (request.fallback === false) return list.slice(0, 1);
     // Los que fallaron hace poco van al final; los que no tienen cuota o llave válida, solo si no queda otro.
     const now = this.now();
     const closed = list.filter((candidate) => this.breaker.status(candidate.provider.id, now) === "closed");
     const open = list.filter((candidate) => this.breaker.status(candidate.provider.id, now) === "open");
-    const usable = [...closed, ...open];
-    return usable.length ? usable : list;
+    const ordered = [...closed, ...open];
+    const usable = ordered.length ? ordered : list;
+    // Sin respaldo: el proveedor pedido o, si eligió el router, el primero que está respondiendo.
+    if (request.fallback === false) return request.provider ? list.slice(0, 1) : usable.slice(0, 1);
+    return usable;
   }
 
   async complete(request: AIRequestPrompt): Promise<RoutedResult> {
@@ -254,8 +260,9 @@ export class AIRouter {
     const attempts: AIAttempt[] = [];
     const errors: AIProviderError[] = [];
 
-    for (const candidate of candidates) {
+    for (const [index, candidate] of candidates.entries()) {
       const id = candidate.provider.id;
+      const reserve = index < candidates.length - 1 ? FALLBACK_RESERVE_MS : 0;
       for (let attempt = 1; attempt <= this.attemptsPerProvider; attempt++) {
         if (request.signal?.aborted) throw withAttempts(abortError(id, request.signal), attempts);
         const remaining = deadline - this.now();
@@ -263,7 +270,8 @@ export class AIRouter {
           if (errors.length === 0) errors.push(new AIProviderError("timeout", { provider: id, detail: "Se acabó el plazo del pedido." }));
           throw summarizeFailure(attempts, errors);
         }
-        const timeoutMs = Math.min(request.timeoutMs ?? candidate.spec.timeoutMs, remaining);
+        // Si hay otro proveedor después, este intento deja tiempo para el respaldo.
+        const timeoutMs = Math.min(request.timeoutMs ?? candidate.spec.timeoutMs, Math.max(MIN_ATTEMPT_MS, remaining - reserve));
         const startedAttempt = this.now();
         try {
           const result = await this.attempt(candidate, request, timeoutMs);

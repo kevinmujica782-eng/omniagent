@@ -91,8 +91,10 @@ export async function generateReportWithAI(snapshot: FinancialSnapshot, candidat
     prompt: buildAnalysisPrompt(snapshot, candidates),
     tier,
     maxOutputTokens: 2000,
-    // El motor en segundo plano corta la llamada si el paso se pasa de su tiempo.
+    // El motor en segundo plano corta la llamada si el paso se pasa de su tiempo (45 s): el plazo deja lugar al
+    // respaldo de otro proveedor.
     signal,
+    deadlineMs: 42_000,
     attempts: REPORT_ATTEMPTS,
     review: (report) => {
       const unsupported = findUnsupportedAmounts(report, snapshot, candidates);

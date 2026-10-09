@@ -157,6 +157,11 @@ export class StructuredOutputError extends Error {
 export interface StructuredRequest<T> {
   /** Esquema de zod de la respuesta: la IA genera JSON con su forma y zod lo valida. */
   schema: z.ZodType<T>;
+  /**
+   * Lo que se le pide al modelo, si es distinto de lo que se acepta: por ejemplo, pedir la página completa pero aceptar
+   * una negativa aunque el resto venga incompleto. Por defecto, el JSON Schema de `schema`.
+   */
+  jsonSchema?: JsonSchema;
   /** Nombre del formato (en Claude con Haiku es el nombre de la herramienta que recibe el JSON). */
   name: string;
   system: string;
@@ -165,6 +170,9 @@ export interface StructuredRequest<T> {
   maxOutputTokens: number;
   reasoning?: AIReasoningEffort;
   signal?: AbortSignal;
+  /** Tope de cada intento (por defecto, el del modelo). */
+  timeoutMs?: number;
+  /** Tope total con reintentos y respaldo (en el motor, menos que el tiempo del paso). */
   deadlineMs?: number;
   /** Revisión del contenido (por ejemplo, cifras que no salen de los datos): el problema, o null si está bien. */
   review?: (value: T) => string | null;
@@ -192,7 +200,7 @@ export interface StructuredResult<T> {
  * si todos los proveedores fallan o si la respuesta nunca pasa la validación: quien llama decide el plan B.
  */
 export async function generateStructured<T>(input: StructuredRequest<T>): Promise<StructuredResult<T>> {
-  const format: AIResponseFormat = { type: "json", schema: jsonSchemaOf(input.schema), name: input.name };
+  const format: AIResponseFormat = { type: "json", schema: input.jsonSchema ?? jsonSchemaOf(input.schema), name: input.name };
   const messages: AIMessage[] = [{ role: "user", content: input.prompt }];
   const total = { input: 0, output: 0, cached: 0 };
   let last: AIResponse | null = null;
@@ -209,6 +217,7 @@ export async function generateStructured<T>(input: StructuredRequest<T>): Promis
         maxOutputTokens: input.maxOutputTokens,
         reasoning: input.reasoning,
         signal: input.signal,
+        timeoutMs: input.timeoutMs,
         deadlineMs: input.deadlineMs,
       });
       last = response;
@@ -235,7 +244,8 @@ export async function generateStructured<T>(input: StructuredRequest<T>): Promis
     }
   } finally {
     const usage = input.usage;
-    if (usage && last && total.input + total.output > 0 && (succeeded || (usage.logOn ?? "always") === "always")) {
+    // Hubo respuesta: se registra aunque el proveedor no informe tokens (algunos usos cuentan contra el plan).
+    if (usage && last && (succeeded || (usage.logOn ?? "always") === "always")) {
       await logAIUsage(usage, {
         provider: last.provider,
         model: last.model,

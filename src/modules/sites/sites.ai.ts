@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { AppError } from "@/lib/errors";
-import { generateStructured } from "@/modules/ai/ai.service";
+import { generateStructured, jsonSchemaOf } from "@/modules/ai/ai.service";
 import type { AIProviderId, AITier } from "@/types/ai";
 import { contactLinks, normalizeContact, unsupportedNumbers } from "./sites.rules";
 import { siteCopySchema, type SiteBrief, type SiteCopy, type SiteGoal } from "./sites.types";
@@ -14,7 +14,7 @@ import { siteCopySchema, type SiteBrief, type SiteCopy, type SiteGoal } from "./
 const FORMAT_NAME = "guardar_pagina";
 const MAX_ATTEMPTS = 2;
 
-/** Lo que responde la IA: la página, o que no la hace y por qué. */
+/** Lo que se le pide a la IA: la página, o que no la hace y por qué. */
 const siteAnswerSchema = z.object({
   decision: z
     .enum(["hacer", "no_hacer"])
@@ -22,6 +22,15 @@ const siteAnswerSchema = z.object({
   motivo: z.string().max(200).nullable().describe("Si es no_hacer: por qué, en una frase corta para la persona. Si es hacer: null"),
   pagina: siteCopySchema.nullable().describe("Los textos de la página (null si es no_hacer)"),
 });
+
+/**
+ * Lo que se acepta: una negativa vale aunque el motivo sea largo o el resto venga incompleto. Si no, una negativa que
+ * no pasara la validación terminaría en una página armada por reglas, justo lo que la IA no quiso hacer.
+ */
+const siteAnswerCheck = z.discriminatedUnion("decision", [
+  z.object({ decision: z.literal("no_hacer"), motivo: z.unknown(), pagina: z.unknown() }),
+  z.object({ decision: z.literal("hacer"), motivo: z.unknown(), pagina: siteCopySchema }),
+]);
 
 const SYSTEM_PROMPT = [
   "Eres el redactor web de Omni, el asistente de OmniAgent. Escribes páginas de presentación (landing pages) en español neutro para pequeños negocios y proyectos personales: claras, cálidas y concretas.",
@@ -104,25 +113,27 @@ export interface WrittenCopy {
 /** Textos de la página con IA. Lanza AppError 422 si la IA se niega a hacerla (el motor no lo reintenta). */
 export async function writeSiteCopy(req: CopyRequest): Promise<WrittenCopy> {
   const result = await generateStructured({
-    schema: siteAnswerSchema,
+    schema: siteAnswerCheck,
+    jsonSchema: jsonSchemaOf(siteAnswerSchema),
     name: FORMAT_NAME,
     system: SYSTEM_PROMPT,
     prompt: userPrompt(req),
     tier: req.tier,
     maxOutputTokens: 3000,
     signal: req.signal,
+    // El paso del motor tiene 45 s: así queda tiempo para el respaldo de otro proveedor.
+    deadlineMs: 42_000,
     attempts: MAX_ATTEMPTS,
     review: (answer) => {
       if (answer.decision === "no_hacer") return null;
-      if (!answer.pagina) return "Falta pagina: con decision hacer, escribe los textos de la página.";
       const invented = unsupportedNumbers(answer.pagina, req.source);
       return invented.length ? `Estas cifras no salen del pedido; quítalas: ${invented.join(", ")}.` : null;
     },
     usage: { userId: req.userId, module: "GENERAL", kind: "site" },
   });
   const answer = result.value;
-  if (answer.decision === "no_hacer" || !answer.pagina) {
-    const reason = answer.motivo?.trim();
+  if (answer.decision === "no_hacer") {
+    const reason = typeof answer.motivo === "string" ? answer.motivo.trim() : "";
     const why = reason ? reason.replace(/[.!]+$/, "").slice(0, 200) : "no es algo que pueda publicar";
     throw new AppError(422, "site_declined", `No puedo armar esa página: ${why}.`);
   }

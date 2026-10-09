@@ -137,6 +137,9 @@ async function extractWithAI(
     ],
     tier,
     maxOutputTokens: 4000,
+    // Leer un PDF largo puede tardar: la ruta tiene 60 s.
+    timeoutMs: 50_000,
+    deadlineMs: 55_000,
     // Cuenta contra las lecturas con IA del plan: solo si la lectura sirvió (como antes).
     usage: { userId, module: "PROCEDURES", kind: "document", logOn: "success" },
   });

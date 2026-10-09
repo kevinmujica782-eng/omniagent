@@ -494,6 +494,10 @@ describe("router de IA: Gemini (generateContent)", () => {
         { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerMinutePerProjectPerModel" }] },
         { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "33s" },
       ]),
+      error(429, "RESOURCE_EXHAUSTED", "You exceeded your current quota, please check your plan and billing details.", [
+        { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateContentInputTokensPerModelPerMinute-FreeTier" }] },
+        { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "45s" },
+      ]),
       error(429, "RESOURCE_EXHAUSTED", "Quota exceeded", [
         { "@type": "type.googleapis.com/google.rpc.QuotaFailure", violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel" }] },
       ]),
@@ -506,6 +510,7 @@ describe("router de IA: Gemini (generateContent)", () => {
     const provider = geminiProvider({ apiKey: "k", models: MODELS, fetch });
     await expectAIError(provider.generate(callFor(flash)), "auth_failed");
     await expectAIError(provider.generate(callFor(flash)), "rate_limited", { retryAfterMs: 33_000 });
+    await expectAIError(provider.generate(callFor(flash)), "rate_limited", { retryAfterMs: 45_000 });
     await expectAIError(provider.generate(callFor(flash)), "quota_exceeded");
     await expectAIError(provider.generate(callFor(flash)), "quota_exceeded");
     await expectAIError(provider.generate(callFor(flash)), "provider_unavailable");
