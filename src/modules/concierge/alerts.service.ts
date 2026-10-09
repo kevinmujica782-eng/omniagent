@@ -6,7 +6,7 @@ import { Errors } from "@/lib/errors";
 import { money } from "@/lib/format";
 import { isUuid } from "@/lib/validation";
 import type { PriceAlertView, WatchKindId } from "@/types/cards";
-import { writeAlertWithClaude } from "./ai";
+import { writeAlertWithAI } from "./ai";
 import { rulesAlertText, type AlertFacts } from "./rules/alert-copy";
 import type { DropAnalysis, HistoryPoint } from "./rules/drops";
 import { alertView, sparkOf, type PointRow } from "./views";
@@ -69,7 +69,7 @@ export async function createPriceAlert(input: {
 }): Promise<PriceAlert> {
   const { item, analysis, reading, now } = input;
   const facts = alertFactsFor(item, analysis, reading, input.history, now);
-  const ai = input.writeWithAI ? await writeAlertWithClaude(item.userId, facts) : null;
+  const ai = input.writeWithAI ? await writeAlertWithAI(item.userId, facts) : null;
   const text = ai ?? rulesAlertText(facts);
 
   // Una alerta abierta por producto: la anterior queda vencida (salvo que ya tenga una compra en curso).

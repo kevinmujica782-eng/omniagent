@@ -1,5 +1,6 @@
 // Traducción de cualquier error a { status, code, message }: pura, sin Next ni base de datos (se prueba sola).
 import { ZodError } from "zod";
+import { AIProviderError, aiErrorToHttp } from "@/modules/ai/ai.errors";
 import { AppError } from "./errors";
 
 export type Mapped = { status: number; code: string; message: string; details?: unknown; retryAfter?: number };
@@ -11,6 +12,11 @@ export function classify(error: unknown): Mapped {
   }
   if (error instanceof ZodError) {
     return { status: 422, code: "validation_error", message: "Revisa los datos enviados.", details: error.issues };
+  }
+  // Router de IA: el error ya viene normalizado (red, tiempo, cuota, límite de tasa...), con la espera sugerida.
+  if (error instanceof AIProviderError) {
+    const http = aiErrorToHttp(error);
+    return { status: http.status, code: http.code, message: http.message, details: http.details, retryAfter: http.retryAfter };
   }
   const e = error as { name?: string; code?: unknown; status?: unknown; type?: unknown } | null;
   const code = typeof e?.code === "string" ? e.code : "";

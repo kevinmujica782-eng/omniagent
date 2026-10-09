@@ -1,7 +1,7 @@
 import "server-only";
 import { getEntitlements, monthlyPageReads } from "@/modules/billing/entitlements";
 import { PLANS } from "@/modules/billing/plans";
-import { aiConfigured, readPageWithClaude } from "./ai";
+import { aiConfigured, readPageWithAI } from "./ai";
 import type { SandboxFlashSale } from "./sandbox/stores";
 import { extractOffer, pageText, type PageFacts, type PageOffer } from "./scraper/extract";
 import { fetchPage, type FetchFailure, type FetchOptions } from "./scraper/fetcher";
@@ -86,7 +86,7 @@ export async function readPrice(
         facts,
       };
     }
-    const read = await readPageWithClaude({ userId: ctx.userId, url: page.url, text, facts, fallbackCurrency: ctx.fallbackCurrency });
+    const read = await readPageWithAI({ userId: ctx.userId, url: page.url, text, facts, fallbackCurrency: ctx.fallbackCurrency });
     if (read && read.currency) {
       return { ok: true, reading: { offer: { ...read, currency: read.currency }, url: page.url, source, facts, aiUsed: true } };
     }

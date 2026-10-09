@@ -1,30 +1,20 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
-import { prisma } from "@/lib/db";
-import { env } from "@/lib/env";
-import { anthropic } from "@/modules/agent/anthropic";
+import { aiConfigured as routerConfigured, generateStructured } from "@/modules/ai/ai.service";
 import { ALERT_SYSTEM_PROMPT, ALERT_TOOL_NAME, alertSchema, buildAlertPrompt, validateAlertText } from "./rules/alert-ai";
 import type { AlertFacts, AlertText } from "./rules/alert-copy";
 import type { PageFacts, PageOffer } from "./scraper/extract";
 import { buildPagePrompt, PAGE_SYSTEM_PROMPT, PAGE_TOOL_NAME, pageReadSchema, validatePageRead } from "./scraper/page-ai";
 
-// Claude en el módulo de compras, siempre con salida estructurada (tool use forzado) y validación posterior:
-// 1) leer el precio de una página sin datos de producto, 2) redactar la alerta de una bajada.
-// Son tareas cortas y automáticas: usan el modelo rápido y no gastan la cuota del chat.
-
-function toolFor(name: string, description: string, schema: z.ZodType): Anthropic.Tool {
-  const json = z.toJSONSchema(schema, { io: "input" }) as Record<string, unknown>;
-  delete json.$schema;
-  return { name, description, input_schema: json as unknown as Anthropic.Tool["input_schema"] };
-}
+// La IA en el módulo de compras, siempre con salida estructurada y validación posterior, por el router de IA (Claude
+// primero y otro proveedor si falla): 1) leer el precio de una página sin datos de producto, 2) redactar la alerta de
+// una bajada. Son tareas cortas y automáticas: usan el modelo rápido, razonan poco y no gastan la cuota del chat.
 
 export function aiConfigured(): boolean {
-  return Boolean(env().ANTHROPIC_API_KEY);
+  return routerConfigured();
 }
 
-/** Precio leído por Claude del texto de la página. null si no lo encontró o si su respuesta no pasa la validación. */
-export async function readPageWithClaude(input: {
+/** Precio leído por la IA del texto de la página. null si no lo encontró o si su respuesta no pasa la validación. */
+export async function readPageWithAI(input: {
   userId: string;
   url: string;
   text: string;
@@ -32,67 +22,39 @@ export async function readPageWithClaude(input: {
   fallbackCurrency: string | null;
 }): Promise<PageOffer | null> {
   if (!aiConfigured() || input.text.length < 20) return null;
-  const model = env().ANTHROPIC_MODEL_FREE;
   try {
-    const tool = toolFor(PAGE_TOOL_NAME, "Registra el precio del artículo principal de la página.", pageReadSchema);
-    const response = await anthropic().messages.create({
-      model,
-      max_tokens: 600,
+    const result = await generateStructured({
+      schema: pageReadSchema,
+      name: PAGE_TOOL_NAME,
       system: PAGE_SYSTEM_PROMPT,
-      tools: [tool],
-      tool_choice: { type: "tool", name: PAGE_TOOL_NAME },
-      messages: [{ role: "user", content: buildPagePrompt(input.url, input.text, input.facts) }],
+      prompt: buildPagePrompt(input.url, input.text, input.facts),
+      tier: "fast",
+      maxOutputTokens: 600,
+      reasoning: "low",
+      usage: { userId: input.userId, module: "CONCIERGE", kind: "page_read" },
     });
-    await prisma.aiUsageLog.create({
-      data: {
-        userId: input.userId,
-        module: "CONCIERGE",
-        kind: "page_read",
-        model,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-      },
-    });
-    const block = response.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") return null;
-    const parsed = pageReadSchema.safeParse(block.input);
-    if (!parsed.success) return null;
-    return validatePageRead(parsed.data, { text: input.text, url: input.url, facts: input.facts, fallbackCurrency: input.fallbackCurrency });
+    return validatePageRead(result.value, { text: input.text, url: input.url, facts: input.facts, fallbackCurrency: input.fallbackCurrency });
   } catch (error) {
     console.error("[concierge] no se pudo leer la página con IA", error);
     return null;
   }
 }
 
-/** Titular y resumen de la alerta escritos por Claude; null si falla o si alguna cifra no cuadra con los datos. */
-export async function writeAlertWithClaude(userId: string, facts: AlertFacts): Promise<AlertText | null> {
+/** Titular y resumen de la alerta escritos por la IA; null si falla o si alguna cifra no cuadra con los datos. */
+export async function writeAlertWithAI(userId: string, facts: AlertFacts): Promise<AlertText | null> {
   if (!aiConfigured()) return null;
-  const model = env().ANTHROPIC_MODEL_FREE;
   try {
-    const tool = toolFor(ALERT_TOOL_NAME, "Registra el aviso de bajada de precio.", alertSchema);
-    const response = await anthropic().messages.create({
-      model,
-      max_tokens: 500,
+    const result = await generateStructured({
+      schema: alertSchema,
+      name: ALERT_TOOL_NAME,
       system: ALERT_SYSTEM_PROMPT,
-      tools: [tool],
-      tool_choice: { type: "tool", name: ALERT_TOOL_NAME },
-      messages: [{ role: "user", content: buildAlertPrompt(facts) }],
+      prompt: buildAlertPrompt(facts),
+      tier: "fast",
+      maxOutputTokens: 500,
+      reasoning: "low",
+      usage: { userId, module: "CONCIERGE", kind: "price_alert" },
     });
-    await prisma.aiUsageLog.create({
-      data: {
-        userId,
-        module: "CONCIERGE",
-        kind: "price_alert",
-        model,
-        inputTokens: response.usage.input_tokens,
-        outputTokens: response.usage.output_tokens,
-      },
-    });
-    const block = response.content.find((b) => b.type === "tool_use");
-    if (!block || block.type !== "tool_use") return null;
-    const parsed = alertSchema.safeParse(block.input);
-    if (!parsed.success) return null;
-    return validateAlertText(parsed.data, facts);
+    return validateAlertText(result.value, facts);
   } catch (error) {
     console.error("[concierge] no se pudo redactar la alerta con IA", error);
     return null;

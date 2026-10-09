@@ -1,18 +1,16 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
 import type { Prisma, SavingsRecommendation } from "@/generated/prisma/client";
 import type { AnalysisTrigger } from "@/generated/prisma/enums";
 import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
-import { env } from "@/lib/env";
 import { AppError, Errors } from "@/lib/errors";
 import { money, shortDate } from "@/lib/format";
 import { isUuid } from "@/lib/validation";
-import { anthropic } from "@/modules/agent/anthropic";
+import { aiConfigured, generateStructured, tierForPlan } from "@/modules/ai/ai.service";
 import { getEntitlements } from "@/modules/billing/entitlements";
 import { createGoal } from "@/modules/goals/goals.service";
 import { createTask } from "@/modules/procedures/procedures.service";
+import type { AIProviderId, AITier } from "@/types/ai";
 import type { ApprovalCard, BudgetView, InsightsCard, RecommendationView } from "@/types/cards";
 import { DAY_MS } from "../analyzers";
 import { listBudgets, upsertBudget } from "../budgets.service";
@@ -31,8 +29,9 @@ import {
 import { buildCandidates, rulesReport, type AnalysisDraft, type Candidate } from "./rules";
 
 // Servicio de IA del asistente financiero:
-// snapshot de 3 meses → candidatas por reglas → Claude redacta el informe (salida estructurada) → se guarda
-// con recomendaciones accionables. Sin API key, o si el modelo falla, se usa el informe por reglas.
+// snapshot de 3 meses → candidatas por reglas → la IA redacta el informe (salida estructurada, por el router de IA:
+// Claude primero y otro proveedor si falla) → se guarda con recomendaciones accionables. Sin IA configurada, o si
+// el modelo falla, se usa el informe por reglas.
 
 export const ANALYSIS_REQUEST_TEXT = "Analiza mis finanzas de los últimos 3 meses.";
 
@@ -81,56 +80,33 @@ export async function loadSnapshot(userId: string, timeZone?: string): Promise<F
 const REPORT_ATTEMPTS = 2;
 
 /**
- * Pide el informe a Claude con salida estructurada (tool use forzado) y revisa cada monto contra los datos.
- * Si alguno no sale de ellos, le pide una corrección; si sigue mal, lanza y se usa el informe por reglas.
- * Exportada para probarla con un cliente simulado.
+ * Pide el informe a la IA con salida estructurada y revisa cada monto contra los datos. Si alguno no sale de ellos,
+ * le pide una corrección; si sigue mal, lanza y se usa el informe por reglas. Exportada para probarla.
  */
-export async function generateWithClaude(snapshot: FinancialSnapshot, candidates: Candidate[], model: string, signal?: AbortSignal) {
-  const schema = z.toJSONSchema(reportSchema, { io: "input" }) as Record<string, unknown>;
-  delete schema.$schema;
-  const tool: Anthropic.Tool = {
+export async function generateReportWithAI(snapshot: FinancialSnapshot, candidates: Candidate[], tier: AITier, signal?: AbortSignal) {
+  const result = await generateStructured({
+    schema: reportSchema,
     name: REPORT_TOOL_NAME,
-    description: "Guarda el informe de ahorro del usuario con sus recomendaciones.",
-    input_schema: schema as unknown as Anthropic.Tool["input_schema"],
+    system: ANALYST_SYSTEM_PROMPT,
+    prompt: buildAnalysisPrompt(snapshot, candidates),
+    tier,
+    maxOutputTokens: 2000,
+    // El motor en segundo plano corta la llamada si el paso se pasa de su tiempo.
+    signal,
+    attempts: REPORT_ATTEMPTS,
+    review: (report) => {
+      const unsupported = findUnsupportedAmounts(report, snapshot, candidates);
+      if (unsupported.length) console.warn("[finance] el informe citó montos que no están en los datos; se pide corregirlo", unsupported);
+      return unsupported.length ? unsupportedAmountsFeedback(unsupported) : null;
+    },
+    correction: (problem) => problem,
+  });
+  return {
+    draft: draftFromModel(result.value, candidates, snapshot),
+    usage: { input: result.usage.input, output: result.usage.output },
+    provider: result.provider,
+    model: result.model,
   };
-
-  const messages: Anthropic.MessageParam[] = [{ role: "user", content: buildAnalysisPrompt(snapshot, candidates) }];
-  const usage = { input: 0, output: 0 };
-  for (let attempt = 1; ; attempt++) {
-    const response = await anthropic().messages.create(
-      {
-        model,
-        max_tokens: 2000,
-        system: [{ type: "text", text: ANALYST_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-        tools: [tool],
-        // Salida estructurada: el modelo debe responder llamando a la herramienta con el esquema del informe.
-        tool_choice: { type: "tool", name: REPORT_TOOL_NAME },
-        messages,
-      },
-      // El motor en segundo plano corta la llamada si el paso se pasa de su tiempo.
-      { signal },
-    );
-    usage.input += response.usage.input_tokens;
-    usage.output += response.usage.output_tokens;
-
-    const block = response.content.find((b) => b.type === "tool_use" && b.name === REPORT_TOOL_NAME);
-    if (!block || block.type !== "tool_use") throw new Error("El modelo no devolvió el informe.");
-    const parsed = reportSchema.safeParse(block.input);
-    if (!parsed.success) {
-      throw new Error(`Informe inválido: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
-    }
-
-    const unsupported = findUnsupportedAmounts(parsed.data, snapshot, candidates);
-    if (unsupported.length === 0) return { draft: draftFromModel(parsed.data, candidates, snapshot), usage };
-    if (attempt >= REPORT_ATTEMPTS) throw new Error(`El informe cita montos que no salen de los datos: ${unsupported.join(", ")}`);
-
-    console.warn("[finance] el informe citó montos que no están en los datos; se pide corregirlo", unsupported);
-    messages.push({ role: "assistant", content: [{ type: "tool_use", id: block.id, name: block.name, input: block.input }] });
-    messages.push({
-      role: "user",
-      content: [{ type: "tool_result", tool_use_id: block.id, is_error: true, content: unsupportedAmountsFeedback(unsupported) }],
-    });
-  }
 }
 
 function waitLabel(minutes: number): string {
@@ -173,13 +149,15 @@ export async function runFinancialAnalysis(
   const candidates = buildCandidates(snapshot);
   let draft: AnalysisDraft = rulesReport(snapshot, candidates);
   let model: string | null = null;
+  let provider: AIProviderId | null = null;
   let usage = { input: 0, output: 0 };
-  if (env().ANTHROPIC_API_KEY) {
+  if (aiConfigured()) {
     try {
-      const result = await generateWithClaude(snapshot, candidates, entitlements.model, opts.signal);
+      const result = await generateReportWithAI(snapshot, candidates, tierForPlan(entitlements.plan), opts.signal);
       draft = result.draft;
       usage = result.usage;
-      model = entitlements.model;
+      model = result.model;
+      provider = result.provider;
     } catch (error) {
       // Si quien pidió el análisis lo canceló (el motor cortó el paso por tiempo), no se guarda nada a medias.
       if (opts.signal?.aborted) throw opts.signal.reason ?? error;
@@ -188,7 +166,7 @@ export async function runFinancialAnalysis(
   }
   opts.signal?.throwIfAborted();
 
-  const analysis = await persistAnalysis(userId, snapshot, draft, { trigger: opts.trigger, model, usage });
+  const analysis = await persistAnalysis(userId, snapshot, draft, { trigger: opts.trigger, model, provider, usage });
   return { analysisId: analysis.id, card: toInsightsCard(analysis) };
 }
 
@@ -196,7 +174,7 @@ async function persistAnalysis(
   userId: string,
   snapshot: FinancialSnapshot,
   draft: AnalysisDraft,
-  meta: { trigger: AnalysisTrigger; model: string | null; usage: { input: number; output: number } },
+  meta: { trigger: AnalysisTrigger; model: string | null; provider: AIProviderId | null; usage: { input: number; output: number } },
 ): Promise<AnalysisWithRecommendations> {
   // Las recomendaciones anteriores sin decidir quedan reemplazadas por las nuevas.
   await prisma.savingsRecommendation.updateMany({ where: { userId, status: "NEW" }, data: { status: "EXPIRED" } });
@@ -253,6 +231,7 @@ async function persistAnalysis(
         userId,
         module: "FINANCE",
         kind: "analysis",
+        provider: meta.provider ?? "anthropic",
         model: meta.model,
         inputTokens: meta.usage.input,
         outputTokens: meta.usage.output,

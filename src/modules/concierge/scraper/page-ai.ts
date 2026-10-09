@@ -10,7 +10,7 @@ export const PAGE_TOOL_NAME = "leer_precio";
 
 export const PAGE_SYSTEM_PROMPT = [
   "Lees el texto de una página web de una tienda, una boletería, una aerolínea o un hotel para encontrar el precio actual del artículo principal.",
-  "Entrega el resultado SOLO llamando a la herramienta leer_precio.",
+  "Entrega el resultado SOLO en el formato estructurado indicado, sin texto aparte.",
   "",
   "Reglas:",
   "1. El precio es el que pagaría hoy una persona por una unidad del artículo principal de la página (no el precio anterior tachado, no el envío, no cuotas mensuales, no accesorios ni productos relacionados).",

@@ -11,7 +11,7 @@ export const REPORT_TOOL_NAME = "registrar_informe";
 
 export const ANALYST_SYSTEM_PROMPT = [
   "Eres el analista financiero de OmniAgent. Recibes, en JSON, un resumen de los últimos 3 meses de un usuario y una lista de recomendaciones candidatas calculadas con reglas.",
-  "Escribe un informe breve, cálido y concreto en español neutro, hablándole de tú. Entrégalo SOLO llamando a la herramienta registrar_informe.",
+  "Escribe un informe breve, cálido y concreto en español neutro, hablándole de tú. Entrégalo SOLO en el formato estructurado indicado (registrar_informe), sin texto aparte.",
   "",
   "Reglas:",
   "1. Usa solo los datos recibidos. No inventes comercios, montos, fechas ni hábitos. Los montos van en la moneda indicada.",
@@ -217,7 +217,7 @@ export function unsupportedAmountsFeedback(amounts: string[]): string {
   return [
     `Estos montos no salen de los datos: ${amounts.join(", ")}.`,
     "Usa solo las «cifras para citar» (montos mensuales, con el formato $4,852) o los ahorros de las candidatas.",
-    "No sumes los meses ni calcules totales o promedios. Vuelve a llamar a registrar_informe con el informe corregido.",
+    "No sumes los meses ni calcules totales o promedios. Devuelve el informe completo corregido, con el mismo formato.",
   ].join(" ");
 }
 

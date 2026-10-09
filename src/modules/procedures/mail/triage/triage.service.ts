@@ -1,10 +1,7 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
 import type { MailAttachment, MailMessage, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
-import { env } from "@/lib/env";
-import { anthropic } from "@/modules/agent/anthropic";
+import { aiConfigured, generateStructured } from "@/modules/ai/ai.service";
 import type { ParsedIcsEvent } from "../../calendar/ics";
 import type { BusyBlock } from "../../calendar/scheduler";
 import { busyWindow, suggestFromMessage, userTimeZone } from "../../plan";
@@ -18,9 +15,10 @@ import {
 } from "./ai";
 import { triageWithRules, type TriageInput, type TriageResult } from "./rules";
 
-// Clasificación de la bandeja: reglas para cada correo nuevo y, si hay clave de Anthropic, Claude en lotes
-// con salida estructurada (tool use forzado). Cada correo accionable se convierte en un trámite sugerido.
-// Clasificar es una tarea corta y automática: usa el modelo rápido en todos los planes y no consume cuota del chat.
+// Clasificación de la bandeja: reglas para cada correo nuevo y, si hay IA configurada, la IA en lotes con salida
+// estructurada (router de IA: Claude primero y otro proveedor si falla). Cada correo accionable se convierte en un
+// trámite sugerido. Clasificar es una tarea corta y automática: usa el modelo rápido en todos los planes y no consume
+// cuota del chat.
 
 const AI_BATCH = 15;
 const MAX_PER_RUN = 60;
@@ -79,20 +77,13 @@ function toInput(message: MessageWithAttachments): TriageInput {
   };
 }
 
-/** Un lote de correos a Claude. Exportada para probarla con un cliente simulado. */
-export async function classifyWithClaude(
+/** Un lote de correos a la IA. Lanza si la IA falla o si su respuesta no pasa la validación. */
+export async function classifyWithAI(
+  userId: string,
   batch: { key: string; message: MessageWithAttachments }[],
   now: Date,
   timeZone: string,
-  model: string,
-): Promise<{ output: TriageOutput; usage: { input: number; output: number } }> {
-  const schema = z.toJSONSchema(triageSchema, { io: "input" }) as Record<string, unknown>;
-  delete schema.$schema;
-  const tool: Anthropic.Tool = {
-    name: TRIAGE_TOOL_NAME,
-    description: "Registra la clasificación de cada correo y el trámite que implica.",
-    input_schema: schema as unknown as Anthropic.Tool["input_schema"],
-  };
+): Promise<TriageOutput> {
   const prompt = buildTriagePrompt(
     batch.map(({ key, message }) => ({
       key,
@@ -106,19 +97,18 @@ export async function classifyWithClaude(
     now,
     timeZone,
   );
-  const response = await anthropic().messages.create({
-    model,
-    max_tokens: 4000,
-    system: [{ type: "text", text: TRIAGE_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    tools: [tool],
-    tool_choice: { type: "tool", name: TRIAGE_TOOL_NAME },
-    messages: [{ role: "user", content: prompt }],
+  const result = await generateStructured({
+    schema: triageSchema,
+    name: TRIAGE_TOOL_NAME,
+    system: TRIAGE_SYSTEM_PROMPT,
+    prompt,
+    tier: "fast",
+    maxOutputTokens: 4000,
+    reasoning: "low",
+    // Se registra solo el lote que sirvió (como antes).
+    usage: { userId, module: "PROCEDURES", kind: "triage", logOn: "success" },
   });
-  const block = response.content.find((b) => b.type === "tool_use" && b.name === TRIAGE_TOOL_NAME);
-  if (!block || block.type !== "tool_use") throw new Error("El modelo no devolvió la clasificación.");
-  const parsed = triageSchema.safeParse(block.input);
-  if (!parsed.success) throw new Error(`Clasificación inválida: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
-  return { output: parsed.data, usage: { input: response.usage.input_tokens, output: response.usage.output_tokens } };
+  return result.value;
 }
 
 export interface TriageRunResult {
@@ -151,14 +141,13 @@ export async function triageInbox(userId: string, opts: { preferAI?: boolean } =
   const results = new Map<string, TriageResult>(messages.map((m) => [m.id, triageWithRules(inputs.get(m.id)!, now, timeZone)]));
 
   let source: "AI" | "RULES" = "RULES";
-  if ((opts.preferAI ?? true) && env().ANTHROPIC_API_KEY) {
+  if ((opts.preferAI ?? true) && aiConfigured()) {
     // La publicidad que el propio proveedor marcó como tal no pasa por la IA.
     const candidates = messages.filter((m) => !m.labels.includes("CATEGORY_PROMOTIONS"));
-    const model = env().ANTHROPIC_MODEL_FREE;
     for (let i = 0; i < candidates.length; i += AI_BATCH) {
       const batch = candidates.slice(i, i + AI_BATCH).map((message, j) => ({ key: `m${j + 1}`, message }));
       try {
-        const { output, usage } = await classifyWithClaude(batch, now, timeZone, model);
+        const output = await classifyWithAI(userId, batch, now, timeZone);
         for (const item of output.correos) {
           const entry = batch.find((b) => b.key === item.id);
           if (!entry) continue;
@@ -176,9 +165,6 @@ export async function triageInbox(userId: string, opts: { preferAI?: boolean } =
           );
         }
         source = "AI";
-        await prisma.aiUsageLog.create({
-          data: { userId, module: "PROCEDURES", kind: "triage", model, inputTokens: usage.input, outputTokens: usage.output },
-        });
       } catch (error) {
         console.error("[triage] la clasificación con IA falló; se usan reglas", error);
       }

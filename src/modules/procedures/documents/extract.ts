@@ -11,7 +11,7 @@ export const FORM_TOOL_NAME = "registrar_formulario";
 
 export const FORM_SYSTEM_PROMPT = [
   "Eres el asistente de trámites de OmniAgent. Recibes un formulario PDF, la lista de sus campos (id, tipo, etiqueta cercana y opciones), los datos guardados del usuario (Mis datos) y, si existe, el correo con el que llegó.",
-  "Entrega el resultado SOLO llamando a la herramienta registrar_formulario, con un elemento por cada id de campo.",
+  "Entrega el resultado SOLO en el formato estructurado indicado, con un elemento por cada id de campo y sin texto aparte.",
   "",
   "Reglas:",
   "1. Propón un valor para cada campo usando, en este orden: Mis datos, el correo, el propio documento o la fecha de hoy. Indica la fuente.",

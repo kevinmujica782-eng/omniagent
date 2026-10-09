@@ -1,5 +1,6 @@
 import "server-only";
 import { z } from "zod";
+import { DEFAULT_MODELS } from "@/modules/ai/ai.catalog";
 import { Errors } from "./errors";
 
 /**
@@ -10,8 +11,27 @@ import { Errors } from "./errors";
 const schema = z.object({
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL_FREE: z.string().default("claude-haiku-4-5-20251001"),
-  ANTHROPIC_MODEL_PRO: z.string().default("claude-sonnet-5-5"),
+  ANTHROPIC_MODEL_FREE: z.string().default(DEFAULT_MODELS.anthropic.fast),
+  ANTHROPIC_MODEL_PRO: z.string().default(DEFAULT_MODELS.anthropic.smart),
+  ANTHROPIC_BASE_URL: z.string().url().optional(),
+  // Router de IA (src/modules/ai, docs/ROUTER-IA.md): cada proveedor se activa con su llave. Los modelos `FAST` son
+  // los del plan Gratis y los `SMART`, los de Pro.
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().url().optional(),
+  OPENAI_MODEL_FAST: z.string().default(DEFAULT_MODELS.openai.fast),
+  OPENAI_MODEL_SMART: z.string().default(DEFAULT_MODELS.openai.smart),
+  // Google AI Studio. GOOGLE_API_KEY sirve igual (es el nombre que usan los SDK de Google).
+  GEMINI_API_KEY: z.string().optional(),
+  GOOGLE_API_KEY: z.string().optional(),
+  GEMINI_BASE_URL: z.string().url().optional(),
+  GEMINI_MODEL_FAST: z.string().default(DEFAULT_MODELS.gemini.fast),
+  GEMINI_MODEL_SMART: z.string().default(DEFAULT_MODELS.gemini.smart),
+  XAI_API_KEY: z.string().optional(),
+  XAI_BASE_URL: z.string().url().optional(),
+  XAI_MODEL_FAST: z.string().default(DEFAULT_MODELS.xai.fast),
+  XAI_MODEL_SMART: z.string().default(DEFAULT_MODELS.xai.smart),
+  // Orden en que el router prueba los proveedores (los que no se nombran van después, en el orden por defecto).
+  AI_PROVIDER_ORDER: z.string().default("anthropic,openai,gemini,xai"),
   TOKEN_ENCRYPTION_KEY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),

@@ -590,6 +590,8 @@ model AiUsageLog {
   conversationId  String?     @map("conversation_id") @db.Uuid
   module          AgentModule @default(GENERAL)
   kind            String      @default("chat") // chat | analysis
+  /// Proveedor que respondió (router de IA): anthropic | openai | gemini | xai.
+  provider        String      @default("anthropic")
   model           String
   inputTokens     Int         @default(0) @map("input_tokens")
   outputTokens    Int         @default(0) @map("output_tokens")

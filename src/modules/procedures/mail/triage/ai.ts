@@ -9,7 +9,7 @@ export const TRIAGE_TOOL_NAME = "clasificar_correos";
 
 export const TRIAGE_SYSTEM_PROMPT = [
   "Eres el asistente de trámites de OmniAgent. Revisas correos de un usuario para detectar lo que debe hacer: formularios o permisos por llenar, citas, reembolsos, facturas, fechas límite y eventos.",
-  "Entrega el resultado SOLO llamando a la herramienta clasificar_correos, con un elemento por correo.",
+  "Entrega el resultado SOLO en el formato estructurado indicado, con un elemento por correo y sin texto aparte.",
   "",
   "Reglas:",
   "1. Usa solo lo que dice cada correo. No inventes fechas, montos, lugares ni remitentes.",

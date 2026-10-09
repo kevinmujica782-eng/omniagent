@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import { proposeAction } from "@/modules/actions/actions.service";
+import { tierForPlan } from "@/modules/ai/ai.service";
 import { rememberMemory } from "@/modules/memory/memory.service";
 import { assembleContent, copyOf, reviewCopy } from "@/modules/sites/sites.rules";
 import {
@@ -54,7 +55,7 @@ export const writeSite = defineStep<SiteBrief, SiteDraft>({
   timeoutMs: 45_000,
   maxAttempts: 2,
   async run(ctx) {
-    const drafted = await draftSite(ctx.userId, ctx.input, { model: ctx.profile.model, signal: ctx.signal });
+    const drafted = await draftSite(ctx.userId, ctx.input, { tier: tierForPlan(ctx.profile.plan), signal: ctx.signal });
     return done(
       { siteId: null, brief: ctx.input, content: drafted.content, extraSource: [], generator: drafted.generator, model: drafted.model },
       drafted.generator === "ai" ? "Texto listo, solo con lo que me contaste." : "La armé con tus palabras (la IA no estaba disponible).",
@@ -73,7 +74,12 @@ export const reviseExistingSite = defineStep<SiteUpdateInput, SiteDraft>({
   async run(ctx) {
     const site = await findOwnedSite(ctx.userId, ctx.input.site);
     if (site.status === "ARCHIVED") throw new AppError(409, "site_archived", "Esa página está retirada. Pídeme una nueva.");
-    const revised = await reviseSite(ctx.userId, site, { changes: ctx.input.changes, contact: ctx.input.contact }, { model: ctx.profile.model, signal: ctx.signal });
+    const revised = await reviseSite(
+      ctx.userId,
+      site,
+      { changes: ctx.input.changes, contact: ctx.input.contact },
+      { tier: tierForPlan(ctx.profile.plan), signal: ctx.signal },
+    );
     return done(
       { siteId: site.id, brief: revised.brief, content: revised.content, extraSource: revised.extraSource, generator: revised.generator, model: revised.model },
       revised.generator === "ai" ? "Cambios aplicados al texto." : "Actualicé tus datos de contacto.",

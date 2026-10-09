@@ -7,7 +7,7 @@ export const ALERT_TOOL_NAME = "redactar_alerta";
 
 export const ALERT_SYSTEM_PROMPT = [
   "Redactas avisos breves de bajadas de precio para OmniAgent, un asistente personal en español neutro.",
-  "Entrega el resultado SOLO llamando a la herramienta redactar_alerta.",
+  "Entrega el resultado SOLO en el formato estructurado indicado, sin texto aparte.",
   "",
   "Reglas:",
   "1. Usa solo las cifras de los datos. No calcules cifras nuevas (ni ahorros, ni cuotas, ni porcentajes distintos) y no inventes fechas, tiendas ni existencias.",

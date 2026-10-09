@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { FormReview } from "@/components/procedures/form-review";
 import { requireUser } from "@/lib/auth";
-import { env } from "@/lib/env";
 import { AppError } from "@/lib/errors";
+import { aiConfigured } from "@/modules/ai/ai.service";
 import { storedExtraction } from "@/modules/procedures/documents/documents.service";
 import { getProcedure, userTimeZone } from "@/modules/procedures/plan";
 
@@ -33,7 +33,7 @@ export default async function FormPage({ params }: { params: Params }) {
       documentId={stored.templateId}
       initial={stored.extraction}
       aiPending={stored.aiPending}
-      aiAvailable={Boolean(env().ANTHROPIC_API_KEY)}
+      aiAvailable={aiConfigured()}
       timeZone={timeZone}
       procedure={procedure}
     />

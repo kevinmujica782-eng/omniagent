@@ -7,7 +7,9 @@ import { env } from "@/lib/env";
 import { AppError, Errors } from "@/lib/errors";
 import { log } from "@/lib/log";
 import { isUuid } from "@/lib/validation";
+import { aiConfigured } from "@/modules/ai/ai.service";
 import { startOfMonthUtc } from "@/modules/billing/entitlements";
+import type { AITier } from "@/types/ai";
 import { writeSiteCopy } from "./sites.ai";
 import { SLUG_PATTERN, assembleContent, copyOf, copyText, rulesCopy, siteSourceText, slugBase, slugFor } from "./sites.rules";
 import {
@@ -74,12 +76,12 @@ export interface DraftedSite {
   model: string | null;
 }
 
-/** Escribe la página: con IA si está configurada; si la IA falla, por reglas (solo con los datos de la persona). */
-export async function draftSite(userId: string, brief: SiteBrief, opts: { model: string; signal?: AbortSignal }): Promise<DraftedSite> {
-  if (env().ANTHROPIC_API_KEY) {
+/** Escribe la página: con IA si hay algún proveedor configurado; si la IA falla, por reglas (solo con los datos de la persona). */
+export async function draftSite(userId: string, brief: SiteBrief, opts: { tier: AITier; signal?: AbortSignal }): Promise<DraftedSite> {
+  if (aiConfigured()) {
     try {
-      const copy = await writeSiteCopy({ userId, brief, model: opts.model, signal: opts.signal, source: siteSourceText(brief) });
-      return { content: assembleContent(brief, copy), generator: "ai", model: opts.model };
+      const written = await writeSiteCopy({ userId, brief, tier: opts.tier, signal: opts.signal, source: siteSourceText(brief) });
+      return { content: assembleContent(brief, written.copy), generator: "ai", model: written.model };
     } catch (error) {
       // Si se cortó por tiempo, que el motor lo reintente; si la IA se negó, la persona tiene que saberlo.
       if (opts.signal?.aborted) throw opts.signal.reason ?? error;
@@ -112,7 +114,7 @@ export async function reviseSite(
   userId: string,
   site: Site,
   request: SiteChangeRequest,
-  opts: { model: string; signal?: AbortSignal },
+  opts: { tier: AITier; signal?: AbortSignal },
 ): Promise<DraftedSite & { brief: SiteBrief; extraSource: string[] }> {
   const stored = briefOf(site);
   const current = contentOf(site.pendingContent) ?? contentOf(site.content);
@@ -121,20 +123,26 @@ export async function reviseSite(
   const currentCopy = copyOf(current);
   const extraSource = [copyText(currentCopy), request.changes];
 
-  if (!env().ANTHROPIC_API_KEY) {
+  if (!aiConfigured()) {
     if (!request.contact) throw Errors.notConfigured("Cambiar el texto de la página con IA");
     return { content: assembleContent({ ...brief, palette: current.palette }, currentCopy), generator: "rules", model: null, brief, extraSource };
   }
-  const copy = await writeSiteCopy({
+  const written = await writeSiteCopy({
     userId,
     brief,
-    model: opts.model,
+    tier: opts.tier,
     signal: opts.signal,
     source: siteSourceText(brief, extraSource),
     revise: { current: currentCopy, changes: request.changes },
   });
   // La paleta la decide el texto nuevo (la persona pudo pedir otros colores).
-  return { content: assembleContent({ ...brief, palette: copy.palette }, copy), generator: "ai", model: opts.model, brief, extraSource };
+  return {
+    content: assembleContent({ ...brief, palette: written.copy.palette }, written.copy),
+    generator: "ai",
+    model: written.model,
+    brief,
+    extraSource,
+  };
 }
 
 // ── Guardar y publicar ───────────────────────────────────────────────────────

@@ -1,17 +1,16 @@
 import "server-only";
-import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { Prisma, UserDocument } from "@/generated/prisma/client";
 import type { DocumentKind } from "@/generated/prisma/enums";
 import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
-import { env } from "@/lib/env";
 import { Errors } from "@/lib/errors";
 import { firstName } from "@/lib/format";
 import { isUuid } from "@/lib/validation";
 import { proposeAction } from "@/modules/actions/actions.service";
-import { anthropic } from "@/modules/agent/anthropic";
+import { aiConfigured, generateStructured, tierForPlan } from "@/modules/ai/ai.service";
 import { getEntitlements, monthlyFormReads } from "@/modules/billing/entitlements";
+import type { AIProviderId, AITier } from "@/types/ai";
 import type { ApprovalCard, FormCard, FormDocumentView, FormExtractionView } from "@/types/cards";
 import {
   FORM_SYSTEM_PROMPT,
@@ -29,8 +28,9 @@ import type { PdfInspection } from "./pdf-types";
 import { loadPersonalRecords, upsertPersonalFields } from "./personal-data.service";
 import { activeStorageDriver, deleteObject, getObject, putObject, safeFileName, type StorageDriver } from "./storage";
 
-// Documentos del módulo de trámites: guardar PDFs (adjuntos o subidos), leer sus campos con Claude
-// (o con reglas), rellenarlos con los datos del usuario y preparar la respuesta con el PDF adjunto.
+// Documentos del módulo de trámites: guardar PDFs (adjuntos o subidos), leer sus campos con IA (router de IA: el
+// PDF completo va al proveedor, Claude primero) o con reglas, rellenarlos con los datos del usuario y preparar la
+// respuesta con el PDF adjunto.
 
 type TemplateData = {
   version: 1;
@@ -119,40 +119,28 @@ async function mailContextFor(doc: UserDocument): Promise<{ context: MailContext
   };
 }
 
-async function callClaude(
+/** El PDF completo y las indicaciones a la IA (solo proveedores que leen PDF). Lanza si falla o no pasa la validación. */
+async function extractWithAI(
+  userId: string,
   bytes: Uint8Array,
   fileName: string,
   prompt: string,
-  model: string,
-): Promise<{ output: FormOutput; usage: { input: number; output: number } }> {
-  const schema = z.toJSONSchema(formSchema, { io: "input" }) as Record<string, unknown>;
-  delete schema.$schema;
-  const tool: Anthropic.Tool = {
+  tier: AITier,
+): Promise<{ output: FormOutput; provider: AIProviderId; model: string }> {
+  const result = await generateStructured({
+    schema: formSchema,
     name: FORM_TOOL_NAME,
-    description: "Registra el formulario, el valor propuesto para cada campo y lo que falta hacer.",
-    input_schema: schema as unknown as Anthropic.Tool["input_schema"],
-  };
-  const response = await anthropic().messages.create({
-    model,
-    max_tokens: 4000,
-    system: [{ type: "text", text: FORM_SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
-    tools: [tool],
-    tool_choice: { type: "tool", name: FORM_TOOL_NAME },
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "document", source: { type: "base64", media_type: "application/pdf", data: Buffer.from(bytes).toString("base64") }, title: fileName },
-          { type: "text", text: prompt },
-        ],
-      },
+    system: FORM_SYSTEM_PROMPT,
+    prompt: [
+      { type: "file", mediaType: "application/pdf", data: Buffer.from(bytes).toString("base64"), filename: fileName },
+      { type: "text", text: prompt },
     ],
+    tier,
+    maxOutputTokens: 4000,
+    // Cuenta contra las lecturas con IA del plan: solo si la lectura sirvió (como antes).
+    usage: { userId, module: "PROCEDURES", kind: "document", logOn: "success" },
   });
-  const block = response.content.find((b) => b.type === "tool_use" && b.name === FORM_TOOL_NAME);
-  if (!block || block.type !== "tool_use") throw new Error("El modelo no devolvió el formulario.");
-  const parsed = formSchema.safeParse(block.input);
-  if (!parsed.success) throw new Error(`Formulario inválido: ${parsed.error.issues.map((i) => i.path.join(".")).join(", ")}`);
-  return { output: parsed.data, usage: { input: response.usage.input_tokens, output: response.usage.output_tokens } };
+  return { output: result.value, provider: result.provider, model: result.model };
 }
 
 async function latestCopy(documentId: string) {
@@ -173,7 +161,7 @@ export async function extractForm(userId: string, documentId: string, opts: { pr
   if (doc.mimeType !== "application/pdf") throw Errors.badRequest("Por ahora solo leo formularios en PDF.");
 
   const stored = doc.extractedData as unknown as TemplateData | null;
-  const wantsAI = opts.preferAI && Boolean(env().ANTHROPIC_API_KEY);
+  const wantsAI = opts.preferAI && aiConfigured();
   if (stored?.version === 1 && !opts.force && !(wantsAI && stored.extraction.source === "RULES" && stored.note === null)) {
     return withCopy(stored.extraction, documentId, stored.note);
   }
@@ -210,20 +198,10 @@ export async function extractForm(userId: string, documentId: string, opts: { pr
     } else {
       try {
         const prompt = buildFormPrompt({ inspection, records, mail: mail?.context ?? null, now, timeZone });
-        const result = await callClaude(bytes, doc.fileName, prompt, entitlements.model);
+        const result = await extractWithAI(userId, bytes, doc.fileName, prompt, tierForPlan(entitlements.plan));
         output = result.output;
         source = "AI";
-        model = entitlements.model;
-        await prisma.aiUsageLog.create({
-          data: {
-            userId,
-            module: "PROCEDURES",
-            kind: "document",
-            model: entitlements.model,
-            inputTokens: result.usage.input,
-            outputTokens: result.usage.output,
-          },
-        });
+        model = result.model;
       } catch (error) {
         console.error("[documents] la lectura con IA falló; se usan reglas", error);
         note = "La lectura con IA falló; lo llené con reglas.";
