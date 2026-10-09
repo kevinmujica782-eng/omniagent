@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answeredByLine, autoProviderOf, planModelOf } from "@/lib/ai-copy";
+import { answeredByLine, autoProviderOf, modelLabel, planModelOf } from "@/lib/ai-copy";
 import { runToolLoop, type ToolLoopInput, type ToolOutcome } from "@/modules/agent/tool-loop";
 import { anthropicModel, geminiModel, openAIModel, preferredProviderOf } from "@/modules/ai/ai.catalog";
 import { AIProviderError } from "@/modules/ai/ai.errors";
@@ -293,6 +293,18 @@ describe("modelo de IA: textos y preferencia", () => {
     // Claude va primero en el orden pero no tiene llave: en automático responde ChatGPT.
     expect(autoProviderOf(view)).toBe("openai");
     expect(autoProviderOf({ ...view, providers: [] })).toBeNull();
+  });
+
+  it("muestra cada modelo con el nombre que le da su proveedor", () => {
+    expect(modelLabel("claude-haiku-4-5-20251001")).toBe("Claude Haiku 4.5");
+    expect(modelLabel("claude-sonnet-5-5")).toBe("Claude Sonnet 5.5");
+    expect(modelLabel("gpt-6-luna")).toBe("GPT-6 Luna");
+    expect(modelLabel("gpt-6.1-sol")).toBe("GPT-6.1 Sol");
+    expect(modelLabel("gemini-3.5-flash-lite")).toBe("Gemini 3.5 Flash-Lite");
+    expect(modelLabel("gemini-3.8-flash")).toBe("Gemini 3.8 Flash");
+    expect(modelLabel("grok-4.7")).toBe("Grok 4.7");
+    // Un modelo configurado con otra forma se muestra tal cual.
+    expect(modelLabel("mi-modelo-propio")).toBe("mi-modelo-propio");
   });
 
   it("lee la preferencia guardada en el perfil", () => {

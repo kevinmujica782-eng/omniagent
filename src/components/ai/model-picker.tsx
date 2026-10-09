@@ -2,7 +2,7 @@
 
 import { Check, LoaderCircle } from "lucide-react";
 import { useState } from "react";
-import { autoProviderOf, planModelOf } from "@/lib/ai-copy";
+import { autoProviderOf, modelLabel, planModelOf } from "@/lib/ai-copy";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { AI_PROVIDER_LABEL, type AIModelsView, type AIProviderId } from "@/types/ai";
@@ -42,15 +42,18 @@ function rowsOf(view: AIModelsView): Row[] {
       note: "Recomendado",
       disabled: false,
     },
-    ...byRouterOrder(view).map((provider) => ({
-      id: provider.id,
-      title: provider.assistant,
-      detail: provider.configured
-        ? `De ${provider.company}. Usa ${planModelOf(provider) ?? "su modelo rápido"}.`
-        : `De ${provider.company}. Todavía no está disponible en Omni.`,
-      note: provider.configured && !provider.available ? "Sin respuesta ahora" : null,
-      disabled: !provider.configured,
-    })),
+    ...byRouterOrder(view).map((provider) => {
+      const model = planModelOf(provider);
+      return {
+        id: provider.id,
+        title: provider.assistant,
+        detail: provider.configured
+          ? `De ${provider.company}. Usa ${model ? modelLabel(model) : "su modelo rápido"}.`
+          : `De ${provider.company}. Todavía no está disponible en Omni.`,
+        note: provider.configured && !provider.available ? "Sin respuesta ahora" : null,
+        disabled: !provider.configured,
+      };
+    }),
   ];
 }
 

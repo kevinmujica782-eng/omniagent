@@ -21,6 +21,25 @@ export function planModelOf(provider: AIProviderOption): string | null {
   return (allowed.find((model) => model.tier === "smart") ?? allowed.find((model) => model.tier === "fast"))?.model ?? null;
 }
 
+const capitalize = (word: string) => word.charAt(0).toUpperCase() + word.slice(1);
+
+/**
+ * El nombre del modelo como lo escribe cada proveedor: «claude-haiku-4-5-20251001» → «Claude Haiku 4.5»,
+ * «gpt-6.1-sol» → «GPT-6.1 Sol», «gemini-3.5-flash-lite» → «Gemini 3.5 Flash-Lite», «grok-4.7» → «Grok 4.7». Los
+ * modelos se configuran por variables: uno con otra forma se muestra tal cual.
+ */
+export function modelLabel(id: string): string {
+  const claude = /^claude-([a-z]+)-(\d+)-(\d+)(?:-\d{8})?$/.exec(id);
+  if (claude) return `Claude ${capitalize(claude[1])} ${claude[2]}.${claude[3]}`;
+  const gpt = /^gpt-(\d+(?:\.\d+)?)(?:-([a-z]+))?$/.exec(id);
+  if (gpt) return `GPT-${gpt[1]}${gpt[2] ? ` ${capitalize(gpt[2])}` : ""}`;
+  const gemini = /^gemini-(\d+(?:\.\d+)?)-([a-z]+(?:-[a-z]+)*)$/.exec(id);
+  if (gemini) return `Gemini ${gemini[1]} ${gemini[2].split("-").map(capitalize).join("-")}`;
+  const grok = /^grok-(\d+(?:\.\d+)?)$/.exec(id);
+  if (grok) return `Grok ${grok[1]}`;
+  return id;
+}
+
 /** Quién responde en automático: el primero del orden que está configurado. */
 export function autoProviderOf(view: AIModelsView): AIProviderId | null {
   const configured = new Set(view.providers.filter((provider) => provider.configured).map((provider) => provider.id));
