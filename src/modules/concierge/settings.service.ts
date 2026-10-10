@@ -1,9 +1,9 @@
 import "server-only";
-import type { Prisma } from "@/generated/prisma/client";
 import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { Errors } from "@/lib/errors";
+import { mergePreferences } from "@/lib/preferences";
 import { getEntitlements } from "@/modules/billing/entitlements";
 import type { ConciergeSettingsView } from "@/types/cards";
 import { paymentProvider } from "./payments";
@@ -44,10 +44,7 @@ export async function updatePurchaseLimits(userId: string, input: { perOrderLimi
     throw Errors.badRequest("Elige límites entre 1 y 100.000 por compra y hasta 500.000 al mes.");
   }
   if (perOrder > monthly) throw Errors.badRequest("El límite por compra no puede ser mayor que el mensual.");
-  const profile = await prisma.profile.findUnique({ where: { id: userId }, select: { preferences: true } });
-  const prefs = { ...((profile?.preferences ?? {}) as Preferences) };
-  prefs.concierge = { ...(prefs.concierge ?? {}), perOrderLimit: perOrder, monthlyLimit: monthly };
-  await prisma.profile.update({ where: { id: userId }, data: { preferences: prefs as unknown as Prisma.InputJsonValue } });
+  await mergePreferences(userId, "concierge", { perOrderLimit: perOrder, monthlyLimit: monthly });
   await audit({ userId, actor: "user", action: "concierge.limits", metadata: { perOrder, monthly } });
   return getConciergeSettings(userId);
 }

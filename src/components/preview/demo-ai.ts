@@ -39,7 +39,7 @@ export function demoModelConversation(): ChatMessageView[] {
       role: "assistant",
       text: "Llevas **$486** en Restaurantes este mes, $134 más que tu promedio. Casi la mitad fueron 4 pedidos a domicilio de fin de semana.",
       cards: [],
-      ai: { provider: "openai", model: DEFAULT_MODELS.openai.smart, fallbackFrom: null },
+      ai: { provider: "openai", model: DEFAULT_MODELS.openai.smart, fallbackFrom: null, requested: "openai" },
       createdAt,
     },
     user("demo-ai-3", "¿Y en el súper?"),
@@ -48,7 +48,7 @@ export function demoModelConversation(): ChatMessageView[] {
       role: "assistant",
       text: "En el súper llevas **$612**, casi igual que tu promedio ($598). Ahí no hay nada raro.",
       cards: [],
-      ai: { provider: "gemini", model: DEFAULT_MODELS.gemini.smart, fallbackFrom: "openai" },
+      ai: { provider: "gemini", model: DEFAULT_MODELS.gemini.smart, fallbackFrom: "openai", requested: "openai" },
       createdAt,
     },
   ];

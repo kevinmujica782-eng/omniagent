@@ -101,6 +101,8 @@ export function AccountView({
 }) {
   const pro = billing.plan === "PRO";
   const limits = PLANS[billing.plan];
+  // Si el servidor trae otra vista de modelos (otra elección, otra llave, otro plan), el selector arranca con ella.
+  const modelsKey = [models.plan, models.preference ?? "auto", ...models.providers.map((p) => `${p.id}:${p.configured}`)].join("|");
   return (
     <PageBody>
       <PageHeader title="Cuenta" />
@@ -171,7 +173,7 @@ export function AccountView({
       </Section>
 
       <Section title="Modelo de IA">
-        <ModelPicker initial={models} demo={preview} />
+        <ModelPicker key={modelsKey} initial={models} demo={preview} />
       </Section>
 
       <Section title="Lo que tus agentes hacen solos">

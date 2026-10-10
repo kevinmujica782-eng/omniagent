@@ -20,6 +20,11 @@ const WEATHER_TOOL = {
   description: "El clima de una ciudad",
   parameters: { type: "object", properties: { ciudad: { type: "string" } }, required: ["ciudad"] },
 };
+const NOTE_TOOL = {
+  name: "guardar_nota",
+  description: "Guarda una nota",
+  parameters: { type: "object", properties: { texto: { type: "string" } }, required: ["texto"], additionalProperties: false },
+};
 const REPORT_SCHEMA = { type: "object", properties: { titular: { type: "string", maxLength: 90 } }, required: ["titular"] };
 
 /** Una conversación con una ronda de herramientas hecha por otro proveedor. */
@@ -67,7 +72,7 @@ describe("router de IA: OpenAI (Responses API)", () => {
       callFor(spec, {
         system: "Eres Omni.",
         messages: [{ role: "user", content: [{ type: "text", text: "Lee esto" }, IMAGE, PDF] }],
-        tools: [WEATHER_TOOL],
+        tools: [WEATHER_TOOL, NOTE_TOOL],
         toolChoice: { name: "clima" },
         responseFormat: { type: "json", schema: REPORT_SCHEMA, name: "informe final" },
         reasoning: "low",
@@ -85,7 +90,11 @@ describe("router de IA: OpenAI (Responses API)", () => {
       reasoning: { effort: "low" },
       include: ["reasoning.encrypted_content"],
       tool_choice: { type: "function", name: "clima" },
-      tools: [{ type: "function", name: "clima", description: "El clima de una ciudad", parameters: WEATHER_TOOL.parameters }],
+      // Modo estricto solo con el esquema que lo admite: el clima tiene propiedades abiertas, la nota no.
+      tools: [
+        { type: "function", name: "clima", description: "El clima de una ciudad", parameters: WEATHER_TOOL.parameters, strict: false },
+        { type: "function", name: "guardar_nota", description: "Guarda una nota", parameters: NOTE_TOOL.parameters, strict: true },
+      ],
       text: { format: { type: "json_schema", name: "informe_final", schema: REPORT_SCHEMA, strict: false } },
       input: [
         {
@@ -331,6 +340,26 @@ describe("router de IA: Anthropic (Messages API)", () => {
     ]);
   });
 
+  it("texto en varios bloques: seguidos van juntos; separados por una herramienta, en párrafos", async () => {
+    const { fetch } = fakeFetch([
+      reply([{ type: "text", text: "Gastas " }, { type: "text", text: "$4.212 al mes." }]),
+      reply(
+        [
+          { type: "text", text: "Reviso tus suscripciones." },
+          { type: "tool_use", id: "toolu_1", name: "clima", input: {} },
+          { type: "text", text: "Y también tus gastos." },
+          { type: "tool_use", id: "toolu_2", name: "clima", input: {} },
+        ],
+        { stop_reason: "tool_use" },
+      ),
+    ]);
+    const provider = anthropicProvider({ apiKey: "sk-ant", models: MODELS, fetch });
+    expect((await provider.generate(callFor(haiku))).text).toBe("Gastas $4.212 al mes.");
+    const withTools = await provider.generate(callFor(haiku, { tools: [WEATHER_TOOL] }));
+    expect(withTools.text).toBe("Reviso tus suscripciones.\n\nY también tus gastos.");
+    expect(withTools.toolCalls.map((call) => call.id)).toEqual(["toolu_1", "toolu_2"]);
+  });
+
   it("motivos de fin: tope de tokens, rechazo y ventana de contexto", async () => {
     const { fetch } = fakeFetch([
       reply([{ type: "text", text: "Hasta aquí" }], { stop_reason: "max_tokens" }),
@@ -481,6 +510,32 @@ describe("router de IA: Gemini (generateContent)", () => {
         ],
       },
     ]);
+  });
+
+  it("llamadas sin id: el router inventa ids que no se repiten entre respuestas y no se los devuelve a Gemini", async () => {
+    const call = { candidates: [{ content: { parts: [{ functionCall: { name: "clima", args: { ciudad: "Caracas" } } }] }, finishReason: "STOP" }] };
+    const { fetch, sent } = fakeFetch([{ body: call }, { body: call }, { body: { candidates: [{ content: { parts: [{ text: "Listo" }] }, finishReason: "STOP" }] } }]);
+    const provider = geminiProvider({ apiKey: "k", models: MODELS, fetch });
+    const first = await provider.generate(callFor(flash, { tools: [WEATHER_TOOL] }));
+    const second = await provider.generate(callFor(flash, { tools: [WEATHER_TOOL] }));
+    const [a, b] = [first.toolCalls[0].id, second.toolCalls[0].id];
+    expect(a).toMatch(/^gemini-sin-id-/);
+    expect(b).toMatch(/^gemini-sin-id-/);
+    expect(a).not.toBe(b);
+
+    await provider.generate(
+      callFor(flash, {
+        tools: [WEATHER_TOOL],
+        messages: [
+          { role: "user", content: "Clima" },
+          { role: "assistant", content: "", toolCalls: first.toolCalls },
+          { role: "tool", toolCallId: a, name: "clima", content: "29 grados" },
+        ],
+      }),
+    );
+    const contents = sent[2].body.contents as { parts: Record<string, Record<string, unknown>>[] }[];
+    expect(contents[1].parts[0].functionCall).toEqual({ name: "clima", args: { ciudad: "Caracas" } });
+    expect(contents[2].parts[0].functionResponse).toEqual({ name: "clima", response: { result: "29 grados" } });
   });
 
   it("motivos de fin y pedidos bloqueados", async () => {

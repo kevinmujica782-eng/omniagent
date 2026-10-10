@@ -589,12 +589,15 @@ model AiUsageLog {
   userId          String      @map("user_id") @db.Uuid
   conversationId  String?     @map("conversation_id") @db.Uuid
   module          AgentModule @default(GENERAL)
-  kind            String      @default("chat") // chat | analysis
+  /// chat (un mensaje del plan) | chat_fallback (otro modelo que respondió antes en el mismo turno) | analysis | site | document | page_read...
+  kind            String      @default("chat")
   /// Proveedor que respondió (router de IA): anthropic | openai | gemini | xai.
   provider        String      @default("anthropic")
   model           String
+  /// Tokens de entrada, incluidos los de caché (así desde el router de IA, 9 oct 2026; antes, sin la caché).
   inputTokens     Int         @default(0) @map("input_tokens")
   outputTokens    Int         @default(0) @map("output_tokens")
+  /// Parte de la entrada que el proveedor leyó de su caché.
   cacheReadTokens Int         @default(0) @map("cache_read_tokens")
   toolCalls       Int         @default(0) @map("tool_calls")
   createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)

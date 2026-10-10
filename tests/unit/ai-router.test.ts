@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { anthropicModel, geminiModel, needsOf, openAIModel, parseProviderOrder, xaiModel } from "@/modules/ai/ai.catalog";
 import { AIProviderError, aiErrorToHttp, summarizeFailure } from "@/modules/ai/ai.errors";
-import { AIRouter, CircuitBreaker, cutAtStop, validateRequest, type AttemptEvent, type RouterOptions } from "@/modules/ai/ai.router";
+import { AIRouter, CircuitBreaker, cutAtStop, fallbackReserve, validateRequest, type AttemptEvent, type RouterOptions } from "@/modules/ai/ai.router";
 import type { AIRequestPrompt, ModelProvider, ProviderCall, ProviderResult } from "@/modules/ai/ai.types";
 import { fakeProvider, result } from "../support/ai-fakes";
 
@@ -247,14 +247,39 @@ describe("router de IA: capacidades, plazos y cancelación", () => {
   });
 
   it("un proveedor colgado deja tiempo para el respaldo dentro del plazo total", async () => {
-    // Plazo de 16,6 s: con 15 s guardados para el respaldo, el primero tiene 1,6 s (no sus 30 s).
+    // Plazo de 16,6 s: con 15 s guardados para el respaldo, el primero tiene 1,6 s (no sus 30 s). El mínimo del primer
+    // intento baja a 1,5 s para que la prueba no espere 10 s.
     const stuck = fakeProvider("anthropic", claude, [() => new Promise<ProviderResult>(() => undefined)]);
     const openai = fakeProvider("openai", gpt, [result()]);
-    const { router } = routerWith([stuck, openai]);
+    const { router } = routerWith([stuck, openai], { minPrimaryAttemptMs: 1_500 });
     const started = Date.now();
     const { response } = await router.complete({ ...ask, deadlineMs: 16_600 });
     expect(response.provider).toBe("openai");
     expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it("con poco plazo no guarda tiempo para el respaldo: el que responde usa lo que queda", async () => {
+    expect(fallbackReserve(55_000)).toBe(15_000);
+    expect(fallbackReserve(20_000)).toBe(10_000);
+    expect(fallbackReserve(12_000)).toBe(2_000);
+    expect(fallbackReserve(8_000)).toBe(0);
+    // Una ronda final de herramientas con 9 s: antes el primero se cortaba en 1,5 s y respondía otro.
+    const slow = fakeProvider("anthropic", claude, [() => new Promise<ProviderResult>((resolve) => setTimeout(() => resolve(result()), 1_800))]);
+    const openai = fakeProvider("openai", gpt, [result()]);
+    const { router } = routerWith([slow, openai]);
+    const { response } = await router.complete({ ...ask, deadlineMs: 9_000 });
+    expect(response).toMatchObject({ provider: "anthropic", fallback: false });
+    expect(openai.calls).toHaveLength(0);
+  });
+
+  it("un tiempo agotado por un plazo corto no aparta al proveedor", async () => {
+    const stuck = () => new Promise<ProviderResult>(() => undefined);
+    const anthropic = fakeProvider("anthropic", claude, [stuck, stuck, stuck]);
+    const openai = fakeProvider("openai", gpt, [result(), result(), result()]);
+    const { router } = routerWith([anthropic, openai]);
+    for (let i = 0; i < 3; i++) await router.complete({ ...ask, timeoutMs: 30 });
+    expect(anthropic.calls).toHaveLength(3);
+    expect(router.breakerStatus("anthropic")).toBe("closed");
   });
 
   it("con provider auto y sin respaldo, usa el primero que está respondiendo", async () => {

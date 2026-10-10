@@ -165,13 +165,15 @@ export function parseGeminiResponse(call: ProviderCall, body: unknown, wrapped: 
   const parts = Array.isArray(content.parts) ? content.parts.filter(isRecord) : [];
   let text = "";
   const toolCalls: AIToolCall[] = [];
+  // Ids inventados únicos en la conversación: si después responde otro proveedor, Claude y OpenAI piden ids sin repetir.
+  const generatedPrefix = `${GENERATED_ID}${globalThis.crypto.randomUUID().slice(0, 8)}-`;
   for (const part of parts) {
     if (part.thought === true) continue;
     if (typeof part.text === "string") text += part.text;
     if (isRecord(part.functionCall)) {
       const fc = part.functionCall;
       toolCalls.push({
-        id: typeof fc.id === "string" && fc.id ? fc.id : `${GENERATED_ID}${toolCalls.length + 1}`,
+        id: typeof fc.id === "string" && fc.id ? fc.id : `${generatedPrefix}${toolCalls.length + 1}`,
         name: String(fc.name ?? ""),
         arguments: isRecord(fc.args) ? fc.args : {},
       });

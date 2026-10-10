@@ -22,6 +22,18 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 1024;
 const MIN_ATTEMPT_MS = 1_500;
 /** Tiempo que se guarda para el respaldo cuando hay otro proveedor después: uno colgado no se come todo el plazo. */
 const FALLBACK_RESERVE_MS = 15_000;
+/**
+ * El intento se lleva al menos esto antes de guardar tiempo para el respaldo. Con un plazo corto (las últimas rondas de
+ * herramientas de un turno del chat) el que está respondiendo usa lo que queda, en vez de cortarse en 1,5 s.
+ */
+const MIN_PRIMARY_ATTEMPT_MS = 10_000;
+/** Un tiempo agotado en un intento más corto que esto (el plazo ya era corto) no cuenta en el cortacircuitos. */
+const BREAKER_MIN_TIMEOUT_MS = 10_000;
+
+/** Lo que se guarda para el respaldo con `remaining` ms de plazo: hasta `reserveMs`, sin dejar al intento con menos de `minPrimaryMs`. */
+export function fallbackReserve(remaining: number, reserveMs = FALLBACK_RESERVE_MS, minPrimaryMs = MIN_PRIMARY_ATTEMPT_MS): number {
+  return Math.max(0, Math.min(reserveMs, remaining - minPrimaryMs));
+}
 const TOOL_NAME = /^[a-zA-Z0-9_-]{1,64}$/;
 
 export interface AttemptEvent {
@@ -53,6 +65,9 @@ export interface RouterOptions {
   maxWaitMs?: number;
   /** Plazo total por defecto (por defecto 55 s: cabe en una función de 60 s). */
   defaultDeadlineMs?: number;
+  /** Tiempo que se guarda para el respaldo (por defecto 15 s) y mínimo del intento antes de guardarlo (10 s). */
+  fallbackReserveMs?: number;
+  minPrimaryAttemptMs?: number;
   breaker?: { threshold?: number; cooldownMs?: number; longCooldownMs?: number };
   onAttempt?: (event: AttemptEvent) => void;
 }
@@ -169,6 +184,8 @@ export class AIRouter {
   private readonly baseDelayMs: number;
   private readonly maxWaitMs: number;
   private readonly defaultDeadlineMs: number;
+  private readonly fallbackReserveMs: number;
+  private readonly minPrimaryAttemptMs: number;
   private readonly onAttempt?: (event: AttemptEvent) => void;
   readonly breaker: CircuitBreaker;
 
@@ -184,6 +201,8 @@ export class AIRouter {
     this.baseDelayMs = options.baseDelayMs ?? 500;
     this.maxWaitMs = options.maxWaitMs ?? 4_000;
     this.defaultDeadlineMs = options.defaultDeadlineMs ?? 55_000;
+    this.fallbackReserveMs = options.fallbackReserveMs ?? FALLBACK_RESERVE_MS;
+    this.minPrimaryAttemptMs = options.minPrimaryAttemptMs ?? MIN_PRIMARY_ATTEMPT_MS;
     this.onAttempt = options.onAttempt;
     this.breaker = new CircuitBreaker(options.breaker);
   }
@@ -262,7 +281,7 @@ export class AIRouter {
 
     for (const [index, candidate] of candidates.entries()) {
       const id = candidate.provider.id;
-      const reserve = index < candidates.length - 1 ? FALLBACK_RESERVE_MS : 0;
+      const last = index === candidates.length - 1;
       for (let attempt = 1; attempt <= this.attemptsPerProvider; attempt++) {
         if (request.signal?.aborted) throw withAttempts(abortError(id, request.signal), attempts);
         const remaining = deadline - this.now();
@@ -270,7 +289,8 @@ export class AIRouter {
           if (errors.length === 0) errors.push(new AIProviderError("timeout", { provider: id, detail: "Se acabó el plazo del pedido." }));
           throw summarizeFailure(attempts, errors);
         }
-        // Si hay otro proveedor después, este intento deja tiempo para el respaldo.
+        // Si hay otro proveedor después, este intento deja tiempo para el respaldo (menos si el plazo ya es corto).
+        const reserve = last ? 0 : fallbackReserve(remaining, this.fallbackReserveMs, this.minPrimaryAttemptMs);
         const timeoutMs = Math.min(request.timeoutMs ?? candidate.spec.timeoutMs, Math.max(MIN_ATTEMPT_MS, remaining - reserve));
         const startedAttempt = this.now();
         try {
@@ -289,7 +309,8 @@ export class AIRouter {
           const latencyMs = this.now() - startedAttempt;
           attempts.push({ provider: id, model: candidate.spec.id, ok: false, error: failure.code, latencyMs });
           errors.push(failure);
-          this.breaker.failure(id, failure, this.now());
+          // Cortado antes de tiempo por un plazo corto: no dice nada de la salud del proveedor.
+          if (failure.code !== "timeout" || timeoutMs >= BREAKER_MIN_TIMEOUT_MS) this.breaker.failure(id, failure, this.now());
           this.emit({
             provider: id,
             model: candidate.spec.id,

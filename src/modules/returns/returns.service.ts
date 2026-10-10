@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { Errors } from "@/lib/errors";
 import { money, shortDate } from "@/lib/format";
+import { mergePreferences } from "@/lib/preferences";
 import { defaultDesired, desiredOptions, OUTCOME_LABEL, REASON_LABEL } from "@/lib/returns-copy";
 import { isUuid } from "@/lib/validation";
 import { proposeAction, toApprovalCard } from "@/modules/actions/actions.service";
@@ -322,11 +323,8 @@ async function scanMail(ctx: Ctx, now: Date): Promise<{ created: number; updated
     }
   }
 
-  // Se relee justo antes de guardar para no pisar otros cambios en las preferencias.
-  const fresh = await prisma.profile.findUnique({ where: { id: ctx.userId }, select: { preferences: true } });
-  const prefs = { ...((fresh?.preferences ?? {}) as Prefs) };
-  prefs.returns = { ...(prefs.returns ?? {}), mailCursor: messages[messages.length - 1].createdAt.toISOString() };
-  await prisma.profile.update({ where: { id: ctx.userId }, data: { preferences: prefs as unknown as Prisma.InputJsonValue } });
+  // Solo el cursor, en una sola sentencia: no pisa otros cambios en las preferencias hechos mientras tanto.
+  await mergePreferences(ctx.userId, "returns", { mailCursor: messages[messages.length - 1].createdAt.toISOString() });
   return counts;
 }
 

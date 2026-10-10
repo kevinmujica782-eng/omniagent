@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { answeredByLine, autoProviderOf, modelLabel, planModelOf } from "@/lib/ai-copy";
-import { runToolLoop, type ToolLoopInput, type ToolOutcome } from "@/modules/agent/tool-loop";
+import { resolveProvider, runToolLoop, type ToolLoopInput, type ToolOutcome } from "@/modules/agent/tool-loop";
 import { anthropicModel, geminiModel, openAIModel, preferredProviderOf } from "@/modules/ai/ai.catalog";
 import { AIProviderError } from "@/modules/ai/ai.errors";
 import { AIRouter, type RoutedResult } from "@/modules/ai/ai.router";
@@ -167,14 +167,48 @@ describe("chat del agente: el modelo elegido y el respaldo", () => {
     expect(openai.calls[1].request.messages[1]).toMatchObject({ role: "assistant", state: { provider: "openai", data: ["rs_1"] } });
   });
 
-  it("si el modelo elegido no tiene llave, responde el automático sin marcarlo como respaldo", async () => {
-    const anthropic = fakeProvider("anthropic", claude, [result({ text: "Hola." })]);
-    const openai = fakeProvider("openai", gpt, [], { configured: false });
-    const { router } = routerWith([anthropic, openai]);
-    const { input } = loopInput((request) => router.complete(request), { provider: "openai" });
+  it("a quién pedirle: el elegido si tiene llave; si no, el primero del orden", () => {
+    expect(resolveProvider(["anthropic", "openai"], "openai")).toEqual({ requested: "openai", expected: "openai" });
+    expect(resolveProvider(["anthropic", "openai"], null)).toEqual({ requested: null, expected: "anthropic" });
+    // Le quitaron la llave al elegido: responde el automático, sin marcarlo como respaldo.
+    expect(resolveProvider(["anthropic"], "openai")).toEqual({ requested: null, expected: "anthropic" });
+    expect(resolveProvider([], "gemini")).toEqual({ requested: null, expected: null });
+  });
 
-    const out = await runToolLoop(input);
-    expect(out).toMatchObject({ provider: "anthropic", fallbackFrom: null });
+  it("si el elegido está apartado (sin cuota), responde otro y queda dicho cuál faltó", async () => {
+    const google = fakeProvider("gemini", gemini, [new AIProviderError("quota_exceeded", { provider: "gemini" })]);
+    const anthropic = fakeProvider("anthropic", claude, [result({ text: "Uno." }), result({ text: "Dos." })]);
+    const { router } = routerWith([anthropic, google]);
+    // Primer turno: Gemini se queda sin cuota y el router lo aparta por un rato.
+    const first = await runToolLoop(loopInput((request) => router.complete(request), { provider: "gemini" }).input);
+    expect(first).toMatchObject({ provider: "anthropic", fallbackFrom: "gemini" });
+    // Segundo turno: el router ni lo intenta (va al final), pero igual se dice que respondió otro.
+    const second = await runToolLoop(loopInput((request) => router.complete(request), { provider: "gemini" }).input);
+    expect(google.calls).toHaveLength(1);
+    expect(second).toMatchObject({ text: "Dos.", provider: "anthropic", fallbackFrom: "gemini" });
+  });
+
+  it("en automático, si el primero del orden está apartado, también se dice", async () => {
+    const anthropic = fakeProvider("anthropic", claude, [new AIProviderError("auth_failed", { provider: "anthropic" })]);
+    const openai = fakeProvider("openai", gpt, [result(), result()]);
+    const { router } = routerWith([anthropic, openai]);
+    await router.complete({ messages: [{ role: "user", content: "Hola" }] });
+    const out = await runToolLoop(loopInput((request) => router.complete(request), { provider: "anthropic" }).input);
+    expect(anthropic.calls).toHaveLength(1);
+    expect(out).toMatchObject({ provider: "openai", fallbackFrom: "anthropic" });
+  });
+
+  it("si cambia de proveedor a mitad del turno, cada uno queda con su consumo", async () => {
+    const anthropic = fakeProvider("anthropic", claude, [asksTools(toolCall("t1")), new AIProviderError("provider_unavailable", { provider: "anthropic", retryable: false })]);
+    const openai = fakeProvider("openai", gpt, [result({ text: "Listo.", usage: { ...EMPTY_USAGE, inputTokens: 40, outputTokens: 8, totalTokens: 48 } })]);
+    const { router } = routerWith([anthropic, openai]);
+    const out = await runToolLoop(loopInput((request) => router.complete(request), { provider: "anthropic" }).input);
+    expect(out).toMatchObject({ text: "Listo.", provider: "openai", fallbackFrom: "anthropic" });
+    expect(out.usageByModel).toEqual([
+      { provider: "anthropic", model: "claude-haiku-4-5-20251001", input: 10, output: 5, cached: 0 },
+      { provider: "openai", model: "gpt-6-luna", input: 40, output: 8, cached: 0 },
+    ]);
+    expect(out.usage).toEqual({ input: 50, output: 13, cached: 0 });
   });
 });
 
@@ -245,14 +279,18 @@ describe("chat del agente: tiempo del turno", () => {
 });
 
 describe("modelo de IA: textos y preferencia", () => {
-  it("marca quién respondió solo si no es el modelo de siempre o si hubo respaldo", () => {
+  it("marca quién respondió: el elegido en Cuenta o el respaldo; en automático sin respaldo, nada", () => {
     expect(answeredByLine(undefined)).toBeNull();
-    expect(answeredByLine({ provider: "anthropic", model: "claude-sonnet-5-5", fallbackFrom: null })).toBeNull();
-    expect(answeredByLine({ provider: "openai", model: "gpt-6.1-sol", fallbackFrom: null })).toBe("Respondió ChatGPT");
-    expect(answeredByLine({ provider: "gemini", model: "gemini-3.8-flash", fallbackFrom: "openai" })).toBe(
+    // Automático: el primero del orden respondió (sea Claude u otro, según AI_PROVIDER_ORDER).
+    expect(answeredByLine({ provider: "anthropic", model: "claude-sonnet-5-5", fallbackFrom: null, requested: null })).toBeNull();
+    expect(answeredByLine({ provider: "openai", model: "gpt-6.1-sol", fallbackFrom: null, requested: null })).toBeNull();
+    // Eligió ChatGPT y respondió ChatGPT.
+    expect(answeredByLine({ provider: "openai", model: "gpt-6.1-sol", fallbackFrom: null, requested: "openai" })).toBe("Respondió ChatGPT");
+    // Respaldo, elegido o automático.
+    expect(answeredByLine({ provider: "gemini", model: "gemini-3.8-flash", fallbackFrom: "openai", requested: "openai" })).toBe(
       "Respondió Gemini porque ChatGPT no estaba disponible",
     );
-    expect(answeredByLine({ provider: "anthropic", model: "claude-sonnet-5-5", fallbackFrom: "xai" })).toBe(
+    expect(answeredByLine({ provider: "anthropic", model: "claude-sonnet-5-5", fallbackFrom: "xai", requested: null })).toBe(
       "Respondió Claude porque Grok no estaba disponible",
     );
   });

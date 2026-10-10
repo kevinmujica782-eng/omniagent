@@ -150,17 +150,19 @@ El router solo manda a cada proveedor lo que este puede atender. Por ejemplo, un
 - Opus y Sonnet 5.5, Fable y Mythos responden 400 si se les fuerza una herramienta. Con ellos el JSON va por salida estructurada (`output_config.format`).
 - Si un modelo deja de aceptar la herramienta forzada, el adaptador repite el pedido con salida estructurada.
 - Los límites de largo y de cifras del esquema pasan a la descripción, porque la salida estructurada no los acepta.
+- Varios bloques de texto seguidos se unen tal cual; si una herramienta los separa, van en párrafos distintos.
 
 **OpenAI**
 
 - Usa la Responses API, porque con GPT-6 las herramientas solo funcionan ahí.
+- Cada herramienta va con `strict` explícito: `true` solo si su esquema lo admite (todo requerido, sin propiedades extra). Las de Omni tienen campos opcionales, así que van con `false`; no se deja al valor por defecto de la API.
 - Corre sin estado en OpenAI (`store: false`). Para seguir una ronda de herramientas, se le devuelven sus propios elementos de salida, con el razonamiento cifrado incluido.
 - `max_output_tokens` incluye el razonamiento, así que el router suma una reserva al máximo pedido. Solo se cobra lo que se usa.
 
 **Gemini**
 
 - Gemini 3 exige recibir de vuelta la firma de pensamiento de sus llamadas a funciones. Para llamadas que hizo otro proveedor se usa el valor que documenta Google para saltar esa validación.
-- Cada respuesta de función lleva el `id` de su llamada, y todas van juntas en un solo turno.
+- Cada respuesta de función lleva el `id` de su llamada, y todas van juntas en un solo turno. Si un modelo no devuelve ids, el router los inventa sin repetir entre respuestas (Claude y OpenAI los exigen únicos si después responden ellos) y no se los devuelve a Gemini.
 - El JSON se pide con `responseMimeType` + `responseSchema`, en el subconjunto de OpenAPI. Si la API ya no los acepta, se repite con `responseFormat`.
 
 **xAI**
@@ -201,7 +203,8 @@ El router solo manda a cada proveedor lo que este puede atender. Por ejemplo, un
   - Sin cuota, con la llave inválida o con un modelo inexistente, queda fuera 5 minutos, salvo que no haya otro.
   - Es por instancia del servidor.
 - **Plazos:**
-  - Cada intento tiene su tope: 30 s en el nivel rápido y 45–50 s en el capaz. Si hay otro proveedor después, el intento deja 15 s del plazo total para el respaldo: uno colgado no se come todo el tiempo.
+  - Cada intento tiene su tope: 30 s en el nivel rápido y 45–50 s en el capaz. Si hay otro proveedor después, el intento deja hasta 15 s del plazo total para el respaldo: uno colgado no se come todo el tiempo. Ese tiempo nunca deja al intento con menos de 10 s: con un plazo de 20 s se guardan 10, y con menos de 10 s no se guarda nada.
+  - Un tiempo agotado en un intento de menos de 10 s (porque el plazo ya era corto) no cuenta en el cortacircuitos.
   - En el motor (pasos de 45 s), el informe de finanzas y las páginas web usan un plazo de 42 s; la lectura de formularios, 55 s (su ruta tiene 60 s).
   - Todo el pedido tiene un plazo total: 50 s en la API, dentro de los 60 s de una función de Netlify.
   - Si la persona cierra la app, se corta la llamada al proveedor.
@@ -227,12 +230,13 @@ El chat y el asistente de Omni también van por el router (`modules/agent/run-ag
 
 - **Rondas de herramientas:** el modelo pide herramientas, Omni las ejecuta y le devuelve los resultados, hasta 6 rondas. Si hace falta más, Omni pide dividir el pedido.
 - **Mismo proveedor en todo el turno:** después de la primera respuesta, las rondas siguientes van al proveedor que respondió, porque su estado (razonamiento, firmas) solo le sirve a él. Si ese proveedor falla a mitad del turno, el router sigue con otro.
-- **Respaldo:** si el primero no responde, contesta el siguiente del orden. El chat lo dice bajo la respuesta: «Respondió Gemini porque ChatGPT no estaba disponible».
-- **Tiempo:** el turno tiene 52 s (la ruta tiene 60). Cada ronda recibe lo que queda como plazo del router y no se empieza una con menos de 3 s.
+- **Respaldo:** si el que se pidió no responde, contesta el siguiente del orden. El que se pide es el modelo que eligió la persona o, en automático, el primero del orden con llave. El chat lo dice bajo la respuesta («Respondió Gemini porque ChatGPT no estaba disponible»), también cuando el router ni lo intentó porque lo tenía apartado (sin cuota, por ejemplo).
+- **Tiempo:** el turno tiene 52 s (la ruta tiene 60). Cada ronda recibe lo que queda como plazo del router y no se empieza una con menos de 6 s. Con poco plazo el router no guarda tiempo para el respaldo (ver «Plazos»): en las últimas rondas, el que está respondiendo usa lo que queda.
 - **Nada se pierde:** si se acaba el tiempo o ningún proveedor responde después de ejecutar herramientas, el turno guarda lo que hicieron (sus tarjetas, por ejemplo una baja por aprobar) con un aviso para retomarlo. Queda en el log `agent.turn_interrupted`.
 - **Caché:** las instrucciones van por partes. Claude guarda en caché las herramientas y la parte fija del prompt entre turnos, y la memoria entre las rondas de un turno. OpenAI y Gemini reciben las partes unidas y hacen su caché solos.
-- **Consumo:** cada turno queda en `ai_usage_logs` con el proveedor y el modelo que respondieron, y cuenta como un mensaje del plan.
-- **Quién respondió:** se guarda con el mensaje (`content.ai`: proveedor, modelo y, si hubo respaldo, cuál falló) y vuelve en el historial como `ai` en `ChatMessageView`.
+- **Consumo:** cada turno queda en `ai_usage_logs` con el proveedor y el modelo que dieron la respuesta (`kind: "chat"`), y cuenta como un mensaje del plan. Si a mitad del turno respondió otro modelo antes, lo suyo queda aparte con `kind: "chat_fallback"`, que no cuenta otro mensaje.
+- **Quién respondió:** se guarda con el mensaje (`content.ai`: proveedor, modelo, cuál falló si hubo respaldo y cuál eligió la persona) y vuelve en el historial como `ai` en `ChatMessageView`. El chat lo muestra si hubo respaldo o si respondió el modelo elegido; en automático, sin respaldo, no muestra nada.
+- **Errores:** si un proveedor rechaza el pedido (`invalid_request`), el chat responde 502 «Omni no pudo responder ese mensaje…», porque el pedido lo arma Omni y no es algo que la persona arregle en su texto. El detalle queda en el log.
 
 ### El modelo que elige la persona
 
@@ -242,7 +246,7 @@ En Cuenta → Modelo de IA, la persona elige **Automático** (recomendado) o un 
 - **Un proveedor:** el chat lo usa primero y, si no responde, contesta otro para no dejar a la persona sin respuesta. El chat marca quién respondió cuando no es Claude.
 - **Nivel:** cada proveedor usa el nivel del plan: el rápido en Gratis y el capaz en Pro.
 
-`PUT /api/v1/ai/preference` guarda la elección en `profiles.preferences.ai.provider` (`null` es automático) y devuelve la vista de modelos actualizada:
+`PUT /api/v1/ai/preference` guarda la elección en `profiles.preferences.ai.provider` (`null` es automático) y devuelve la vista de modelos actualizada. Se guarda con una sola sentencia que solo toca esa clave (`mergePreferences`, en `src/lib/preferences.ts`), así no pisa otras preferencias que cambien a la vez:
 
 ```json
 { "provider": "openai" }

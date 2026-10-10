@@ -162,10 +162,17 @@ export function parseAnthropicResponse(call: ProviderCall, body: unknown, mode: 
   let text = "";
   let json: unknown;
   const toolCalls: AIToolCall[] = [];
+  // Bloques de texto seguidos van juntos (son un mismo texto); separados por otro bloque (una herramienta), en párrafos.
+  let afterOtherBlock = false;
   for (const block of content) {
     if (block.type === "text" && typeof block.text === "string") {
+      if (afterOtherBlock && text && block.text) text += "\n\n";
       text += block.text;
-    } else if (block.type === "tool_use") {
+      afterOtherBlock = false;
+      continue;
+    }
+    afterOtherBlock = true;
+    if (block.type === "tool_use") {
       const input = isRecord(block.input) ? block.input : {};
       if (mode.kind === "tool" && block.name === mode.name) json = mode.wrapped ? input.value : input;
       else toolCalls.push({ id: String(block.id ?? `toolu_${toolCalls.length + 1}`), name: String(block.name ?? ""), arguments: input });

@@ -2,17 +2,17 @@
 import { AI_PROVIDER_LABEL, type AIModelsView, type AIProviderId, type AIProviderOption } from "@/types/ai";
 import type { AnsweredBy } from "@/types/cards";
 
-/** El proveedor de siempre: con él no se marca quién respondió. */
-const USUAL_PROVIDER: AIProviderId = "anthropic";
-
-/** Bajo una respuesta del chat: quién respondió, solo si no es el modelo de siempre o si hubo respaldo. */
+/**
+ * Bajo una respuesta del chat, quién respondió: si contestó otro porque el pedido no estaba disponible, o si es el
+ * modelo que la persona eligió en Cuenta. En automático, sin respaldo, no se marca nada.
+ */
 export function answeredByLine(ai: AnsweredBy | undefined): string | null {
   if (!ai) return null;
   const who = AI_PROVIDER_LABEL[ai.provider].assistant;
   if (ai.fallbackFrom && ai.fallbackFrom !== ai.provider) {
     return `Respondió ${who} porque ${AI_PROVIDER_LABEL[ai.fallbackFrom].assistant} no estaba disponible`;
   }
-  return ai.provider === USUAL_PROVIDER ? null : `Respondió ${who}`;
+  return ai.requested === ai.provider ? `Respondió ${who}` : null;
 }
 
 /** El modelo que le toca a la persona en ese proveedor: el más capaz si su plan lo permite, si no el rápido. */

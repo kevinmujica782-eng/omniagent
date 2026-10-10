@@ -13,10 +13,15 @@ import type { AgentCard, AnsweredBy, ChatMessageView } from "@/types/cards";
 /** Qué modelo respondió, guardado con el mensaje (los mensajes de antes del router no lo tienen). */
 function answeredByOf(value: unknown): AnsweredBy | null {
   if (!value || typeof value !== "object") return null;
-  const ai = value as { provider?: unknown; model?: unknown; fallbackFrom?: unknown };
+  const ai = value as { provider?: unknown; model?: unknown; fallbackFrom?: unknown; requested?: unknown };
   const known = (id: unknown): id is AIProviderId => typeof id === "string" && (AI_PROVIDER_IDS as readonly string[]).includes(id);
   if (!known(ai.provider) || typeof ai.model !== "string") return null;
-  return { provider: ai.provider, model: ai.model, fallbackFrom: known(ai.fallbackFrom) ? ai.fallbackFrom : null };
+  return {
+    provider: ai.provider,
+    model: ai.model,
+    fallbackFrom: known(ai.fallbackFrom) ? ai.fallbackFrom : null,
+    requested: known(ai.requested) ? ai.requested : null,
+  };
 }
 
 export async function getConversationView(userId: string, conversationId: string) {

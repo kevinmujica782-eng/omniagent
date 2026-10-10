@@ -107,7 +107,12 @@ export function buildOpenAIRequest(call: ProviderCall): { body: Item; warnings: 
   if (instructions.length) body.instructions = instructions.join("\n\n");
 
   if (request.tools?.length) {
-    body.tools = request.tools.map((tool) => ({ type: "function", name: tool.name, description: tool.description, parameters: cleanSchema(tool.parameters) }));
+    body.tools = request.tools.map((tool) => {
+      const parameters = cleanSchema(tool.parameters);
+      // En la Responses API el modo estricto no se deja al valor por defecto: solo se pide con un esquema que lo admite
+      // (todo requerido y sin propiedades extra); con campos opcionales, como casi todas las herramientas de Omni, no.
+      return { type: "function", name: tool.name, description: tool.description, parameters, strict: isStrictCompatible(parameters) };
+    });
     // Sin estado en OpenAI: el razonamiento cifrado vuelve en la respuesta para el turno siguiente.
     body.include = ["reasoning.encrypted_content"];
     if (request.toolChoice) body.tool_choice = toolChoiceOf(request.toolChoice);

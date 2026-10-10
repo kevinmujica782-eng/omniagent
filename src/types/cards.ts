@@ -748,7 +748,10 @@ export type ChatMessageView = {
 export type AnsweredBy = {
   provider: AIProviderId;
   model: string;
+  /** El que se pidió y no respondió (el elegido o el primero del automático); null si respondió el pedido. */
   fallbackFrom: AIProviderId | null;
+  /** El modelo que la persona eligió en Cuenta (null: automático). */
+  requested: AIProviderId | null;
 };
 
 /** Idea proactiva (tabla suggestions o sugerencia inicial). */

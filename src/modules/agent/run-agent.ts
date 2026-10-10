@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { AppError, Errors, isFreePlanLimit, type PlanLimitDetails } from "@/lib/errors";
 import { log } from "@/lib/log";
 import { preferredProviderOf } from "@/modules/ai/ai.catalog";
+import { AIProviderError } from "@/modules/ai/ai.errors";
 import { aiRouter, logAIUsage, tierForPlan } from "@/modules/ai/ai.service";
 import type { AIMessage, AISystemPart, AIToolDefinition } from "@/modules/ai/ai.types";
 import { assertCanSendMessage, getEntitlements } from "@/modules/billing/entitlements";
@@ -13,7 +14,7 @@ import { buildAgentMemory } from "@/modules/memory/memory.service";
 import type { AnsweredBy, ChatMessageView } from "@/types/cards";
 import { buildSystemPrompt } from "./prompts";
 import { toAITool, type ToolContext } from "./registry";
-import { runToolLoop, type ToolOutcome } from "./tool-loop";
+import { resolveProvider, runToolLoop, type ToolOutcome } from "./tool-loop";
 import { ALL_TOOLS, findTool } from "./tools";
 
 const MAX_TOOL_ROUNDS = 6;
@@ -109,13 +110,17 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     memory?.text ? { text: `${prompt.dynamic}\n\n${memory.text}`, cache: true } : { text: prompt.dynamic },
   ];
 
+  // El modelo que eligió la persona en Cuenta (si tiene llave) o, en automático, el primero del orden.
+  const router = aiRouter();
+  const { requested, expected } = resolveProvider(router.configured(), preferredProviderOf(profile.preferences));
+
   const result = await runToolLoop({
-    complete: (request) => aiRouter().complete(request),
+    complete: (request) => router.complete(request),
     system,
     messages,
     tools: agentTools(),
     tier: tierForPlan(entitlements.plan),
-    provider: preferredProviderOf(profile.preferences),
+    provider: expected,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     maxRounds: MAX_TOOL_ROUNDS,
     deadline,
@@ -131,6 +136,14 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       });
       return outcome;
     },
+  }).catch((error: unknown) => {
+    // El pedido lo arma Omni (historial, herramientas): si un proveedor lo rechaza, no es algo que la persona pueda
+    // arreglar en su texto. El detalle queda en el log del intento (ai.attempt_failed).
+    if (error instanceof AIProviderError && error.code === "invalid_request") {
+      log.error("agent.ai_invalid_request", { userId, conversationId, provider: error.provider, detail: error.detail });
+      throw new AppError(502, "ai_invalid_request", "Omni no pudo responder ese mensaje. Inténtalo de nuevo o escríbelo de otra forma.");
+    }
+    throw error;
   });
 
   if (result.interrupted) {
@@ -141,7 +154,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   if (!finalText) {
     finalText = cards.length ? "Listo, aquí tienes el detalle." : "No tengo una respuesta para eso todavía.";
   }
-  const answeredBy: AnsweredBy = { provider: result.provider, model: result.model, fallbackFrom: result.fallbackFrom };
+  const answeredBy: AnsweredBy = { provider: result.provider, model: result.model, fallbackFrom: result.fallbackFrom, requested };
 
   const saved = await prisma.message.create({
     data: {
@@ -159,18 +172,24 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     select: { id: true, createdAt: true },
   });
 
+  // Consumo por modelo: el que dio la respuesta cuenta como el mensaje del plan ("chat"); si antes respondió otro
+  // (respaldo a mitad del turno), lo suyo queda aparte ("chat_fallback") y no cuenta otro mensaje.
+  const agentModule = input.module ?? "GENERAL";
   await Promise.all([
-    logAIUsage(
-      { userId, conversationId, module: input.module ?? "GENERAL", kind: "chat" },
-      {
-        provider: result.provider,
-        model: result.model,
-        inputTokens: result.usage.input,
-        outputTokens: result.usage.output,
-        cachedInputTokens: result.usage.cached,
-        toolCalls: result.toolCalls,
-      },
-    ),
+    ...result.usageByModel.map((entry) => {
+      const final = entry.provider === result.provider && entry.model === result.model;
+      return logAIUsage(
+        { userId, conversationId, module: agentModule, kind: final ? "chat" : "chat_fallback" },
+        {
+          provider: entry.provider,
+          model: entry.model,
+          inputTokens: entry.input,
+          outputTokens: entry.output,
+          cachedInputTokens: entry.cached,
+          toolCalls: final ? result.toolCalls : 0,
+        },
+      );
+    }),
     prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: new Date() } }),
   ]);
 

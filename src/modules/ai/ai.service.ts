@@ -1,11 +1,11 @@
 import "server-only";
 import { z } from "zod";
-import type { Prisma } from "@/generated/prisma/client";
 import type { AgentModule } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { AppError, Errors } from "@/lib/errors";
 import { log } from "@/lib/log";
+import { mergePreferences } from "@/lib/preferences";
 import { assertCanSendMessage, getEntitlements, requireFeature } from "@/modules/billing/entitlements";
 import type { PlanId } from "@/modules/billing/plans";
 import { AI_PROVIDER_IDS, AI_PROVIDER_LABEL, type AIModelsView, type AIProviderId, type AIResponse, type AITier } from "@/types/ai";
@@ -274,11 +274,7 @@ export async function setPreferredProvider(userId: string, provider: "auto" | AI
   if (provider !== "auto" && !aiRouter().provider(provider)?.isConfigured()) {
     throw new AppError(409, "ai_provider_unavailable", `${AI_PROVIDER_LABEL[provider].assistant} no está disponible en Omni por ahora.`);
   }
-  const profile = await prisma.profile.findUnique({ where: { id: userId }, select: { preferences: true } });
-  const preferences = { ...((profile?.preferences ?? {}) as Record<string, unknown>) };
-  const current = preferences.ai && typeof preferences.ai === "object" ? (preferences.ai as Record<string, unknown>) : {};
-  preferences.ai = { ...current, provider: provider === "auto" ? null : provider };
-  await prisma.profile.update({ where: { id: userId }, data: { preferences: preferences as unknown as Prisma.InputJsonValue } });
+  await mergePreferences(userId, "ai", { provider: provider === "auto" ? null : provider });
   return modelsForApp(userId);
 }
 

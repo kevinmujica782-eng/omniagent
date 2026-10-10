@@ -24,7 +24,10 @@ export interface ToolLoopInput {
   messages: readonly AIMessage[];
   tools: readonly AIToolDefinition[];
   tier: AITier;
-  /** Proveedor que eligió la persona (null: decide el router). */
+  /**
+   * A quién se le pide la respuesta (ver `resolveProvider`): el modelo que eligió la persona o el primero del orden. Si
+   * responde otro, ese es el que falló (`fallbackFrom`). null: decide el router.
+   */
   provider: AIProviderId | null;
   maxOutputTokens: number;
   /** Rondas de herramientas antes de pedirle que lo divida. */
@@ -35,30 +38,55 @@ export interface ToolLoopInput {
   execute: (call: AIToolCall) => Promise<ToolOutcome>;
 }
 
+/** Consumo de un modelo en el turno (si respondió más de uno, cada uno con lo suyo). */
+export interface ModelUsage {
+  provider: AIProviderId;
+  model: string;
+  input: number;
+  output: number;
+  cached: number;
+}
+
 export interface ToolLoopResult {
   text: string;
   cards: AgentCard[];
   suggestions: string[];
+  /** Total del turno. */
   usage: { input: number; output: number; cached: number };
+  /** Por modelo, en el orden en que respondieron. */
+  usageByModel: ModelUsage[];
   toolCalls: number;
   /** Quién respondió la última ronda. */
   provider: AIProviderId;
   model: string;
-  /** Si respondió otro porque el primero falló: cuál falló. */
+  /** Si respondió otro porque el que se pidió falló: cuál se pidió. */
   fallbackFrom: AIProviderId | null;
   /** El turno quedó a medias después de ejecutar herramientas (sin tiempo o sin modelo que respondiera). */
   interrupted: AIErrorCode | null;
 }
 
-/** Con menos tiempo que esto no se empieza otra ronda. */
-const MIN_ROUND_MS = 3_000;
+/** Con menos tiempo que esto no se empieza otra ronda: no alcanzaría para una respuesta y se cobraría igual. */
+const MIN_ROUND_MS = 6_000;
+
+/**
+ * A quién pedirle la respuesta. `requested`: el modelo que eligió la persona, si tiene llave (si se la quitaron,
+ * responde el automático). `expected`: ese o, en automático, el primero del orden con llave; si responde otro, el
+ * chat dice que este no estaba disponible.
+ */
+export function resolveProvider(
+  configured: readonly AIProviderId[],
+  preferred: AIProviderId | null,
+): { requested: AIProviderId | null; expected: AIProviderId | null } {
+  const requested = preferred && configured.includes(preferred) ? preferred : null;
+  return { requested, expected: requested ?? configured[0] ?? null };
+}
 
 export async function runToolLoop(input: ToolLoopInput): Promise<ToolLoopResult> {
   const now = input.now ?? Date.now;
   const messages: AIMessage[] = [...input.messages];
   const cards: AgentCard[] = [];
   let suggestions: string[] = [];
-  const usage = { input: 0, output: 0, cached: 0 };
+  const usageByModel: ModelUsage[] = [];
   let toolCalls = 0;
   let provider = input.provider;
   let answered: { provider: AIProviderId; model: string } | null = null;
@@ -75,6 +103,7 @@ export async function runToolLoop(input: ToolLoopInput): Promise<ToolLoopResult>
       interrupted = "timeout";
       break;
     }
+    const asked = provider;
     let routed: RoutedResult;
     try {
       routed = await input.complete({
@@ -82,7 +111,7 @@ export async function runToolLoop(input: ToolLoopInput): Promise<ToolLoopResult>
         messages,
         tools: input.tools,
         tier: input.tier,
-        ...(provider ? { provider } : {}),
+        ...(asked ? { provider: asked } : {}),
         maxOutputTokens: input.maxOutputTokens,
         deadlineMs: remaining,
       });
@@ -94,12 +123,12 @@ export async function runToolLoop(input: ToolLoopInput): Promise<ToolLoopResult>
       break;
     }
     const { response, state } = routed;
-    usage.input += response.usage.inputTokens;
-    usage.output += response.usage.outputTokens;
-    usage.cached += response.usage.cachedInputTokens;
-    if (response.fallback && fallbackFrom === null) {
-      const first = response.attempts[0]?.provider;
-      if (first && first !== response.provider) fallbackFrom = first;
+    addUsage(usageByModel, response.provider, response.model, response.usage);
+    // Respondió otro que el pedido: el pedido falló o el router lo apartó (sin cuota, fallando seguido). Sin pedido
+    // (decide el router), cuenta el primero que intentó.
+    if (fallbackFrom === null) {
+      const expected = asked ?? response.attempts[0]?.provider ?? null;
+      if (expected && expected !== response.provider) fallbackFrom = expected;
     }
     answered = { provider: response.provider, model: response.model };
     // Las rondas siguientes van al mismo proveedor: su estado (razonamiento, firmas) solo le sirve a él. Si falla, el
@@ -125,5 +154,25 @@ export async function runToolLoop(input: ToolLoopInput): Promise<ToolLoopResult>
   }
 
   if (!answered) throw new AIProviderError("bad_response", { detail: "El turno terminó sin respuesta." });
-  return { text, cards, suggestions, usage, toolCalls, provider: answered.provider, model: answered.model, fallbackFrom, interrupted };
+  const usage = usageByModel.reduce(
+    (total, entry) => ({ input: total.input + entry.input, output: total.output + entry.output, cached: total.cached + entry.cached }),
+    { input: 0, output: 0, cached: 0 },
+  );
+  return { text, cards, suggestions, usage, usageByModel, toolCalls, provider: answered.provider, model: answered.model, fallbackFrom, interrupted };
+}
+
+function addUsage(
+  list: ModelUsage[],
+  provider: AIProviderId,
+  model: string,
+  usage: { inputTokens: number; outputTokens: number; cachedInputTokens: number },
+): void {
+  let entry = list.find((item) => item.provider === provider && item.model === model);
+  if (!entry) {
+    entry = { provider, model, input: 0, output: 0, cached: 0 };
+    list.push(entry);
+  }
+  entry.input += usage.inputTokens;
+  entry.output += usage.outputTokens;
+  entry.cached += usage.cachedInputTokens;
 }
