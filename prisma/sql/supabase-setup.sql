@@ -176,7 +176,8 @@ declare
     'calendar_events', 'watchlist_items', 'suggestions', 'recurring_charges',
     'financial_accounts', 'transactions', 'goals', 'documents',
     'financial_analyses', 'savings_recommendations', 'category_budgets',
-    'price_alerts', 'purchase_orders', 'tracked_orders', 'engine_jobs'
+    'price_alerts', 'purchase_orders', 'tracked_orders', 'engine_jobs',
+    'assistants', 'user_knowledge'
   ];
 begin
   foreach tbl in array owner_tables loop
@@ -195,6 +196,65 @@ begin
     drop policy if exists owner_select on public.profiles;
     create policy owner_select on public.profiles
       for select to authenticated using ((select auth.uid()) = id);
+  end if;
+end $$;
+
+-- ─── 4.1 Dots y conocimiento base: reglas que Prisma no expresa ────────
+-- Checks y trigger (Prisma no los toca en db push ni en migraciones). Las filas solo las escribe el servidor;
+-- estas reglas protegen la forma de los datos aunque falle una validación de la app.
+
+do $$
+begin
+  if to_regclass('public.assistants') is not null then
+    alter table public.assistants drop constraint if exists assistants_name_not_blank;
+    alter table public.assistants add constraint assistants_name_not_blank check (length(btrim(name)) > 0);
+    alter table public.assistants drop constraint if exists assistants_role_not_blank;
+    alter table public.assistants add constraint assistants_role_not_blank check (length(btrim(role)) > 0);
+    alter table public.assistants drop constraint if exists assistants_permissions_object;
+    alter table public.assistants add constraint assistants_permissions_object
+      check (jsonb_typeof(permissions) = 'object' and pg_column_size(permissions) <= 4096);
+    -- Un Dot archivado no puede ser el de por defecto.
+    alter table public.assistants drop constraint if exists assistants_default_active;
+    alter table public.assistants add constraint assistants_default_active
+      check (not (is_default and archived_at is not null));
+  end if;
+
+  if to_regclass('public.user_knowledge') is not null then
+    alter table public.user_knowledge drop constraint if exists user_knowledge_content_object;
+    alter table public.user_knowledge add constraint user_knowledge_content_object
+      check (jsonb_typeof(content) = 'object' and pg_column_size(content) <= 32768);
+    alter table public.user_knowledge drop constraint if exists user_knowledge_version_positive;
+    alter table public.user_knowledge add constraint user_knowledge_version_positive check (version >= 1);
+  end if;
+end $$;
+
+-- Un solo Dot por defecto por persona: al marcar uno, los demás dejan de serlo. Es un trigger y no un índice
+-- parcial porque Prisma borraría el índice en el siguiente db push.
+create or replace function public.assistants_single_default()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.is_default then
+    -- Candado por persona: dos cambios a la vez no dejan dos Dots por defecto.
+    perform pg_advisory_xact_lock(hashtext('assistants_default:' || new.user_id::text));
+    update public.assistants
+       set is_default = false
+     where user_id = new.user_id and id <> new.id and is_default;
+  end if;
+  return new;
+end;
+$$;
+
+do $$
+begin
+  if to_regclass('public.assistants') is not null then
+    drop trigger if exists assistants_single_default on public.assistants;
+    create trigger assistants_single_default
+      before insert or update of is_default on public.assistants
+      for each row when (new.is_default)
+      execute function public.assistants_single_default();
   end if;
 end $$;
 

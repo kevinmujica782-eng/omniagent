@@ -89,6 +89,17 @@ enum MemorySource {
   @@map("memory_source")
 }
 
+/// Categoría del conocimiento base que la persona escribe sobre sí misma (una fila por categoría en user_knowledge).
+enum KnowledgeCategory {
+  GOALS // metas: qué quiere lograr y para cuándo
+  RULES // reglas: lo que Omni debe o no debe hacer nunca
+  FINANCES // finanzas: ingresos, deudas, compromisos que el banco no muestra
+  PROFILE // quién es: trabajo, familia, ciudad
+  PREFERENCES // gustos: marcas, horarios, formas de pago
+
+  @@map("knowledge_category")
+}
+
 enum MessageRole {
   USER
   ASSISTANT
@@ -491,6 +502,8 @@ model Profile {
   returnCases       ReturnCase[]
   contentReports    ContentReport[]
   memories          AgentMemory[]
+  assistants        Assistant[]
+  knowledge         UserKnowledge[]
   engineJobs        EngineJob[]
   sites             Site[]
 
@@ -654,6 +667,51 @@ model AgentMemory {
   @@unique([userId, dedupeKey])
   @@index([userId, kind])
   @@map("agent_memories")
+}
+
+/// Dots: asistentes personalizados de cada persona (nombre, rol, personalidad, instrucciones base y permisos).
+/// `modules` limita las herramientas del agente a esos módulos (vacío = todos). `permissions` sigue el esquema de
+/// src/modules/assistants (por ejemplo { "purchases": "ask" | "off", "sendEmail": false }); una compra siempre pide
+/// aprobación, ningún permiso la salta. Restricciones extra (largo, forma del JSON, un solo Dot por defecto) en
+/// prisma/sql/supabase-setup.sql. El servidor escribe; la persona lee los suyos con RLS.
+model Assistant {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String        @map("user_id") @db.Uuid
+  name         String        @db.VarChar(40)
+  role         String        @db.VarChar(80)
+  personality  String        @default("") @db.VarChar(300)
+  instructions String        @default("") @db.VarChar(4000)
+  modules      AgentModule[] @default([])
+  permissions  Json          @default("{}")
+  isDefault    Boolean       @default(false) @map("is_default")
+  archivedAt   DateTime?     @map("archived_at") @db.Timestamptz(6)
+  createdAt    DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name])
+  @@index([userId, archivedAt])
+  @@map("assistants")
+}
+
+/// Conocimiento base: lo que la persona escribe sobre sí misma, una fila por categoría, con `content` en JSON (la
+/// forma de cada categoría se valida en la app). A diferencia de agent_memories (lo que Omni deduce en el chat),
+/// esto lo escribe la persona y Omni lo lee completo en cada turno. `version` sube en cada cambio para detectar
+/// ediciones simultáneas.
+model UserKnowledge {
+  id        String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String            @map("user_id") @db.Uuid
+  category  KnowledgeCategory
+  content   Json              @default("{}")
+  version   Int               @default(1)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, category])
+  @@map("user_knowledge")
 }
 
 /// content guarda lo que ve la UI: { text, cards[] }. Los mensajes TOOL registran cada llamada a herramienta.
