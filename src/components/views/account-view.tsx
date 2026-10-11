@@ -2,6 +2,7 @@ import { Check, ChevronRight, FileText, Lock, LogOut, Mail, ShieldCheck, Sparkle
 import Link from "next/link";
 import { ActionButton } from "@/components/action-button";
 import { ModelPicker } from "@/components/ai/model-picker";
+import { DotsPanel } from "@/components/assistants/dots-panel";
 import { BinanceRenewButton, BinanceReturn } from "@/components/binance-pay";
 import { UpgradeButton } from "@/components/upgrade-sheet";
 import { CheckoutReturn } from "@/components/checkout-return";
@@ -174,6 +175,10 @@ export function AccountView({
 
       <Section title="Modelo de IA">
         <ModelPicker key={modelsKey} initial={models} demo={preview} />
+      </Section>
+
+      <Section title="Tus Dots">
+        <DotsPanel demo={preview} />
       </Section>
 
       <Section title="Lo que tus agentes hacen solos">

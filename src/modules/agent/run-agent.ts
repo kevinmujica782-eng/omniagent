@@ -10,9 +10,11 @@ import { aiRouter, logAIUsage, tierForPlan } from "@/modules/ai/ai.service";
 import type { AIMessage, AISystemPart, AIToolDefinition } from "@/modules/ai/ai.types";
 import { assertCanSendMessage, getEntitlements } from "@/modules/billing/entitlements";
 import { upgradeCard } from "@/modules/billing/upgrade";
+import { activeAssistant } from "@/modules/assistants/assistants.service";
+import { DOT_MODULE_LABEL } from "@/modules/assistants/assistants.types";
 import { buildAgentMemory } from "@/modules/memory/memory.service";
 import type { AnsweredBy, ChatMessageView } from "@/types/cards";
-import { buildSystemPrompt } from "./prompts";
+import { buildSystemPrompt, type PromptAssistant } from "./prompts";
 import { toAITool, type ToolContext } from "./registry";
 import { resolveProvider, runToolLoop, type ToolOutcome } from "./tool-loop";
 import { ALL_TOOLS, findTool } from "./tools";
@@ -85,12 +87,24 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
 
   const now = new Date();
   const ctx: ToolContext = { userId, conversationId, currency: profile.currency, timezone: profile.timezone, now };
+  // El Dot activo de la persona (Cuenta → Tus Dots). Si falla su lectura, el turno sigue sin él.
+  const assistant = await activeAssistant(userId)
+    .then((dot): PromptAssistant | null =>
+      dot
+        ? { name: dot.name, role: dot.role, personality: dot.personality, instructions: dot.instructions, modules: dot.modules.map((m) => DOT_MODULE_LABEL[m]) }
+        : null,
+    )
+    .catch((error: unknown) => {
+      log.warn("agent.assistant_unavailable", { userId, error });
+      return null;
+    });
   const prompt = buildSystemPrompt({
     name: profile.fullName,
     currency: profile.currency,
     timezone: profile.timezone,
     plan: entitlements.plan,
     now,
+    assistant,
   });
   // Memoria de Omni: lo más relevante para este mensaje. Si falla, el turno sigue sin ella.
   const memory = await buildAgentMemory(userId, {

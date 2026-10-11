@@ -639,6 +639,8 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 | POST | `/api/v1/ai/chat` | Router de IA: un turno con `{ messages, provider?: "auto" \| "openai" \| "anthropic" \| "gemini" \| "xai", tier?: "fast" \| "smart", responseFormat?, maxOutputTokens?, instructions?, fallback? }` → siempre `AIResponse` (20 por minuto; cuenta como mensaje; `smart` es de Pro) |
 | GET | `/api/v1/ai/models` | Proveedores y modelos del router: cuáles hay, cuáles responden, cuáles permite el plan y cuál eligió la persona (`preference`) |
 | PUT | `/api/v1/ai/preference` | `{ provider: "auto" \| "openai" \| "anthropic" \| "gemini" \| "xai" }`: el modelo del chat (Cuenta → Modelo de IA) → la vista de modelos actualizada (409 `ai_provider_unavailable` si ese proveedor no tiene llave) |
+| GET, POST | `/api/v1/assistants` | Los Dots de la persona; crear uno `{ name, role, personality?, instructions?, modules?, isDefault? }` (el primero queda por defecto solo) |
+| PATCH, DELETE | `/api/v1/assistants/:id` | Editar un Dot, marcarlo por defecto (`{ isDefault: true }`) o archivarlo (`{ archived: true }` o DELETE) |
 | GET, POST | `/api/v1/engine/jobs` | Trabajos en segundo plano (`?active=1`); empezar uno `{ playbook, input }` → responde al instante (`created: false` si ya estaba en marcha) |
 | GET | `/api/v1/engine/jobs/:id` | Un trabajo con sus pasos |
 | POST | `/api/v1/engine/jobs/:id/cancel` | Detenerlo (si corre, al terminar el paso actual) |
