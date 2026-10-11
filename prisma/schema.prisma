@@ -46,6 +46,7 @@ enum IntegrationProvider {
   BANK_DEMO
   MAIL_DEMO // bandeja y calendario de prueba (sandbox con el contrato de Gmail/Outlook)
   MAIL_IMAP // correo real por IMAP/SMTP con contraseña de aplicación (Gmail, Yahoo, iCloud…)
+  SLACK // escribirle a Omni desde Slack (vínculo por código; no guarda tokens, responde por response_url)
 
   @@map("integration_provider")
 }

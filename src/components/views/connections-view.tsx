@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ConnectBankButton } from "@/components/finance/connect-bank-button";
 import { CONNECTOR_ICON } from "@/components/icons";
 import { ConnectMailButton } from "@/components/procedures/connect-mail";
+import { SlackConnect } from "@/components/integrations/slack-connect";
 import { Chip, IconTile, PageBody, PageHeader, Panel, Section } from "@/components/ui";
 import type { ConnectorView } from "@/modules/connections/catalog";
 
@@ -94,6 +95,9 @@ export function ConnectionsView({
             <ConnectorRow key={connector.id} connector={connector} preview={preview} />
           ))}
         </Panel>
+      </Section>
+      <Section title="Slack">
+        <SlackConnect demo={preview} />
       </Section>
       <p className="mt-6 px-1 text-xs leading-relaxed text-muted">
         Los accesos a tus cuentas se guardan cifrados y puedes desconectarlos cuando quieras. Lo marcado como Demo usa

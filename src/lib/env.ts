@@ -51,6 +51,8 @@ const schema = z.object({
   PLAID_COUNTRY_CODES: z.string().default("US"),
   PLAID_WEBHOOK_URL: z.string().optional(),
   CRON_SECRET: z.string().optional(),
+  // Slack: el «Signing Secret» de la app de Slack (Basic Information). Sin él, la pasarela de Slack responde 503.
+  SLACK_SIGNING_SECRET: z.string().optional(),
   // Documentos: "database" guarda los PDF en Postgres (tabla document_blobs); "supabase" usa Storage.
   DOCUMENT_STORAGE: z.enum(["database", "supabase"]).default("database"),
   // Llave secreta de Supabase (sb_secret_...) o service_role heredada: solo servidor, para Storage.
