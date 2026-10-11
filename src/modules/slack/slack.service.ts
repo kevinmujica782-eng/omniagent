@@ -26,7 +26,7 @@ export function slackSigningSecret(): string {
 type SlackMeta = { code?: string; codeExpiresAt?: string; teamId?: string; slackUserId?: string; conversationId?: string };
 
 function metaOf(row: IntegrationConnection): SlackMeta {
-  return (row.metadata ?? {}) as SlackMeta;
+  return (row.metadata ?? {}) as unknown as SlackMeta;
 }
 
 function newCode(): string {
