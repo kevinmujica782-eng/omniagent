@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, Slack } from "lucide-react";
+import { Check, Copy, Send } from "lucide-react";
 import { useState } from "react";
 import { Panel, buttonClass } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
@@ -47,7 +47,7 @@ export function SlackConnect({ demo = false }: { demo?: boolean }) {
     <Panel className="p-4">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 grid size-10 shrink-0 place-items-center rounded-xl bg-surface-2 text-ink">
-          <Slack className="size-5" aria-hidden />
+          <Send className="size-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">Slack</p>
