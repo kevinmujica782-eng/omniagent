@@ -345,7 +345,8 @@ export async function listBankConnections(userId: string): Promise<BankConnectio
       id: connection.id,
       institutionName: connection.displayName ?? meta.institutionName,
       provider: meta.provider,
-      status: connection.status,
+      // Los bancos nunca quedan en PENDING (ese estado es del vínculo de Slack); el estrechamiento es seguro.
+      status: connection.status as Exclude<typeof connection.status, "PENDING">,
       lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null,
       accounts: accounts.filter((account) => account.connectionId === connection.id),
     };

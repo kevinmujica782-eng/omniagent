@@ -364,7 +364,8 @@ export async function listMailboxes(userId: string): Promise<MailboxView[]> {
         displayName: row.displayName ?? "Correo",
         flavor: meta.flavor,
         provider: meta.provider,
-        status: row.status,
+        // El correo nunca queda en PENDING (ese estado es del vínculo de Slack); el estrechamiento es seguro.
+        status: row.status as Exclude<typeof row.status, "PENDING">,
         lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
         messageCount: await prisma.mailMessage.count({ where: { connectionId: row.id, folder: "inbox" } }),
       };
