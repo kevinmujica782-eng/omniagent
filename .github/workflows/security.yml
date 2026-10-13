@@ -1,0 +1,66 @@
+# Seguridad en cada cambio: análisis estático (SAST con CodeQL) y auditoría de dependencias npm.
+# No bloquea el despliegue de Netlify (que es manual); CodeQL reporta en la pestaña Security del repositorio y la
+# auditoría falla solo ante vulnerabilidades críticas, para no frenar por avisos menores de dependencias transitivas.
+name: Seguridad
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1" # un barrido semanal, lunes 06:00 UTC (CodeQL mejora sus reglas con el tiempo)
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── SAST: análisis estático del código TypeScript/JavaScript ──
+  codeql:
+    name: Análisis estático (CodeQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write # subir los hallazgos a la pestaña Security
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # Incluye las consultas de seguridad extendidas además de las del conjunto por defecto.
+          queries: security-and-quality
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
+
+  # ── Auditoría de dependencias npm ──
+  audit:
+    name: Auditoría de dependencias
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # No hay package-lock.json en el repositorio: se resuelve uno al vuelo solo para auditar (no instala nada).
+      - name: Resolver dependencias para auditar
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Vulnerabilidades críticas (bloquea)
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Informe de vulnerabilidades altas (no bloquea)
+        if: always()
+        run: npm audit --omit=dev --audit-level=high || true
