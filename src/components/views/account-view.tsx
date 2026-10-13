@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ActionButton } from "@/components/action-button";
 import { ModelPicker } from "@/components/ai/model-picker";
 import { DotsPanel } from "@/components/assistants/dots-panel";
+import { KnowledgePanel } from "@/components/knowledge/knowledge-panel";
 import { BinanceRenewButton, BinanceReturn } from "@/components/binance-pay";
 import { UpgradeButton } from "@/components/upgrade-sheet";
 import { CheckoutReturn } from "@/components/checkout-return";
@@ -179,6 +180,10 @@ export function AccountView({
 
       <Section title="Tus Dots">
         <DotsPanel demo={preview} />
+      </Section>
+
+      <Section title="Lo que Omni debe saber">
+        <KnowledgePanel demo={preview} />
       </Section>
 
       <Section title="Lo que tus agentes hacen solos">

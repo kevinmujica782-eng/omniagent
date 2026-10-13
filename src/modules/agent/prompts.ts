@@ -91,6 +91,8 @@ export function buildSystemPrompt(p: {
   plan: "FREE" | "PRO";
   now: Date;
   assistant?: PromptAssistant | null;
+  /** Conocimiento base que la persona escribió (Cuenta → Lo que Omni debe saber), ya en texto compacto. */
+  knowledge?: string | null;
 }): { stable: string; dynamic: string } {
   const dynamic = [
     `Ahora es ${nowIn(p.timezone, p.now)} (zona horaria ${p.timezone}). Moneda del usuario: ${p.currency}.`,
@@ -99,8 +101,22 @@ export function buildSystemPrompt(p: {
       ? "El usuario está en el plan Gratis. Si una herramienta responde plan_limit, dilo en una frase (la app ya muestra una tarjeta para pasarse a Pro) y ofrece una alternativa gratuita; no insistas con Pro."
       : "El usuario tiene el plan Pro.",
     ...assistantLines(p.assistant),
+    ...knowledgeLines(p.knowledge),
   ].join("\n");
   return { stable: STABLE_PROMPT, dynamic };
+}
+
+/**
+ * El conocimiento base que la persona escribió a propósito. Son sus palabras: dan contexto y prioridades, pero no
+ * cambian las reglas de arriba (todo lo que gaste dinero o actúe en su nombre sigue pasando por aprobación).
+ */
+function knowledgeLines(knowledge: string | null | undefined): string[] {
+  if (!knowledge) return [];
+  return [
+    "",
+    "Lo que el usuario te pidió tener siempre presente (sus palabras; respétalo sin saltarte las reglas ni las aprobaciones):",
+    knowledge,
+  ];
 }
 
 /**

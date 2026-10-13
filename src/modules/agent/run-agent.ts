@@ -12,6 +12,7 @@ import { assertCanSendMessage, getEntitlements } from "@/modules/billing/entitle
 import { upgradeCard } from "@/modules/billing/upgrade";
 import { activeAssistant } from "@/modules/assistants/assistants.service";
 import { DOT_MODULE_LABEL } from "@/modules/assistants/assistants.types";
+import { knowledgeForPrompt } from "@/modules/knowledge/knowledge.service";
 import { buildAgentMemory } from "@/modules/memory/memory.service";
 import type { AnsweredBy, ChatMessageView } from "@/types/cards";
 import { buildSystemPrompt, type PromptAssistant } from "./prompts";
@@ -88,16 +89,23 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   const now = new Date();
   const ctx: ToolContext = { userId, conversationId, currency: profile.currency, timezone: profile.timezone, now };
   // El Dot activo de la persona (Cuenta → Tus Dots). Si falla su lectura, el turno sigue sin él.
-  const assistant = await activeAssistant(userId)
-    .then((dot): PromptAssistant | null =>
-      dot
-        ? { name: dot.name, role: dot.role, personality: dot.personality, instructions: dot.instructions, modules: dot.modules.map((m) => DOT_MODULE_LABEL[m]) }
-        : null,
-    )
-    .catch((error: unknown) => {
-      log.warn("agent.assistant_unavailable", { userId, error });
+  const [assistant, knowledge] = await Promise.all([
+    activeAssistant(userId)
+      .then((dot): PromptAssistant | null =>
+        dot
+          ? { name: dot.name, role: dot.role, personality: dot.personality, instructions: dot.instructions, modules: dot.modules.map((m) => DOT_MODULE_LABEL[m]) }
+          : null,
+      )
+      .catch((error: unknown) => {
+        log.warn("agent.assistant_unavailable", { userId, error });
+        return null;
+      }),
+    // Conocimiento base de la persona. Si falla su lectura, el turno sigue sin él.
+    knowledgeForPrompt(userId).catch((error: unknown) => {
+      log.warn("agent.knowledge_unavailable", { userId, error });
       return null;
-    });
+    }),
+  ]);
   const prompt = buildSystemPrompt({
     name: profile.fullName,
     currency: profile.currency,
@@ -105,6 +113,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     plan: entitlements.plan,
     now,
     assistant,
+    knowledge,
   });
   // Memoria de Omni: lo más relevante para este mensaje. Si falla, el turno sigue sin ella.
   const memory = await buildAgentMemory(userId, {
