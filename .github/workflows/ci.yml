@@ -148,8 +148,9 @@ jobs:
           --health-retries 10
     env:
       # El adaptador de la app (src/lib/db.ts) y el CLI de Prisma (prisma.config.ts usa DIRECT_URL).
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/omni_test
-      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/omni_test
+      # sslmode=disable: el Postgres de CI no tiene TLS.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/omni_test?sslmode=disable
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/omni_test?sslmode=disable
     steps:
       - uses: actions/checkout@v7
 
@@ -164,7 +165,15 @@ jobs:
           if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
 
       - name: Crear las tablas (prisma db push)
-        run: npx prisma db push --skip-generate
+        run: |
+          set +e
+          out=$(npx prisma db push --skip-generate --accept-data-loss 2>&1); code=$?
+          echo "$out"
+          if [ "$code" -ne 0 ]; then
+            msg=$(printf '%s' "$out" | tail -n 30 | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"}{print}')
+            echo "::error title=db push::${msg}"
+            exit "$code"
+          fi
 
       - name: Aplicar restricciones y trigger
         run: PGPASSWORD=postgres psql -h localhost -U postgres -d omni_test -v ON_ERROR_STOP=1 -f tests/integration/db/constraints.sql
