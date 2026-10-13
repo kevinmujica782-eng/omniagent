@@ -12,7 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/integration/**/*.int.test.ts"],
+    include: ["tests/integration/*.int.test.ts"], // solo el nivel superior (las de base de datos van en tests/integration/db)
     env: { TZ: "UTC" },
     testTimeout: 60_000,
     hookTimeout: 60_000,

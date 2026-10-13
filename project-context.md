@@ -231,6 +231,11 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 - **Configurar la app de Slack:** crear una app en api.slack.com/apps, un slash command `/omni` que apunte a `https://<dominio>/api/v1/slack/commands`, y poner el *Signing Secret* en `SLACK_SIGNING_SECRET` (Netlify). Sin esa variable, la pasarela responde que Slack no está configurado.
 - **Límite:** el `response_url` responde en el canal/DM donde se usó el comando; todavía no hay bot que escuche menciones ni mensajes libres (haría falta OAuth y un bot token). Teams quedó fuera de esta entrega.
 
+### Pruebas de integración contra Postgres (12 oct 2026)
+- **Job «Base de datos (Postgres)» en `ci.yml`:** levanta un Postgres 16, crea las tablas con `prisma db push`, aplica las restricciones y el trigger (`tests/integration/db/constraints.sql`, espejo del §4.1 de supabase-setup.sql) y corre `tests/integration/db/*.int.test.ts` con `vitest.integration.db.config.mts`.
+- **Qué prueba contra una base real:** el trigger de un solo Dot por defecto, el nombre único por persona, la regla de no archivar el Dot por defecto, y el upsert del conocimiento base con su versión. Ejercita los servicios reales (`assistants`, `knowledge`), no imitaciones.
+- La config de integración del correo se acotó a `tests/integration/*.int.test.ts` (nivel superior) para no pisarse con las de base de datos, que viven en `tests/integration/db/`.
+
 ### Pipeline de seguridad en CI (10 oct 2026)
 - **`.github/workflows/security.yml`:** en cada push a main y en cada PR (más un barrido semanal), corre SAST con **CodeQL** (`javascript-typescript`, conjunto `security-and-quality`; los hallazgos van a la pestaña Security del repo) y **auditoría de dependencias** (`npm audit`: bloquea ante vulnerabilidades críticas, informa las altas sin bloquear). No frena el despliegue de Netlify (que es manual).
 - **Lo que ya estaba (zero-trust de entrada):** validación con zod en las rutas, `rateLimit` en ~20 rutas de `/api`, y secretos solo de servidor (`src/lib/env.ts` con `import "server-only"`; las `NEXT_PUBLIC_*` son las únicas que llegan al cliente). La bandeja de Aprobaciones (`agent_actions`) ya exige el OK explícito para comprar, publicar páginas y enviar correos.

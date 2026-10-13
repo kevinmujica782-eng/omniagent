@@ -127,3 +127,47 @@ jobs:
           cat /tmp/health.json; echo
           docker logs omniagent 2>&1 | tail -20
           grep -q '"status":"degraded"' /tmp/health.json
+
+  database:
+    name: Base de datos (Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: omni_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # El adaptador de la app (src/lib/db.ts) y el CLI de Prisma (prisma.config.ts usa DIRECT_URL).
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/omni_test
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/omni_test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package*.json
+
+      - name: Instalar dependencias (también genera el cliente de Prisma)
+        run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+
+      - name: Crear las tablas (prisma db push)
+        run: npx prisma db push --skip-generate
+
+      - name: Aplicar restricciones y trigger
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d omni_test -v ON_ERROR_STOP=1 -f tests/integration/db/constraints.sql
+
+      - name: Pruebas de integración de base de datos
+        run: npx vitest run --config vitest.integration.db.config.mts
