@@ -167,7 +167,7 @@ jobs:
       - name: Crear las tablas (prisma db push)
         run: |
           set +e
-          out=$(npx prisma db push --skip-generate --accept-data-loss 2>&1); code=$?
+          out=$(npx prisma db push --accept-data-loss 2>&1); code=$?
           echo "$out"
           if [ "$code" -ne 0 ]; then
             msg=$(printf '%s' "$out" | tail -n 30 | sed -e 's/%/%25/g' -e 's/\r//g' | awk 'BEGIN{ORS="%0A"}{print}')
