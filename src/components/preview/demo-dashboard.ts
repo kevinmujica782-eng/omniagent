@@ -18,7 +18,10 @@ const DAY = 24 * HOUR;
 
 export type DemoDashboardVariant = "pro" | "free" | "new";
 
-function billingFor(plan: PlanId, usage: { messages: number; watching: number; formReads: number; pageReads: number; goals: number }): BillingOverview {
+function billingFor(
+  plan: PlanId,
+  usage: { messages: number; watching: number; formReads: number; pageReads: number; statementPages?: number; goals: number },
+): BillingOverview {
   const limits = PLANS[plan];
   return {
     plan,
@@ -39,6 +42,7 @@ function billingFor(plan: PlanId, usage: { messages: number; watching: number; f
       messages: { used: usage.messages, limit: limits.monthlyMessages },
       formReads: { used: usage.formReads, limit: limits.monthlyFormReads },
       pageReads: { used: usage.pageReads, limit: limits.monthlyPageReads },
+      statementPages: { used: usage.statementPages ?? 0, limit: limits.monthlyStatementPages },
       watching: { used: usage.watching, limit: limits.watchlistItems },
       goals: { used: usage.goals, limit: limits.activeGoals },
     },

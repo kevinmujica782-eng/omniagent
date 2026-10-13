@@ -6,10 +6,10 @@ import { Panel, buttonClass } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 
 // «Conectar Slack» (Conexiones): genera un código para escribir en Slack con «/omni vincular CÓDIGO». No pide tokens
-// de Slack; Omni responde por el response_url de cada comando. La app de Slack se configura una vez con la URL del
-// comando (ver README).
+// de Slack; Omni responde por el response_url de cada comando. La app de Slack se crea una vez, en un clic, con el
+// manifiesto de /api/v1/slack/setup, y su Signing Secret va en SLACK_SIGNING_SECRET (ver README).
 
-export function SlackConnect({ demo = false }: { demo?: boolean }) {
+export function SlackConnect({ demo = false, configured = true }: { demo?: boolean; configured?: boolean }) {
   const [code, setCode] = useState<string | null>(demo ? "K7M9Q2" : null);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -56,7 +56,18 @@ export function SlackConnect({ demo = false }: { demo?: boolean }) {
             pégalo en Slack para conectar tu cuenta.
           </p>
 
-          {code ? (
+          {!configured && !demo ? (
+            <div className="mt-3 rounded-xl bg-surface-2 px-3 py-2.5 text-sm leading-relaxed text-muted">
+              <p>Slack todavía no está activo en esta instalación de Omni.</p>
+              <p className="mt-1">
+                ¿Administras Omni?{" "}
+                <a href="/api/v1/slack/setup" target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline">
+                  Crea la app de Slack en un clic
+                </a>{" "}
+                y pon su Signing Secret en <code className="rounded bg-surface px-1">SLACK_SIGNING_SECRET</code>.
+              </p>
+            </div>
+          ) : code ? (
             <div className="mt-3">
               <p className="text-sm text-muted">En Slack escribe:</p>
               <div className="mt-1 flex items-center gap-2">

@@ -823,7 +823,8 @@ export type StatementSkippedView = { source: string; reason: string; text: strin
 /** Lo que se importaría, antes de guardar nada. */
 export type StatementPreviewView = {
   fileName: string;
-  format: "csv" | "pdf";
+  /** "scan": fotos o PDF escaneado, leídos con IA. */
+  format: "csv" | "pdf" | "scan";
   currency: string;
   periodStart: string | null;
   periodEnd: string | null;
@@ -847,6 +848,47 @@ export type StatementPreviewView = {
   sample: StatementRowView[];
   skippedCount: number;
   skipped: StatementSkippedView[];
+  /** Solo si se leyó con IA: con qué se comprobaron los montos y qué se vio en el documento. */
+  scan: StatementScanSummaryView | null;
+};
+
+export type StatementScanSummaryView = {
+  scanId: string;
+  pages: number;
+  /** Páginas que no se pudieron leer: hay que tomarles otra foto. */
+  unreadablePages: number[];
+  /** closing = saldo final; running = saldo de cada renglón; totals = totales de cargos y abonos. */
+  checks: ("closing" | "running" | "totals")[];
+  /** true si todo cuadra; false si algo no (los avisos dicen qué); null si el documento no traía con qué comprobar. */
+  verified: boolean | null;
+  institution: string | null;
+  accountType: "checking" | "savings" | "credit_card" | "other" | null;
+  last4: string | null;
+  currency: string | null;
+};
+
+/** Una página de la lectura con IA. */
+export type StatementScanPageView = {
+  /** Desde 1. */
+  page: number;
+  status: "PENDING" | "READING" | "DONE" | "FAILED";
+  /** Movimientos leídos en la página (solo si ya se leyó). */
+  rows: number | null;
+  error: string | null;
+  /** Falló, pero quedan intentos. */
+  canRetry: boolean;
+};
+
+/** Lectura con IA de un estado de cuenta en fotos o escaneado: la app pide cada página y luego la vista previa. */
+export type StatementScanView = {
+  id: string;
+  fileName: string;
+  source: "pdf" | "images";
+  pageCount: number;
+  pages: StatementScanPageView[];
+  /** Todas las páginas terminaron (leídas o con error): ya se puede pedir la vista previa con `scanId`. */
+  ready: boolean;
+  expiresAt: string;
 };
 
 export type StatementImportResultView = {

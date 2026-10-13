@@ -18,13 +18,17 @@ import { centsToDecimal } from "./amounts";
 import { categorize } from "./categorize";
 import { isoDay } from "./dates";
 import { fingerprintRows } from "./fingerprint";
-import { parseStatement } from "./parse";
+import { statementError } from "./limits";
+import { parseScan, parseStatement } from "./parse";
+import { scanTargetWarnings } from "./scan-checks";
+import { deleteScan, loadScanTranscription } from "./scan.service";
 import type { AccountKind, ParsedStatement } from "./types";
 import type { StatementOptions, StatementUpload } from "./upload";
 
 // Estados de cuenta en PDF o CSV para bancos sin conexión directa. Los movimientos van a una cuenta manual (sin
 // connectionId) para no mezclarse con lo que sincroniza el banco. El archivo no se guarda: se lee en memoria y
-// solo quedan los movimientos, cada uno ligado a su importación para poder deshacerla.
+// solo quedan los movimientos, cada uno ligado a su importación para poder deshacerla. Las fotos y los PDF escaneados
+// se leen antes con IA (scan.service.ts); aquí llega lo transcrito, con `options.scanId`.
 
 const SAMPLE_ROWS = 12;
 const SKIPPED_ROWS = 25;
@@ -68,12 +72,23 @@ async function resolveTarget(userId: string, options: StatementOptions, forImpor
   return { account: null, newAccount: null, kind: "asset", currency: await profileCurrency(userId) };
 }
 
-function read(upload: StatementUpload, kind: AccountKind): Promise<ParsedStatement> {
-  const { mapping, dateOrder, signConvention, password } = upload.options;
-  return parseStatement(
+/** Lee el archivo, o lo transcrito por la IA si viene `scanId`. */
+async function read(userId: string, upload: StatementUpload, target: Target): Promise<{ parsed: ParsedStatement; fileName: string }> {
+  const { mapping, dateOrder, signConvention, password, scanId } = upload.options;
+  if (scanId) {
+    const scan = await loadScanTranscription(userId, scanId);
+    const parsed = parseScan(scan.transcription, { dateOrder, signConvention, accountKind: target.kind });
+    // Lo que la IA vio en el documento frente a la cuenta elegida (tarjeta o débito, moneda).
+    const chosen = target.account !== null || target.newAccount !== null;
+    const extra = chosen && parsed.scan ? scanTargetWarnings(parsed.scan, { kind: target.kind, currency: target.currency }) : [];
+    return { parsed: extra.length > 0 ? { ...parsed, warnings: [...extra, ...parsed.warnings] } : parsed, fileName: scan.fileName };
+  }
+  if (!upload.bytes) throw statementError("file_required", "Adjunta tu estado de cuenta en PDF o CSV.");
+  const parsed = await parseStatement(
     { bytes: upload.bytes, fileName: upload.fileName, mimeType: upload.mimeType },
-    { mapping, dateOrder, signConvention, password, accountKind: kind },
+    { mapping, dateOrder, signConvention, password, accountKind: target.kind },
   );
+  return { parsed, fileName: upload.fileName };
 }
 
 /** Comercio, categoría e identificador estable de cada movimiento. */
@@ -101,7 +116,7 @@ function importView(row: StatementImport): StatementImportView {
 /** Lee el archivo y muestra lo que se importaría. No guarda nada (tampoco crea la cuenta nueva). */
 export async function previewStatement(userId: string, upload: StatementUpload): Promise<StatementPreviewView> {
   const target = await resolveTarget(userId, upload.options, false);
-  const parsed = await read(upload, target.kind);
+  const { parsed, fileName } = await read(userId, upload, target);
   const rows = enrich(parsed);
   const duplicates = target.account
     ? await prisma.transaction.count({
@@ -116,9 +131,9 @@ export async function previewStatement(userId: string, upload: StatementUpload):
     if (row.direction === "DEBIT") spending += row.amountCents;
     else income += row.amountCents;
   }
-  const { detected } = parsed;
+  const { detected, scan } = parsed;
   return {
-    fileName: upload.fileName,
+    fileName,
     format: parsed.format,
     currency: target.currency,
     periodStart: parsed.periodStart,
@@ -147,6 +162,20 @@ export async function previewStatement(userId: string, upload: StatementUpload):
     })),
     skippedCount: parsed.skipped.length,
     skipped: parsed.skipped.slice(0, SKIPPED_ROWS),
+    scan:
+      scan && upload.options.scanId
+        ? {
+            scanId: upload.options.scanId,
+            pages: scan.pages,
+            unreadablePages: scan.unreadablePages,
+            checks: scan.checks,
+            verified: scan.verified,
+            institution: scan.institution,
+            accountType: scan.accountType === "unknown" ? null : scan.accountType,
+            last4: scan.last4,
+            currency: scan.currency,
+          }
+        : null,
   };
 }
 
@@ -156,7 +185,7 @@ export async function previewStatement(userId: string, upload: StatementUpload):
  */
 export async function importStatement(userId: string, upload: StatementUpload): Promise<StatementImportResultView> {
   const target = await resolveTarget(userId, upload.options, true);
-  const parsed = await read(upload, target.kind);
+  const { parsed, fileName } = await read(userId, upload, target);
   const rows = enrich(parsed);
 
   // La cuenta nueva se crea solo cuando el archivo ya se leyó bien.
@@ -169,7 +198,8 @@ export async function importStatement(userId: string, upload: StatementUpload): 
         institutionName: target.newAccount!.institutionName,
         name: target.newAccount!.name ?? ACCOUNT_TYPE_LABEL[target.newAccount!.type],
         type: target.newAccount!.type,
-        mask: target.newAccount!.mask ?? null,
+        // Los últimos 4 dígitos que leyó la IA, si la persona no los escribió.
+        mask: target.newAccount!.mask ?? parsed.scan?.last4 ?? null,
         currency: target.currency,
       },
       select: { id: true, type: true, currency: true },
@@ -179,7 +209,7 @@ export async function importStatement(userId: string, upload: StatementUpload): 
     data: {
       userId,
       accountId: account.id,
-      fileName: upload.fileName,
+      fileName,
       status: "PROCESSING",
       periodStart: dbDate(parsed.periodStart),
       periodEnd: dbDate(parsed.periodEnd),
@@ -238,6 +268,10 @@ export async function importStatement(userId: string, upload: StatementUpload): 
     entityId: statement.id,
     metadata: { format: parsed.format, rows: rows.length, imported, duplicates, skipped: parsed.skipped.length },
   });
+  // Lo transcrito por la IA ya quedó como movimientos: se borra.
+  if (upload.options.scanId) {
+    await deleteScan(userId, upload.options.scanId).catch((error: unknown) => log.warn("finance.scan.delete_failed", { error }));
+  }
   return {
     importId: imported > 0 ? statement.id : null,
     accountId: account.id,

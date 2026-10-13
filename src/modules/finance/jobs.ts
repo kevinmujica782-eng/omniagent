@@ -3,16 +3,25 @@ import { prisma } from "@/lib/db";
 import { entitledSubscriptionWhere } from "@/modules/billing/entitlements";
 import { DAY_MS } from "./analyzers";
 import { runFinancialAnalysis } from "./insights/analysis.service";
+import { purgeExpiredScans } from "./statement-import/scan.service";
 import { syncConnection } from "./sync.service";
 
-// Trabajo programado (cron diario): sincroniza conexiones atrasadas y hace el análisis mensual automático.
+// Trabajo programado (cron diario): sincroniza conexiones atrasadas, hace el análisis mensual automático y borra las
+// lecturas con IA de estados de cuenta que vencieron sin importarse.
 // Lotes pequeños para caber en el tiempo máximo de una función serverless; si crece, pasar a una cola.
 
 export async function runScheduledFinanceJobs(opts: { syncLimit?: number; analysisLimit?: number; now?: Date } = {}) {
   const syncLimit = opts.syncLimit ?? 25;
   const analysisLimit = opts.analysisLimit ?? 3;
   const now = (opts.now ?? new Date()).getTime();
-  const result = { synced: 0, analyzed: 0, errors: 0 };
+  const result = { synced: 0, analyzed: 0, scansPurged: 0, errors: 0 };
+
+  try {
+    result.scansPurged = await purgeExpiredScans(new Date(now));
+  } catch (error) {
+    result.errors += 1;
+    console.error("[cron] limpieza de lecturas con IA fallida", error);
+  }
 
   const stale = await prisma.integrationConnection.findMany({
     where: {

@@ -165,6 +165,7 @@ alter default privileges for role postgres in schema public
 -- (se lee por la API junto con su producto) y return_cases (el texto de los reclamos, las respuestas
 -- de las tiendas y el historial: se leen por la API, que arma la vista con la aprobación pendiente),
 -- push_subscriptions (las llaves de cada aparato), app_settings (ajustes internos, como las llaves VAPID),
+-- statement_scans y statement_scan_pages (fotos cifradas de estados de cuenta mientras la IA las lee; ver 4.2),
 -- agent_memories (la memoria de Omni: se ve y se borra en Cuenta, por la API) y sites (las páginas web que armó Omni:
 -- la pública se sirve en /s/{slug} desde el servidor y la vista previa solo a su dueño).
 
@@ -255,6 +256,21 @@ begin
       before insert or update of is_default on public.assistants
       for each row when (new.is_default)
       execute function public.assistants_single_default();
+  end if;
+end $$;
+
+-- ─── 4.2 Lectura con IA de estados de cuenta: solo servidor ─────────────
+-- statement_scans y statement_scan_pages guardan por unas horas las páginas cifradas de un estado de cuenta en fotos
+-- o escaneado, y lo que transcribió la IA. Nada de eso se lee desde el cliente: RLS sin políticas y sin permisos
+-- para anon ni authenticated (ni siquiera de lectura).
+
+do $$
+begin
+  if to_regclass('public.statement_scans') is not null then
+    revoke all on public.statement_scans from anon, authenticated;
+  end if;
+  if to_regclass('public.statement_scan_pages') is not null then
+    revoke all on public.statement_scan_pages from anon, authenticated;
   end if;
 end $$;
 

@@ -279,7 +279,18 @@ Cómo se lee:
 - **Resúmenes** (totales, saldos, pago mínimo) no se importan como movimientos; los dudosos aparecen entre las filas omitidas.
 - **Categorías** de la misma taxonomía que Plaid y el sandbox, con nombre de comercio canónico ("Netflix", "OXXO"), para que suscripciones y gastos hormiga funcionen igual.
 
-Límites y seguridad: archivos de hasta **4 MB** (el cuerpo se lee con tope aunque falte `Content-Length`), 5,000 movimientos, 60 páginas y 200,000 trozos de texto por PDF; 60 vistas previas y 20 importaciones por hora. **El archivo no se guarda** y la contraseña del PDF solo se usa en memoria. Cada cuenta e importación se busca por usuario, y una cuenta sincronizada con un banco no admite importaciones (409). Los PDF escaneados (imagen) no se leen: se pide el estado de cuenta digital.
+Límites y seguridad: archivos de hasta **4 MB** (el cuerpo se lee con tope aunque falte `Content-Length`), 5,000 movimientos, 60 páginas y 200,000 trozos de texto por PDF; 60 vistas previas y 20 importaciones por hora. **El archivo no se guarda** y la contraseña del PDF solo se usa en memoria. Cada cuenta e importación se busca por usuario, y una cuenta sincronizada con un banco no admite importaciones (409).
+
+### Fotos y PDF escaneados (lectura con IA)
+
+Las fotos del estado de cuenta (JPG, PNG o WebP, hasta 10) y los PDF escaneados (sin texto, hasta 20 páginas) se leen con **Claude**, página por página. Netlify corta cada petición a los 60 s, así que no se lee todo de una vez:
+
+1. **Subir.** `POST /finance/statements/scans` (multipart, el campo `file` una vez por archivo). Un PDF se parte en PDF de una página con pdf-lib; cada foto es una página. Las páginas se guardan **cifradas** (AES-256-GCM, `encryptBytes`) en `statement_scan_pages`. Subir otra vez el mismo documento (mismo sha256) retoma la lectura anterior sin volver a leer ni a cobrar.
+2. **Leer cada página.** `POST /finance/statements/scans/:id/pages/:page` (idempotente, hasta 60 s). Claude transcribe la página **tal como aparece** (`scan-schema.ts`: fechas, descripciones, cargos, abonos, saldos y el resumen; los últimos 4 dígitos de la cuenta, nunca el número completo), con el modelo más capaz. La página se borra en cuanto se lee. Si falla, queda `FAILED` con el motivo y se reintenta hasta 3 veces; una lectura que se cortó se retoma a los 90 s. La app lee 2 páginas a la vez y muestra el avance.
+3. **Vista previa e importación.** Con todas las páginas terminadas, `preview` e `import` reciben `options.scanId` en lugar del archivo. Lo transcrito pasa por **las mismas reglas** que un PDF con texto (fechas, montos, sentido, resúmenes, duplicados) y además se **comprueba con el propio documento**: saldo inicial + movimientos = saldo final, el saldo de cada renglón (en el sentido de lectura que cuadra) y los totales de cargos y abonos. Si algo no cuadra, la vista previa dice cuánto y en qué renglón. Los movimientos con dígitos dudosos no se importan (aparecen entre las filas omitidas) y se avisa de las páginas que no se pudieron leer. También avisa si el documento parece de una tarjeta y elegiste una cuenta de débito (o al revés) o si la moneda no coincide.
+4. **Al importar** se borra lo transcrito. Lo que no se importa vence a las **12 horas** (lo borra la creación de otra lectura y el cron diario de finanzas). Cerrar el diálogo descarta la lectura (`DELETE /finance/statements/scans/:id`).
+
+Cupo: **8 páginas al mes en Gratis y 120 en Pro** (cuenta cada página bien leída; las fallidas no cuentan); sin cupo responde 402 `plan_limit` con `reason: "statement_pages"`. Sin proveedor de IA configurado responde 503 `scan_unavailable`. Las fotos HEIC de iPhone no se leen (el navegador del teléfono las convierte a JPG al subirlas); un PDF escaneado y además protegido con contraseña tampoco (pdf-lib no descifra). En la app, las fotos se reducen a JPEG de hasta 2000 px antes de subirlas para caber en los 4 MB.
 
 > Pendiente: un PDF de 4 MB con flujos comprimidos puede expandirse a varios GB **sin texto** y agotar la memoria al leerlo (igual con los formularios PDF de Trámites). En Vercel solo cae esa invocación; si despliegas con Docker, conviene leer los PDF en un proceso aparte con límite de memoria y de tiempo.
 
@@ -581,6 +592,9 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 | GET | `/api/v1/finance/summary` | Todo lo de la página de Finanzas en una llamada (útil para la app nativa), incluidas las cuentas con estados de cuenta |
 | POST | `/api/v1/finance/statements/preview` | Vista previa de un estado de cuenta (multipart: `file` y `options` en JSON: `accountId` o `newAccount`, y opcionalmente `mapping`, `dateOrder`, `signConvention`, `password`). No guarda nada |
 | POST | `/api/v1/finance/statements/import` | Importa el estado de cuenta (mismo cuerpo) → `{ importId, accountId, imported, duplicates, skipped }` |
+| POST | `/api/v1/finance/statements/scans` | Lectura con IA de fotos (1 a 10) o de un PDF escaneado (hasta 20 páginas): multipart, `file` una vez por archivo → `StatementScanView` con las páginas pendientes (20 por hora; 402 `plan_limit` sin cupo) |
+| GET, DELETE | `/api/v1/finance/statements/scans/:id` | Avance de la lectura, página por página; descartarla |
+| POST | `/api/v1/finance/statements/scans/:id/pages/:page` | Lee esa página con IA (idempotente, hasta 60 s) → `DONE`, `FAILED` con `canRetry`, o `READING` si otra petición la tiene. Con todas terminadas, `preview` e `import` reciben `options.scanId` en lugar del archivo |
 | GET | `/api/v1/finance/statements` | Cuentas manuales con sus estados de cuenta importados |
 | DELETE | `/api/v1/finance/statements/:id` | Deshace una importación y borra sus movimientos |
 | GET | `/api/v1/finance/transactions` | Movimientos: `q`, `category`, `accountId`, `from`, `to`, `type=gasto\|ingreso`, `limit`, `offset` |
@@ -645,6 +659,8 @@ Una suscripción de Google Play solo la puede cancelar la persona desde Google P
 | PUT | `/api/v1/knowledge/:category` | Reemplaza las líneas de una categoría `{ items: string[] }` |
 | POST | `/api/v1/slack/link` | Genera un código para conectar Slack (la persona escribe `/omni vincular CÓDIGO` en Slack) |
 | POST | `/api/v1/slack/commands` | Comando de barra de Slack `/omni`: verifica la firma de Slack, resuelve la cuenta enlazada y responde por el `response_url` (requiere `SLACK_SIGNING_SECRET`) |
+| GET | `/api/v1/slack/setup` | Abre «Create New App» de Slack con el manifiesto de Omni ya puesto (comando `/omni` con la URL de esta instalación y solo el permiso `commands`) |
+| GET | `/api/v1/slack/manifest` | El manifiesto de la app de Slack, la URL para crearla en un clic y si ya hay `SLACK_SIGNING_SECRET` (público, sin secretos) |
 | GET, POST | `/api/v1/engine/jobs` | Trabajos en segundo plano (`?active=1`); empezar uno `{ playbook, input }` → responde al instante (`created: false` si ya estaba en marcha) |
 | GET | `/api/v1/engine/jobs/:id` | Un trabajo con sus pasos |
 | POST | `/api/v1/engine/jobs/:id/cancel` | Detenerlo (si corre, al terminar el paso actual) |

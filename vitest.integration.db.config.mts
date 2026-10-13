@@ -13,7 +13,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/integration/db/**/*.int.test.ts"],
-    env: { TZ: "UTC" },
+    // La lectura con IA exige un proveedor configurado; las pruebas usan un lector falso y nunca llaman a la red.
+    env: { TZ: "UTC", ANTHROPIC_API_KEY: "sk-ant-solo-pruebas" },
     testTimeout: 60_000,
     hookTimeout: 60_000,
     fileParallelism: false, // comparten la base; sin paralelismo entre archivos

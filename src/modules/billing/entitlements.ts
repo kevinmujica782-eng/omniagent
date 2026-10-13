@@ -89,6 +89,11 @@ export async function monthlyPageReads(userId: string, now = new Date()): Promis
   return prisma.aiUsageLog.count({ where: { userId, kind: "page_read", createdAt: { gte: startOfMonthUtc(now) } } });
 }
 
+/** Páginas de estados de cuenta (fotos o PDF escaneados) leídas con IA este mes. */
+export async function monthlyStatementPages(userId: string, now = new Date()): Promise<number> {
+  return prisma.aiUsageLog.count({ where: { userId, kind: "statement_page", createdAt: { gte: startOfMonthUtc(now) } } });
+}
+
 export type UsageMeter = { used: number; limit: number };
 
 /** Consumo del mes frente a los límites del plan (cuenta y panel de Inicio). */
@@ -96,11 +101,19 @@ export async function usageSummary(
   userId: string,
   entitlements: Entitlements,
   now = new Date(),
-): Promise<{ messages: UsageMeter; formReads: UsageMeter; pageReads: UsageMeter; watching: UsageMeter; goals: UsageMeter }> {
-  const [messages, formReads, pageReads, watching, goals] = await Promise.all([
+): Promise<{
+  messages: UsageMeter;
+  formReads: UsageMeter;
+  pageReads: UsageMeter;
+  statementPages: UsageMeter;
+  watching: UsageMeter;
+  goals: UsageMeter;
+}> {
+  const [messages, formReads, pageReads, statementPages, watching, goals] = await Promise.all([
     monthlyUsage(userId, now),
     monthlyFormReads(userId, now),
     monthlyPageReads(userId, now),
+    monthlyStatementPages(userId, now),
     prisma.watchlistItem.count({ where: { userId, status: "ACTIVE" } }),
     prisma.goal.count({ where: { userId, status: "ACTIVE" } }),
   ]);
@@ -109,6 +122,7 @@ export async function usageSummary(
     messages: { used: messages, limit: l.monthlyMessages },
     formReads: { used: formReads, limit: l.monthlyFormReads },
     pageReads: { used: pageReads, limit: l.monthlyPageReads },
+    statementPages: { used: statementPages, limit: l.monthlyStatementPages },
     watching: { used: watching, limit: l.watchlistItems },
     goals: { used: goals, limit: l.activeGoals },
   };

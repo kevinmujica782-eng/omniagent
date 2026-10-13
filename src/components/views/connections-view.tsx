@@ -65,10 +65,13 @@ export function ConnectionsView({
   connected,
   available,
   preview = false,
+  slackReady = true,
 }: {
   connected: ConnectorView[];
   available: ConnectorView[];
   preview?: boolean;
+  /** La instalación tiene el Signing Secret de Slack (sin él, /omni no puede responder). */
+  slackReady?: boolean;
 }) {
   return (
     <PageBody>
@@ -97,7 +100,7 @@ export function ConnectionsView({
         </Panel>
       </Section>
       <Section title="Slack">
-        <SlackConnect demo={preview} />
+        <SlackConnect demo={preview} configured={slackReady} />
       </Section>
       <p className="mt-6 px-1 text-xs leading-relaxed text-muted">
         Los accesos a tus cuentas se guardan cifrados y puedes desconectarlos cuando quieras. Lo marcado como Demo usa

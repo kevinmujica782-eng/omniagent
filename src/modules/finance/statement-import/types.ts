@@ -1,8 +1,31 @@
 // Tipos del importador de estados de cuenta (CSV y PDF). Sin dependencias de servidor: los usan los lectores,
 // el servicio, las pruebas y la interfaz.
 
-export type StatementFormat = "csv" | "pdf";
+/** "scan": fotos o PDF escaneado, leídos con IA página por página. */
+export type StatementFormat = "csv" | "pdf" | "scan";
 export type Direction = "DEBIT" | "CREDIT";
+
+/** Tipo de cuenta que la lectura con IA ve en el documento. */
+export type ScanAccountType = "checking" | "savings" | "credit_card" | "other" | "unknown";
+
+/** Con qué se comprobaron los montos leídos con IA. */
+export type ScanCheck = "closing" | "running" | "totals";
+
+/** Lo que dejó la lectura con IA, además de los movimientos. */
+export interface ScanInfo {
+  pages: number;
+  /** Páginas que no se pudieron leer (borrosas, cortadas o con error), para pedir otra foto. */
+  unreadablePages: number[];
+  /** Comprobaciones que se pudieron hacer con los datos del propio documento. */
+  checks: ScanCheck[];
+  /** true si todas cuadran; false si alguna no; null si el documento no traía con qué comprobar. */
+  verified: boolean | null;
+  institution: string | null;
+  accountType: ScanAccountType | null;
+  /** Solo los últimos 4 dígitos de la cuenta o tarjeta. */
+  last4: string | null;
+  currency: string | null;
+}
 
 /** Orden de día, mes y año en las fechas numéricas ("05/03/2024"). */
 export type DateOrder = "DMY" | "MDY" | "YMD";
@@ -103,4 +126,6 @@ export interface ParsedStatement {
   /** Saldo al cierre (del resumen del PDF o del último saldo por fila), con signo. */
   closingBalanceCents: number | null;
   detected: StatementDetection;
+  /** Solo en la lectura con IA. */
+  scan?: ScanInfo | null;
 }
