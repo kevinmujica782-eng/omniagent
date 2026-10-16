@@ -9,7 +9,7 @@ import { log } from "@/lib/log";
 import { isUuid } from "@/lib/validation";
 import { aiErrorToHttp, isAIProviderError } from "@/modules/ai/ai.errors";
 import { aiConfigured, generateStructured, StructuredOutputError } from "@/modules/ai/ai.service";
-import type { AIContentPart } from "@/modules/ai/ai.types";
+import type { AIContentPart, AITier } from "@/modules/ai/ai.types";
 import { getEntitlements, monthlyStatementPages, planLimitError } from "@/modules/billing/entitlements";
 import type { StatementScanPageView, StatementScanView } from "@/types/cards";
 import { statementError } from "./limits";
@@ -42,27 +42,51 @@ export type ScanPageReader = (input: {
   bytes: Uint8Array;
 }) => Promise<{ result: ScanPageResult; model: string }>;
 
-/** La IA transcribe la página (Claude primero; con el modelo más capaz, porque una cifra mal leída cuesta caro). */
+/** Tope de cada página: la función tiene 60 s. */
+const PAGE_DEADLINE_MS = 54_000;
+/** Si el modelo más capaz rechaza el pedido después de esto, ya no queda tiempo para repetirlo con el rápido. */
+const FALLBACK_WINDOW_MS = 20_000;
+
+/**
+ * La IA transcribe la página: primero con el modelo más capaz (una cifra mal leída cuesta caro). Si ese modelo rechaza
+ * el pedido por su forma (400: no por la imagen ni por la red), se repite con el modelo rápido, que recibe el JSON por
+ * otra vía (herramienta obligatoria). El motivo del rechazo queda en los logs.
+ */
 export const readPageWithAI: ScanPageReader = async (input) => {
+  const started = Date.now();
   const data = Buffer.from(input.bytes).toString("base64");
   const part: AIContentPart =
     input.mediaType === "application/pdf"
       ? { type: "file", mediaType: "application/pdf", data, filename: `pagina-${input.page}.pdf` }
       : { type: "image", mediaType: input.mediaType, data };
-  const result = await generateStructured({
-    schema: scanPageSchema,
-    name: SCAN_TOOL_NAME,
-    system: SCAN_SYSTEM_PROMPT,
-    prompt: [part, { type: "text", text: scanPagePrompt(input.page, input.pages) }],
-    tier: "smart",
-    maxOutputTokens: 8_000,
-    // Cada página va en su propia petición de 60 s.
-    timeoutMs: 50_000,
-    deadlineMs: 54_000,
-    // Cuenta contra las páginas del plan solo si la lectura sirvió.
-    usage: { userId: input.userId, module: "FINANCE", kind: "statement_page", logOn: "success" },
-  });
-  return { result: result.value, model: result.model };
+  const ask = (tier: AITier, deadlineMs: number) =>
+    generateStructured({
+      schema: scanPageSchema,
+      name: SCAN_TOOL_NAME,
+      system: SCAN_SYSTEM_PROMPT,
+      prompt: [part, { type: "text", text: scanPagePrompt(input.page, input.pages) }],
+      tier,
+      maxOutputTokens: 8_000,
+      timeoutMs: Math.min(50_000, deadlineMs - 1_000),
+      deadlineMs,
+      // Cuenta contra las páginas del plan solo si la lectura sirvió.
+      usage: { userId: input.userId, module: "FINANCE", kind: "statement_page", logOn: "success" },
+    });
+  try {
+    const result = await ask("smart", PAGE_DEADLINE_MS);
+    return { result: result.value, model: result.model };
+  } catch (error) {
+    const elapsed = Date.now() - started;
+    if (!isAIProviderError(error) || error.code !== "invalid_request" || elapsed > FALLBACK_WINDOW_MS) throw error;
+    log.warn("finance.scan.smart_rejected", {
+      provider: error.provider,
+      httpStatus: error.httpStatus,
+      detail: error.detail,
+      attempts: error.attempts.map((attempt) => `${attempt.provider}/${attempt.model}:${attempt.error ?? "ok"}`).join(", "),
+    });
+    const result = await ask("fast", PAGE_DEADLINE_MS - elapsed);
+    return { result: result.value, model: result.model };
+  }
 };
 
 const PAGE_FIELDS = { page: true, status: true, attempts: true, result: true, error: true } as const;
@@ -287,6 +311,9 @@ export async function readScanPage(
       page,
       attempt: row.attempts,
       code: isAIProviderError(error) ? error.code : error instanceof Error ? error.name : "unknown",
+      // Lo que dijo el proveedor (sin datos de la persona): para entender un rechazo.
+      detail: isAIProviderError(error) ? error.detail : error instanceof Error ? error.message.slice(0, 300) : null,
+      httpStatus: isAIProviderError(error) ? error.httpStatus : null,
     });
     const saved = await prisma.statementScanPage.update({
       where: key,
