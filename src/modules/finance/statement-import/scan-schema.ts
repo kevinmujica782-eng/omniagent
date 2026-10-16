@@ -81,6 +81,47 @@ export type ScanPageOutput = z.output<typeof scanPageSchema>;
 const _sameShape = (value: ScanPageOutput): ScanPageResult => value;
 void _sameShape;
 
+/**
+ * Lo que se le pide al modelo: el mismo esquema, pero sin los «o null». La salida estructurada de Claude admite hasta 16
+ * parámetros con uniones (null cuenta como unión) y este esquema tiene 17; un dato que no está simplemente se omite.
+ * La validación (scanPageSchema) sigue aceptando null, por si algún modelo lo manda igual.
+ */
+export function scanRequestJsonSchema(): Record<string, unknown> {
+  const json = z.toJSONSchema(scanPageSchema, { io: "input" }) as Record<string, unknown>;
+  delete json.$schema;
+  return dropNullUnions(json) as Record<string, unknown>;
+}
+
+/** Quita la rama `null` de `anyOf` y de `type: [..., "null"]`; si queda una sola opción, la deja sin `anyOf`. */
+export function dropNullUnions(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(dropNullUnions);
+  if (!node || typeof node !== "object") return node;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(node)) out[key] = dropNullUnions(value);
+  if (Array.isArray(out.anyOf)) {
+    const rest = out.anyOf.filter((option) => !(option && typeof option === "object" && (option as { type?: unknown }).type === "null"));
+    if (rest.length === 1 && rest[0] && typeof rest[0] === "object") {
+      const { anyOf: _anyOf, ...others } = out;
+      return { ...(rest[0] as Record<string, unknown>), ...others };
+    }
+    out.anyOf = rest;
+  }
+  if (Array.isArray(out.type)) {
+    const types = out.type.filter((type) => type !== "null");
+    out.type = types.length === 1 ? types[0] : types;
+  }
+  return out;
+}
+
+/** Cuántos parámetros del esquema tienen uniones (`anyOf` o varios tipos): Claude admite hasta 16. */
+export function unionCount(node: unknown): number {
+  if (Array.isArray(node)) return node.reduce((sum: number, item) => sum + unionCount(item), 0);
+  if (!node || typeof node !== "object") return 0;
+  const record = node as Record<string, unknown>;
+  const own = Array.isArray(record.anyOf) || Array.isArray(record.oneOf) || Array.isArray(record.type) ? 1 : 0;
+  return own + Object.values(record).reduce((sum: number, value) => sum + unionCount(value), 0);
+}
+
 /** Nombre del formato (en Claude con Haiku es el nombre de la herramienta que recibe el JSON). */
 export const SCAN_TOOL_NAME = "transcribir_pagina_estado_de_cuenta";
 
