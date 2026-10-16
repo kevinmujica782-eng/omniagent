@@ -1,0 +1,103 @@
+# Prueba de producción de la lectura con IA: crea una cuenta de prueba, sube la foto de un estado de cuenta ficticio
+# (tests/fixtures/estado-de-cuenta-foto.jpg), la lee con Claude, revisa la vista previa (5 movimientos que cuadran con
+# el saldo final, los saldos y los totales del documento), la importa y elimina la cuenta. Cada paso queda como
+# anotación. También comprueba que el manifiesto de Slack y el enlace para crear la app respondan. La cuenta de
+# prueba (kevinmujica782+ocr-<run>@gmail.com) no queda guardada; la lectura cuesta unos centavos de la API de IA.
+name: Probar lectura con IA
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_url:
+        description: "URL de la web"
+        required: true
+        default: "https://omniagent-app.netlify.app"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Foto de estado de cuenta, leída con IA
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      APP_URL: ${{ inputs.app_url }}
+      # Datos públicos (también van en el navegador de cada usuario).
+      SUPABASE_URL: https://nhrporwspcvnmabjaqta.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_enY-kKg99Zn0MdGoM8JjlQ_iVniEvdG
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Slack en un clic
+        run: |
+          manifest=$(curl -sS --max-time 30 "$APP_URL/api/v1/slack/manifest" || true)
+          echo "::notice title=Slack · manifiesto::$(printf '%s' "$manifest" | jq -c '{configured: .data.configured, commandUrl: .data.commandUrl, command: .data.manifest.features.slash_commands[0].command, scopes: .data.manifest.oauth_config.scopes.bot}' 2>/dev/null || printf '%s' "$manifest" | head -c 300)"
+          location=$(curl -sS --max-time 30 -o /dev/null -w "%{http_code} %{redirect_url}" "$APP_URL/api/v1/slack/setup" || true)
+          echo "::notice title=Slack · crear la app::${location:0:120}…"
+          case "$location" in "302 https://api.slack.com/apps?new_app=1&manifest_json="*) ;; *) echo "::error title=Slack::El enlace para crear la app no redirige a Slack"; exit 1 ;; esac
+
+      - name: Crear cuenta, leer la foto con IA, importar y eliminar la cuenta
+        run: |
+          set -u
+          note() { printf '::notice title=%s::%s\n' "$1" "$(printf '%s' "$2" | head -c 1800 | sed -e 's/%/%25/g' -e 's/\r//g' | tr '\n' ' ')"; }
+          email="kevinmujica782+ocr-${GITHUB_RUN_ID}@gmail.com"
+          password="$(openssl rand -hex 16)"
+
+          code=$(curl -sS --max-time 30 -X POST "$SUPABASE_URL/auth/v1/signup" \
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY" -H "Content-Type: application/json" \
+            -d "$(jq -n --arg e "$email" --arg p "$password" '{email:$e, password:$p, data:{full_name:"Prueba de lectura con IA"}}')" \
+            -o signup.json -w "%{http_code}")
+          token=$(jq -r '.access_token // empty' signup.json 2>/dev/null || true)
+          [ -n "$token" ] && echo "::add-mask::$token"
+          note "Registro" "HTTP ${code} · sesión: $([ -n "$token" ] && echo sí || echo no)"
+          [ -n "$token" ] || exit 1
+
+          # Pase lo que pase, la cuenta de prueba se elimina al final (con su lectura, cuenta y movimientos).
+          cleanup() {
+            delete_code=$(curl -sS --max-time 60 -X POST "$APP_URL/api/v1/account/delete" \
+              -H "Authorization: Bearer $token" -H "Content-Type: application/json" \
+              -d '{"confirm":"ELIMINAR"}' -o delete.json -w "%{http_code}" || true)
+            note "Eliminar cuenta" "HTTP ${delete_code}"
+          }
+          trap cleanup EXIT
+          auth=(-H "Authorization: Bearer $token")
+
+          # 1. Subir la foto.
+          curl -sS --max-time 60 -X POST "$APP_URL/api/v1/finance/statements/scans" "${auth[@]}" \
+            -F "file=@tests/fixtures/estado-de-cuenta-foto.jpg;type=image/jpeg" -o scan.json -w "%{http_code}" > scan.code || true
+          scan_id=$(jq -r '.data.id // empty' scan.json 2>/dev/null || true)
+          pages=$(jq -r '.data.pageCount // 0' scan.json 2>/dev/null || echo 0)
+          note "Subir" "HTTP $(cat scan.code) · lectura: ${scan_id:-ninguna} · páginas: ${pages} · $(jq -c '.error // empty' scan.json)"
+          [ -n "$scan_id" ] || exit 1
+
+          # 2. Leer cada página con IA (hasta 3 intentos, como la app).
+          for p in $(seq 1 "$pages"); do
+            for attempt in 1 2 3; do
+              out=$(curl -sS --max-time 90 -X POST "$APP_URL/api/v1/finance/statements/scans/$scan_id/pages/$p" "${auth[@]}" \
+                -o page.json -w "%{http_code} %{time_total}" || true)
+              status=$(jq -r '.data.status // empty' page.json 2>/dev/null || true)
+              note "Página ${p} · intento ${attempt}" "HTTP ${out%% *} en ${out##* } s · ${status:-?} · movimientos: $(jq -r '.data.rows // "-"' page.json) · $(jq -r '.data.error // .error.message // ""' page.json)"
+              [ "$status" = "DONE" ] && break
+              [ "$status" = "FAILED" ] && [ "$(jq -r '.data.canRetry' page.json 2>/dev/null || true)" != "true" ] && break
+              sleep 5
+            done
+          done
+
+          # 3. Vista previa con lo transcrito.
+          options=$(jq -nc --arg s "$scan_id" '{scanId:$s, newAccount:{institutionName:"Banco Demo", type:"CHECKING", currency:"MXN"}}')
+          curl -sS --max-time 60 -X POST "$APP_URL/api/v1/finance/statements/preview" "${auth[@]}" \
+            --form-string "options=$options" -o preview.json -w "%{http_code}" > preview.code || true
+          note "Vista previa" "HTTP $(cat preview.code) · $(jq -c '.data | {count, periodStart, periodEnd, spending, income, scan: (.scan | {verified, checks, institution, accountType, last4, currency}), warnings} // .error' preview.json)"
+          note "Movimientos leídos" "$(jq -r '[.data.sample[]? | "\(.date) \(if .direction == "DEBIT" then "-" else "+" end)\(.amount) \(.description)"] | join(" | ")' preview.json)"
+
+          # 4. Importar.
+          curl -sS --max-time 60 -X POST "$APP_URL/api/v1/finance/statements/import" "${auth[@]}" \
+            --form-string "options=$options" -o import.json -w "%{http_code}" > import.code || true
+          note "Importar" "HTTP $(cat import.code) · $(jq -c '.data | {imported, duplicates, skipped} // .error' import.json)"
+
+          # 5. Lo esperado: los 5 movimientos de la foto, comprobados con el documento, e importados.
+          count=$(jq -r '.data.count // 0' preview.json 2>/dev/null || echo 0)
+          verified=$(jq -r '.data.scan.verified // "null"' preview.json 2>/dev/null || echo null)
+          imported=$(jq -r '.data.imported // 0' import.json 2>/dev/null || echo 0)
+          [ "$count" = "5" ] && [ "$verified" = "true" ] && [ "$imported" = "5" ]
