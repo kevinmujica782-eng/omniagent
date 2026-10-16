@@ -9,6 +9,13 @@ export const MAX_STATEMENT_BYTES = 4 * 1024 * 1024;
 export const MAX_STATEMENT_ROWS = 5_000;
 export const MAX_PDF_PAGES = 60;
 
+/**
+ * Lectura con IA (fotos o PDF escaneado): cada página se lee por separado, en su propia petición de menos de 60 s.
+ * 20 páginas cubren el estado de cuenta mensual de casi cualquier banco; 10 fotos, un estado fotografiado a mano.
+ */
+export const MAX_SCAN_PAGES = 20;
+export const MAX_SCAN_IMAGES = 10;
+
 export type StatementErrorCode =
   | "file_required"
   | "file_too_large"
@@ -22,7 +29,13 @@ export type StatementErrorCode =
   | "columns_not_found"
   | "invalid_mapping"
   | "no_transactions_found"
-  | "too_many_rows";
+  | "too_many_rows"
+  // Lectura con IA
+  | "scan_required"
+  | "scan_unavailable"
+  | "scan_protected_pdf"
+  | "scan_not_found"
+  | "scan_pending";
 
 const STATUS: Record<StatementErrorCode, number> = {
   file_required: 400,
@@ -38,6 +51,11 @@ const STATUS: Record<StatementErrorCode, number> = {
   invalid_mapping: 422,
   no_transactions_found: 422,
   too_many_rows: 422,
+  scan_required: 422,
+  scan_unavailable: 503,
+  scan_protected_pdf: 422,
+  scan_not_found: 404,
+  scan_pending: 409,
 };
 
 export function statementError(code: StatementErrorCode, message: string, details?: unknown): AppError {

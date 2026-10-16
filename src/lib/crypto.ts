@@ -44,6 +44,36 @@ export function decryptSecret(payload: string): string {
   return Buffer.concat([decipher.update(Buffer.from(data, "base64url")), decipher.final()]).toString("utf8");
 }
 
+const BYTES_VERSION = 1;
+const IV_BYTES = 12;
+const TAG_BYTES = 16;
+
+/**
+ * Binario cifrado con AES-256-GCM, para archivos que se guardan poco tiempo (páginas de un estado de cuenta mientras
+ * la IA las lee). Formato: [versión (1 byte)][iv (12)][authTag (16)][datos].
+ */
+export function encryptBytes(plain: Uint8Array): Uint8Array<ArrayBuffer> {
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv("aes-256-gcm", subkey("encrypt-bytes"), iv);
+  const data = Buffer.concat([cipher.update(plain), cipher.final()]);
+  const out = new Uint8Array(1 + IV_BYTES + TAG_BYTES + data.length);
+  out[0] = BYTES_VERSION;
+  out.set(iv, 1);
+  out.set(cipher.getAuthTag(), 1 + IV_BYTES);
+  out.set(data, 1 + IV_BYTES + TAG_BYTES);
+  return out;
+}
+
+export function decryptBytes(payload: Uint8Array): Uint8Array<ArrayBuffer> {
+  if (payload.length < 1 + IV_BYTES + TAG_BYTES || payload[0] !== BYTES_VERSION) {
+    throw new Error("Formato de archivo cifrado no reconocido.");
+  }
+  const decipher = createDecipheriv("aes-256-gcm", subkey("encrypt-bytes"), payload.subarray(1, 1 + IV_BYTES));
+  decipher.setAuthTag(payload.subarray(1 + IV_BYTES, 1 + IV_BYTES + TAG_BYTES));
+  const plain = Buffer.concat([decipher.update(payload.subarray(1 + IV_BYTES + TAG_BYTES)), decipher.final()]);
+  return new Uint8Array(plain);
+}
+
 /** Huella HMAC corta de un texto (p. ej., la cotización que el usuario autoriza en la hoja de pago). */
 export function digest(label: string, data: string): string {
   return createHmac("sha256", subkey(`digest:${label}`)).update(data).digest("base64url").slice(0, 24);

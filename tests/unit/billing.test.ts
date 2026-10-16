@@ -93,6 +93,9 @@ describe("hoja para pasarse a Pro", () => {
     const mail = upgradeHighlights({ reason: "feature", feature: "mail_autopilot" });
     expect(mail[0]).toBe(AGENT_FEATURES.mail_autopilot.pro);
     expect(mail).not.toContain("Correo revisado cada 3 horas");
+    const statements = upgradeHighlights({ reason: "statement_pages" });
+    expect(statements[0]).toBe("120 páginas de estados de cuenta en foto leídas con IA al mes");
+    expect(statements).toHaveLength(3);
   });
 
   it("arma la tarjeta del chat con el motivo y el precio", () => {
@@ -111,6 +114,7 @@ describe("pantalla de Omni Pro", () => {
     expect(row("prices")).toMatchObject({ free: "3, una vez al día", pro: "50, cada hora" });
     expect(row("analysis")).toMatchObject({ free: "Cuando lo pides", pro: "Informe mensual automático" });
     expect(row("model")).toMatchObject({ free: "Rápido", pro: "El más capaz" });
+    expect(row("statements")).toMatchObject({ free: "8 páginas al mes", pro: "120 páginas al mes" });
     // Permitir o Denegar está en los dos planes.
     expect(row("approvals")).toMatchObject({ free: true, pro: true });
     // Ninguna fila promete "ilimitado".
@@ -129,6 +133,7 @@ describe("pantalla de Omni Pro", () => {
     expect(rowForLimit("page_reads", null)).toBe("prices");
     expect(rowForLimit("messages", null)).toBe("messages");
     expect(rowForLimit("form_reads", null)).toBe("forms");
+    expect(rowForLimit("statement_pages", null)).toBe("statements");
     expect(rowForLimit("feature", "mail_autopilot")).toBe("mail");
     expect(rowForLimit(null, "monthly_report")).toBe("analysis");
     expect(rowForLimit(null, "algo_raro")).toBeNull();

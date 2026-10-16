@@ -195,6 +195,16 @@ enum ImportStatus {
   @@map("import_status")
 }
 
+/// Estado de cada página en la lectura con IA de un estado de cuenta (fotos o PDF escaneado).
+enum ScanPageStatus {
+  PENDING
+  READING
+  DONE
+  FAILED
+
+  @@map("scan_page_status")
+}
+
 enum TaskType {
   FORM_FILL
   EMAIL
@@ -485,6 +495,7 @@ model Profile {
   recurringCharges  RecurringCharge[]
   suggestions       Suggestion[]
   statementImports  StatementImport[]
+  statementScans    StatementScan[]
   tasks             Task[]
   documents         UserDocument[]
   calendarEvents    CalendarEvent[]
@@ -994,6 +1005,51 @@ model StatementImport {
   @@index([userId, createdAt(sort: Desc)])
   @@index([accountId])
   @@map("statement_imports")
+}
+
+/// Lectura con IA de un estado de cuenta en fotos o escaneado. Vive poco: las páginas se guardan cifradas solo hasta
+/// leerlas, y su transcripción hasta importar o hasta que vence (12 h). Solo servidor: RLS sin políticas.
+model StatementScan {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  fileName  String   @map("file_name")
+  /// sha256 de lo que se subió: el mismo documento no se vuelve a leer (ni a cobrar) mientras no venza.
+  fileHash  String   @map("file_hash")
+  /// "pdf" (un PDF escaneado, partido en páginas) o "images" (fotos).
+  source    String
+  pageCount Int      @map("page_count")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user  Profile             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pages StatementScanPage[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("statement_scans")
+}
+
+model StatementScanPage {
+  scanId    String         @map("scan_id") @db.Uuid
+  /// Desde 1.
+  page      Int
+  mediaType String         @map("media_type")
+  /// La página cifrada (AES-256-GCM, ver encryptBytes). Se borra en cuanto se lee.
+  data      Bytes?
+  status    ScanPageStatus @default(PENDING)
+  attempts  Int            @default(0)
+  /// Inicio de la lectura en curso: si pasa más de un minuto y medio sin terminar, otra petición la retoma.
+  startedAt DateTime?      @map("started_at") @db.Timestamptz(6)
+  /// Lo que transcribió la IA (movimientos y resumen de la página).
+  result    Json?
+  error     String?
+  model     String?
+  updatedAt DateTime       @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  scan StatementScan @relation(fields: [scanId], references: [id], onDelete: Cascade)
+
+  @@id([scanId, page])
+  @@map("statement_scan_pages")
 }
 
 /// Informe de ahorro de los últimos 3 meses: métricas calculadas + redacción de Claude (o reglas si la IA no está disponible).

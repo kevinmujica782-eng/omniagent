@@ -148,6 +148,11 @@ export function AccountView({
             <Usage label="Precios vigilados" used={billing.usage.watching.used} limit={billing.usage.watching.limit} />
             <Usage label="Formularios leídos con IA" used={billing.usage.formReads.used} limit={billing.usage.formReads.limit} />
             <Usage label="Páginas de tiendas leídas con IA" used={billing.usage.pageReads.used} limit={billing.usage.pageReads.limit} />
+            <Usage
+              label="Estados de cuenta en foto leídos con IA (páginas)"
+              used={billing.usage.statementPages.used}
+              limit={billing.usage.statementPages.limit}
+            />
           </div>
           <div className="mt-5">
             {!pro ? (

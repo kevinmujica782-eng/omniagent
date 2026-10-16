@@ -26,6 +26,8 @@ export interface BillingOverview {
     messages: UsageMeterView;
     formReads: UsageMeterView;
     pageReads: UsageMeterView;
+    /** Páginas de estados de cuenta en foto (o PDF escaneados) leídas con IA. */
+    statementPages: UsageMeterView;
     watching: UsageMeterView;
     goals: UsageMeterView;
   };

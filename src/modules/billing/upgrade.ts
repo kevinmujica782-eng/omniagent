@@ -6,7 +6,7 @@ import { AGENT_FEATURES, cadenceText, PLANS, type AgentFeatureId } from "./plans
 const PRO = PLANS.PRO;
 const n = (value: number) => value.toLocaleString("es-US");
 
-type Topic = "mail" | "prices" | "report" | "messages" | "forms" | "goals" | "sites" | "jobs";
+type Topic = "mail" | "prices" | "report" | "messages" | "forms" | "statements" | "goals" | "sites" | "jobs";
 
 /** El beneficio que responde a lo que se acabó y el tema que cubre (para no repetirlo después). */
 function specific(details: Pick<PlanLimitDetails, "reason" | "feature">): { line: string; topic: Topic } | null {
@@ -21,6 +21,8 @@ function specific(details: Pick<PlanLimitDetails, "reason" | "feature">): { line
       return { line: `${PRO.monthlyFormReads} formularios PDF rellenados con IA al mes`, topic: "forms" };
     case "page_reads":
       return { line: `${PRO.monthlyPageReads} páginas de tiendas leídas con IA al mes`, topic: "prices" };
+    case "statement_pages":
+      return { line: `${n(PRO.monthlyStatementPages)} páginas de estados de cuenta en foto leídas con IA al mes`, topic: "statements" };
     case "sites":
       return { line: `${PRO.monthlySites} páginas web hechas por Omni al mes`, topic: "sites" };
     case "jobs":

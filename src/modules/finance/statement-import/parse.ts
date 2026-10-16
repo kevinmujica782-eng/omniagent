@@ -5,8 +5,10 @@ import { MAX_STATEMENT_ROWS, statementError } from "./limits";
 import { extractPdfText } from "./pdf";
 import { readStatementLayout } from "./pdf-layout";
 import { buildRows, type BuildResult } from "./rows";
+import { assembleScan, looksLikeStatement, type ScanTranscription } from "./scan-assemble";
+import { checkScan } from "./scan-checks";
 import { decodeText, sniffFormat } from "./sniff";
-import type { DateOrder, ParseOptions, ParsedStatement, StatementDetection, StatementFormat } from "./types";
+import type { AccountKind, DateOrder, ParseOptions, ParsedStatement, RawRow, StatementDetection, StatementFormat } from "./types";
 
 // Punto de entrada del importador: detecta el formato, lee el archivo y devuelve movimientos validados.
 // No toca la base de datos (lo usa el servicio para la vista previa y para importar).
@@ -60,7 +62,9 @@ function finish(input: {
       "no_transactions_found",
       input.format === "pdf"
         ? "No encontré la tabla de movimientos en el PDF. Si tu banco lo permite, descarga el estado de cuenta en CSV."
-        : "No encontré movimientos válidos en el archivo. Revisa que las columnas de fecha y monto sean las correctas.",
+        : input.format === "scan"
+          ? "No encontré movimientos en lo que leí. Revisa que la tabla de movimientos se vea completa, derecha y con buena luz."
+          : "No encontré movimientos válidos en el archivo. Revisa que las columnas de fecha y monto sean las correctas.",
       // Con encabezados, la interfaz abre el selector de columnas: casi siempre es una columna equivocada.
       { skipped: built.skipped.slice(0, 5), headers: input.detected.headers, sample: input.detected.sample },
     );
@@ -124,9 +128,28 @@ export async function parseStatement(file: StatementFile, options: ParseOptions 
   if (layout.textChars < 20) {
     throw statementError(
       "scanned_pdf",
-      "Este PDF es una imagen escaneada y no tiene texto que se pueda leer. Descarga el estado de cuenta digital (PDF o CSV) desde tu banca en línea.",
+      "Este PDF es una imagen escaneada y no tiene texto: lo leo con IA página por página.",
+      { pages },
     );
   }
+  return fromLayout(layout, { format, pages, options, kind, now, warnings: [] });
+}
+
+/** Renglones con fecha, descripción y montos aún como texto, más el resumen del documento (periodo y saldos). */
+interface LayoutInput {
+  raw: RawRow[];
+  periodStartText: string | null;
+  periodEndText: string | null;
+  openingBalanceText: string | null;
+  closingBalanceText: string | null;
+}
+
+/** Lo común a un PDF con texto y a la lectura con IA: orden de fechas, periodo, sentido de cada movimiento y saldos. */
+function fromLayout(
+  layout: LayoutInput,
+  ctx: { format: StatementFormat; pages: number; options: ParseOptions; kind: AccountKind; now: Date; warnings: string[] },
+): ParsedStatement {
+  const { options, kind, now } = ctx;
   checkRowCount(layout.raw.length);
 
   const startToken = readDateToken(layout.periodStartText);
@@ -148,12 +171,67 @@ export async function parseStatement(file: StatementFile, options: ParseOptions 
     now,
   });
   return finish({
-    format,
+    format: ctx.format,
     built,
-    warnings: built.warnings,
+    warnings: [...ctx.warnings, ...built.warnings],
     order,
-    detected: { columns: null, headers: null, sample: null, delimiter: null, encoding: null, pages },
+    detected: { columns: null, headers: null, sample: null, delimiter: null, encoding: null, pages: ctx.pages },
     period: { start: periodStart, end: periodEnd },
     closingBalanceCents: signedCents(parseAmount(layout.closingBalanceText)) ?? built.closingBalanceCents,
   });
+}
+
+const listPages = (pages: number[]) =>
+  pages.length === 1 ? `la página ${pages[0]}` : `las páginas ${pages.slice(0, -1).join(", ")} y ${pages[pages.length - 1]}`;
+
+/**
+ * Estado de cuenta leído con IA (fotos o PDF escaneado, página por página). Pasa por las mismas reglas que un PDF con
+ * texto y además se comprueba con el saldo final, el saldo de cada renglón y los totales del propio documento.
+ */
+export function parseScan(transcription: ScanTranscription, options: ParseOptions = {}): ParsedStatement {
+  const now = options.now ?? new Date();
+  const kind = options.accountKind ?? "asset";
+  const scan = assembleScan(transcription);
+  if (!looksLikeStatement(scan)) {
+    throw statementError(
+      "no_transactions_found",
+      "No parece un estado de cuenta. Sube las páginas donde aparecen tus movimientos.",
+      { skipped: [], headers: null, sample: null },
+    );
+  }
+  const warnings: string[] = [];
+  if (scan.unreadablePages.length > 0) {
+    warnings.push(`No pude leer bien ${listPages(scan.unreadablePages)}: tómale otra foto más nítida, derecha y con buena luz.`);
+  }
+  if (scan.unclearRows > 0) {
+    warnings.push(
+      scan.unclearRows === 1
+        ? "Un movimiento no se leía bien y no se importará: lo ves en las filas omitidas."
+        : `${scan.unclearRows} movimientos no se leían bien y no se importarán: los ves en las filas omitidas.`,
+    );
+  }
+  const parsed = fromLayout(scan, { format: "scan", pages: scan.pages, options, kind, now, warnings });
+  const checks = checkScan({
+    raw: scan.raw,
+    rows: parsed.rows,
+    kind,
+    openingBalanceText: scan.openingBalanceText,
+    closingBalanceText: scan.closingBalanceText,
+    totalDebitsText: scan.totalDebitsText,
+    totalCreditsText: scan.totalCreditsText,
+  });
+  return {
+    ...parsed,
+    warnings: [...checks.warnings, ...parsed.warnings],
+    scan: {
+      pages: scan.pages,
+      unreadablePages: scan.unreadablePages,
+      checks: checks.checks,
+      verified: checks.verified,
+      institution: scan.institution,
+      accountType: scan.accountType,
+      last4: scan.last4,
+      currency: scan.currency,
+    },
+  };
 }

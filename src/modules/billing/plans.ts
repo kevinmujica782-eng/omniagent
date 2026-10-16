@@ -18,6 +18,8 @@ export interface PlanLimits {
   monthlyFormReads: number;
   /** Páginas sin datos de producto leídas con IA al mes (para encontrar su precio). */
   monthlyPageReads: number;
+  /** Páginas de estados de cuenta (fotos o PDF escaneados) leídas con IA al mes. */
+  monthlyStatementPages: number;
   /** Páginas web nuevas que arma Omni al mes (los cambios a una página ya creada no cuentan). */
   monthlySites: number;
   /** Trabajos del motor en segundo plano corriendo a la vez (los que esperan una aprobación no cuentan). */
@@ -46,6 +48,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     activeGoals: 2,
     monthlyFormReads: 5,
     monthlyPageReads: 10,
+    monthlyStatementPages: 8,
     monthlySites: 1,
     parallelJobs: 1,
     priceCheckMinutes: 1440,
@@ -64,6 +67,7 @@ export const PLANS: Record<PlanId, PlanLimits> = {
     activeGoals: 20,
     monthlyFormReads: 100,
     monthlyPageReads: 200,
+    monthlyStatementPages: 120,
     monthlySites: 20,
     parallelJobs: 3,
     priceCheckMinutes: 60,
@@ -119,6 +123,7 @@ export function planFeatures(plan: PlanLimits): string[] {
     `${plan.watchlistItems} precios vigilados, revisados ${cadenceText(plan.priceCheckMinutes)}`,
     `Correo revisado ${cadenceText(plan.mailCheckHours * 60)}`,
     `${plan.monthlyFormReads} formularios PDF rellenados con IA al mes`,
+    `${n(plan.monthlyStatementPages)} páginas de estados de cuenta en foto leídas con IA al mes`,
     plan.monthlySites === 1 ? "1 página web hecha por Omni al mes" : `${plan.monthlySites} páginas web hechas por Omni al mes`,
     `${plan.activeGoals} metas activas`,
     plan.features.monthly_report ? "Informe mensual automático de tus gastos" : "Análisis de gastos cuando lo pidas",

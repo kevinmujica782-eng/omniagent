@@ -17,6 +17,29 @@ function extensionOf(fileName: string): string {
 }
 
 const EXCEL_HINT = "Parece un archivo de Excel. Ábrelo y usa «Guardar como» → CSV, o descarga el estado de cuenta en PDF.";
+const HEIC_HINT =
+  "Esa foto está en formato HEIC (el de los iPhone) y no la puedo leer. Compártela como JPG o súbela desde el navegador del teléfono, que la convierte sola.";
+
+export type ImageKind = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+
+/** Tipo de imagen según sus primeros bytes. "heic" agrupa HEIC, HEIF y AVIF (fotos de teléfono que la IA no lee). */
+export function imageTypeOf(bytes: Uint8Array): ImageKind | "heic" | null {
+  if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
+  if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47])) return "image/png";
+  const head = new TextDecoder("latin1").decode(bytes.subarray(0, 16));
+  if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) return "image/gif";
+  if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") return "image/webp";
+  if (head.slice(4, 8) === "ftyp" && /^(heic|heix|hevc|hevx|heim|heis|mif1|msf1|avif|avis)$/.test(head.slice(8, 12))) return "heic";
+  return null;
+}
+
+/** El mensaje para una foto que no se puede leer (HEIC) o que no es una imagen que reconozcamos. */
+export function unsupportedImageError(kind: "heic" | "unknown") {
+  return statementError(
+    "unsupported_file_type",
+    kind === "heic" ? HEIC_HINT : "No reconozco esa imagen. Sube las fotos en JPG o PNG.",
+  );
+}
 
 export function sniffFormat(bytes: Uint8Array, fileName: string, mimeType = ""): StatementFormat {
   if (bytes.byteLength === 0) throw statementError("empty_file", "El archivo está vacío.");
@@ -38,14 +61,15 @@ export function sniffFormat(bytes: Uint8Array, fileName: string, mimeType = ""):
     throw statementError("unsupported_file_type", EXCEL_HINT);
   }
   if (EXCEL_EXTENSIONS.has(ext)) throw statementError("unsupported_file_type", EXCEL_HINT);
-  const image =
-    startsWith(bytes, [0x89, 0x50, 0x4e, 0x47]) || startsWith(bytes, [0xff, 0xd8, 0xff]) || head.startsWith("GIF8") || head.slice(8, 12) === "WEBP";
-  if (image || mime.startsWith("image/")) {
-    throw statementError(
-      "unsupported_file_type",
-      "Sube el estado de cuenta en PDF o CSV, no una foto. Puedes descargarlo desde la banca en línea de tu banco.",
-    );
+  // Las fotos no se leen aquí: van a la lectura con IA (/api/v1/finance/statements/scans), página por página.
+  const image = imageTypeOf(bytes);
+  if (image === "heic") throw unsupportedImageError("heic");
+  if (image) {
+    throw statementError("scan_required", "Las fotos del estado de cuenta se leen con IA: súbelas en «Subir estado de cuenta».", {
+      kind: "image",
+    });
   }
+  if (mime.startsWith("image/")) throw unsupportedImageError("unknown");
   if (!TEXT_EXTENSIONS.has(ext)) {
     throw statementError("unsupported_file_type", `No leo archivos .${ext}. Sube el estado de cuenta en CSV o PDF.`);
   }
