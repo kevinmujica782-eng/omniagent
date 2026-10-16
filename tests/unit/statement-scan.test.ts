@@ -7,7 +7,7 @@ import { parseScan } from "@/modules/finance/statement-import/parse";
 import { assembleScan, UNCLEAR_REASON, type ScanPageResult, type ScanRow, type ScanTranscription } from "@/modules/finance/statement-import/scan-assemble";
 import { checkRunningBalances, scanTargetWarnings, signsCanReach } from "@/modules/finance/statement-import/scan-checks";
 import { scanPagesFromFiles } from "@/modules/finance/statement-import/scan-files";
-import { MAX_ROWS_PER_PAGE, scanPageSchema } from "@/modules/finance/statement-import/scan-schema";
+import { dropNullUnions, MAX_ROWS_PER_PAGE, scanPageSchema, scanRequestJsonSchema, unionCount } from "@/modules/finance/statement-import/scan-schema";
 import { imageTypeOf, sniffFormat } from "@/modules/finance/statement-import/sniff";
 import type { ParsedStatement, RawRow } from "@/modules/finance/statement-import/types";
 import { PROTECTED_PDF_BASE64 } from "../support/protected-pdf";
@@ -282,6 +282,28 @@ describe("lectura con IA: lo que responde el modelo", () => {
     expect(rowSchema.properties.date.description).toMatch(/Fecha tal como aparece/);
     const anthropic = toAnthropicOutputSchema(json) as { additionalProperties?: boolean };
     expect(anthropic.additionalProperties).toBe(false);
+  });
+
+  it("lo que se le pide a Claude no pasa del límite de uniones de la salida estructurada (16)", () => {
+    // Con «o null» en cada dato opcional serían 17 uniones: Claude rechaza el pedido (400). Se piden sin null.
+    const requested = scanRequestJsonSchema();
+    expect(unionCount(toAnthropicOutputSchema(requested))).toBe(0);
+    const props = (requested as { properties: Record<string, { type?: unknown; description?: string }> }).properties;
+    expect(props.institution.type).toBe("string");
+    expect(props.institution.description).toMatch(/Banco o emisor/);
+    expect((requested as { required: string[] }).required).not.toContain("institution");
+    const row = (props.rows as unknown as { items: { properties: Record<string, { type?: unknown }> } }).items.properties;
+    expect(row.date.type).toBe("string");
+    expect(row.unclear.type).toBe("boolean");
+    // La validación sigue aceptando null (por si un modelo lo manda igual).
+    expect(scanPageSchema.parse({ isStatement: true, legible: true, accountType: "unknown", institution: null, rows: [] }).institution).toBeNull();
+  });
+
+  it("quita la rama null de las uniones sin tocar lo demás", () => {
+    expect(dropNullUnions({ anyOf: [{ type: "string" }, { type: "null" }], description: "x" })).toEqual({ type: "string", description: "x" });
+    expect(dropNullUnions({ type: ["string", "null"] })).toEqual({ type: "string" });
+    expect(dropNullUnions({ anyOf: [{ type: "string" }, { type: "number" }, { type: "null" }] })).toEqual({ anyOf: [{ type: "string" }, { type: "number" }] });
+    expect(unionCount({ properties: { a: { anyOf: [{}, {}] }, b: { type: ["string", "null"] }, c: { type: "string" } } })).toBe(2);
   });
 });
 
