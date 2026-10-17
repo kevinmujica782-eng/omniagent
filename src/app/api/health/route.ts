@@ -4,10 +4,12 @@ import { prisma } from "@/lib/db";
 import { env } from "@/lib/env";
 import { log } from "@/lib/log";
 import { supabaseEnv } from "@/lib/supabase/config";
+import { transferHealth } from "@/modules/billing/binance-transfer";
 
 // Salud para monitores de disponibilidad, el healthcheck de Docker y el balanceador.
 // Público: responde solo "ok"/"degraded" y la versión. Con "Authorization: Bearer <CRON_SECRET>" añade el
-// detalle de qué integraciones están configuradas (nunca sus valores).
+// detalle de qué integraciones están configuradas (nunca sus valores) y, con ?binance=1, prueba en vivo el relevo
+// hacia Binance y que la llave de Binance Pay sea de solo lectura.
 export const dynamic = "force-dynamic";
 
 type Check = "ok" | "error" | "not_configured";
@@ -47,9 +49,11 @@ export async function GET(request: Request) {
       stripe: has(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO_MONTHLY && config.STRIPE_WEBHOOK_SECRET),
       revenuecat: has(config.REVENUECAT_WEBHOOK_AUTH),
       binance: has(config.BINANCE_PAY_API_KEY && config.BINANCE_PAY_SECRET_KEY),
+      binanceTransfer: has(config.BINANCE_PAY_ID && config.BINANCE_READ_API_KEY && config.BINANCE_READ_API_SECRET && config.BINANCE_RELAY_TOKEN),
       encryption: has(config.TOKEN_ENCRYPTION_KEY),
       cron: has(config.CRON_SECRET),
     };
+    if (new URL(request.url).searchParams.get("binance") === "1") body.binanceRelay = await transferHealth();
   }
   return NextResponse.json(body, { status: status === "ok" ? 200 : 503, headers: { "Cache-Control": "no-store" } });
 }

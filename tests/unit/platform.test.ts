@@ -123,6 +123,15 @@ describe("configuración al arrancar", () => {
     expect(checkConfig({ ...noAI, CRON_SECRET: undefined, XAI_API_KEY: "xai-x" }, true).recommended).toEqual(["CRON_SECRET"]);
   });
 
+  it("Binance Pay a una cuenta personal va completo o no va", () => {
+    const transfer = { BINANCE_PAY_ID: "123456789", BINANCE_READ_API_KEY: "k", BINANCE_READ_API_SECRET: "s", BINANCE_RELAY_TOKEN: "t" };
+    const onlyTransfer = { ...complete, STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", STRIPE_PRICE_PRO_MONTHLY: "", ...transfer };
+    expect(checkConfig(onlyTransfer, true)).toEqual({ critical: [], recommended: [], warnings: [] });
+    expect(checkConfig({ ...onlyTransfer, BINANCE_READ_API_SECRET: "" }, true).critical).toEqual(["BINANCE_READ_API_SECRET"]);
+    const none = { ...complete, STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", STRIPE_PRICE_PRO_MONTHLY: "" };
+    expect(checkConfig(none, true).recommended).toEqual(["BINANCE_PAY_ID (Binance Pay a tu cuenta) o BINANCE_PAY_API_KEY (comercio)"]);
+  });
+
   it("la llave secreta de Supabase solo hace falta con los documentos en Storage", () => {
     expect(checkConfig(complete, true).critical).toEqual([]);
     expect(checkConfig({ ...complete, DOCUMENT_STORAGE: "supabase" }, true).critical).toEqual([

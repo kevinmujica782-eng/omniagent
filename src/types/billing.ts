@@ -35,4 +35,32 @@ export interface BillingOverview {
   checkoutAvailable: boolean;
   /** Binance Pay está configurado: es la forma de pago en la web y en la app (sin Google Play). */
   binanceAvailable: boolean;
+  /**
+   * Cómo se paga con Binance Pay: "merchant" abre la página de pago de Binance (cuenta de comercio); "transfer" pide
+   * enviar al Pay ID de la cuenta y pegar el ID de la orden (cuenta personal).
+   */
+  binanceMode: BinanceMode | null;
+}
+
+export type BinanceMode = "merchant" | "transfer";
+
+/** POST /api/v1/billing/binance/transfer: a dónde y cuánto pagar. */
+export interface BinanceTransferStartView {
+  payId: string;
+  payName: string | null;
+  amount: number;
+  currency: "USDT";
+  currencies: string[];
+  startedAt: string;
+}
+
+/** POST /api/v1/billing/binance/transfer/claim: el pago encontrado y hasta cuándo queda Pro. */
+export interface BinanceTransferClaimView {
+  paid: true;
+  months: number;
+  amount: number;
+  currency: string;
+  paidUntil: string | null;
+  alreadyClaimed: boolean;
+  plan: "FREE" | "PRO";
 }

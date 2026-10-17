@@ -15,8 +15,10 @@ import {
   nextPeriodEnd,
   signRequest,
 } from "./binance-rules";
+import { formatAmount } from "./binance-transfer-rules";
 import { getEntitlements } from "./entitlements";
 import { applyPlanChange } from "./plan-change";
+import type { PlanId } from "./plans";
 
 // Omni Pro con Binance Pay: la persona paga 19.99 USDT desde su cuenta de Binance y recibe un mes de Pro.
 // No hay renovación automática: cada pago suma un mes a la suscripción BINANCE (desde el fin vigente) y unos días
@@ -158,28 +160,10 @@ export async function syncBinanceOrder(
 
   const before = (await getEntitlements(order.userId, now)).plan;
   const paidAt = remote.transactTime ? new Date(remote.transactTime) : now;
-  const providerSubscriptionId = `binance:${order.userId}`;
-  const key = { provider_providerSubscriptionId: { provider: "BINANCE" as const, providerSubscriptionId } };
   const granted = await prisma.$transaction(async (tx) => {
     const claim = await tx.binanceOrder.updateMany({ where: { merchantTradeNo, status: { not: "PAID" } }, data: { status: "PAID", paidAt } });
     if (claim.count === 0) return null; // ya lo aplicó el webhook o la vuelta del pago
-    const current = await tx.subscription.findUnique({ where: key });
-    const currentPeriodEnd = nextPeriodEnd(current?.status === "ACTIVE" ? current.currentPeriodEnd : null, now, order.months);
-    await tx.subscription.upsert({
-      where: key,
-      create: {
-        userId: order.userId,
-        provider: "BINANCE",
-        plan: "PRO",
-        status: "ACTIVE",
-        productId: PRODUCT_ID,
-        providerSubscriptionId,
-        currentPeriodEnd,
-        cancelAtPeriodEnd: false,
-      },
-      update: { status: "ACTIVE", currentPeriodEnd, cancelAtPeriodEnd: false },
-    });
-    return currentPeriodEnd;
+    return grantBinanceMonths(tx, order.userId, order.months, now);
   });
 
   if (granted) {
@@ -191,22 +175,64 @@ export async function syncBinanceOrder(
       entityId: merchantTradeNo,
       metadata: { amount: expected, months: order.months, paidUntil: granted.toISOString() },
     });
-    await prisma.appNotification.create({
-      data: {
-        userId: order.userId,
-        type: "SYSTEM",
-        title: "Pago recibido: ya tienes Omni Pro",
-        body: `Pagaste ${expected} USDT con Binance Pay. Pro sigue hasta el ${shortDate(granted)}.`,
-        href: "/cuenta",
-      },
-    });
-    const after = (await getEntitlements(order.userId, now)).plan;
-    if (after !== before) await applyPlanChange(order.userId, before, after, now);
+    await announceBinancePayment({ userId: order.userId, amount: expected, currency: BINANCE_CURRENCY, paidUntil: granted, before, now });
   }
   return { paid: true, status: "PAID", paidUntil: granted?.toISOString() ?? (await paidUntil(order.userId)) };
 }
 
-async function paidUntil(userId: string): Promise<string | null> {
+/** Lo que necesita grantBinanceMonths de la transacción (así sirve el cliente de Prisma o el de $transaction). */
+type SubscriptionWriter = { subscription: Pick<typeof prisma.subscription, "findUnique" | "upsert"> };
+
+/**
+ * Suma meses de Pro pagados con Binance a la suscripción BINANCE de la persona (desde el fin vigente: renovar antes no
+ * pierde días). Va dentro de la misma transacción que marca el pago como usado. Devuelve el nuevo fin.
+ */
+export async function grantBinanceMonths(tx: SubscriptionWriter, userId: string, months: number, now: Date): Promise<Date> {
+  const providerSubscriptionId = `binance:${userId}`;
+  const key = { provider_providerSubscriptionId: { provider: "BINANCE" as const, providerSubscriptionId } };
+  const current = await tx.subscription.findUnique({ where: key });
+  const currentPeriodEnd = nextPeriodEnd(current?.status === "ACTIVE" ? current.currentPeriodEnd : null, now, months);
+  await tx.subscription.upsert({
+    where: key,
+    create: {
+      userId,
+      provider: "BINANCE",
+      plan: "PRO",
+      status: "ACTIVE",
+      productId: PRODUCT_ID,
+      providerSubscriptionId,
+      currentPeriodEnd,
+      cancelAtPeriodEnd: false,
+    },
+    update: { status: "ACTIVE", currentPeriodEnd, cancelAtPeriodEnd: false },
+  });
+  return currentPeriodEnd;
+}
+
+/** Después de cobrar: el aviso en la app y, si la persona pasó de Gratis a Pro, los ajustes del plan. */
+export async function announceBinancePayment(input: {
+  userId: string;
+  amount: number;
+  currency: string;
+  paidUntil: Date;
+  before: PlanId;
+  now: Date;
+}): Promise<void> {
+  await prisma.appNotification.create({
+    data: {
+      userId: input.userId,
+      type: "SYSTEM",
+      title: "Pago recibido: ya tienes Omni Pro",
+      body: `Pagaste ${formatAmount(input.amount)} ${input.currency} con Binance Pay. Pro sigue hasta el ${shortDate(input.paidUntil)}.`,
+      href: "/cuenta",
+    },
+  });
+  const after = (await getEntitlements(input.userId, input.now)).plan;
+  if (after !== input.before) await applyPlanChange(input.userId, input.before, after, input.now);
+}
+
+/** Hasta cuándo tiene Pro pagado con Binance (ISO), o null. */
+export async function paidUntil(userId: string): Promise<string | null> {
   const sub = await prisma.subscription.findUnique({
     where: { provider_providerSubscriptionId: { provider: "BINANCE", providerSubscriptionId: `binance:${userId}` } },
     select: { currentPeriodEnd: true },

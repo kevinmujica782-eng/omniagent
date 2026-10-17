@@ -547,15 +547,27 @@ model Subscription {
 
 /// Órdenes de Binance Pay. Cada una compra meses de Omni Pro por adelantado (no hay renovación automática):
 /// al confirmarse el pago, la suscripción BINANCE de la persona se extiende esos meses.
+/// Pagos de Omni Pro con Binance Pay. Dos tipos:
+/// - MERCHANT: orden de Binance Pay para comercios (merchant.binance.com), confirmada por webhook o consulta.
+/// - TRANSFER: envío a la cuenta personal (Pay ID). La fila PENDING marca cuándo la persona empezó a pagar en Omni;
+///   al reclamar con el ID de la orden queda PAID con el ID del pago en Binance, que no se puede usar dos veces.
 model BinanceOrder {
   merchantTradeNo String    @id @map("merchant_trade_no")
   userId          String    @map("user_id") @db.Uuid
+  /// MERCHANT o TRANSFER.
+  kind            String    @default("MERCHANT")
   months          Int
   amount          Decimal   @db.Decimal(12, 2)
   currency        String    @default("USDT")
   prepayId        String?   @map("prepay_id")
   /// PENDING, PAID, CANCELED, EXPIRED o ERROR (los estados de Binance que cierran la orden).
   status          String    @default("PENDING")
+  /// TRANSFER: el transactionId del pago en el historial de Binance Pay (único: un pago activa Pro una sola vez).
+  transactionId   String?   @unique @map("transaction_id")
+  /// TRANSFER: lo que pegó la persona (el ID de la orden en su app de Binance), ya normalizado.
+  claimCode       String?   @map("claim_code")
+  /// TRANSFER: el nombre de quien pagó, como lo muestra Binance.
+  payerName       String?   @map("payer_name")
   paidAt          DateTime? @map("paid_at") @db.Timestamptz(6)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -563,6 +575,7 @@ model BinanceOrder {
   user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, kind, status])
   @@map("binance_orders")
 }
 

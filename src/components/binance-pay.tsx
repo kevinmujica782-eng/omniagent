@@ -3,10 +3,12 @@
 import { Loader } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { BinanceTransferPanel } from "@/components/binance-transfer";
 import { Notice, buttonClass } from "@/components/ui";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { shortDate } from "@/lib/format";
 import { PurchaseError, purchasePro } from "@/lib/purchase";
+import type { BinanceMode } from "@/types/billing";
 
 type SyncResult = { paid: boolean; status: string; paidUntil: string | null; plan: "FREE" | "PRO" };
 
@@ -58,10 +60,38 @@ export function BinanceReturn({ order, alreadyPro }: { order: string; alreadyPro
   return <Notice>Confirmando tu pago con Binance Pay…</Notice>;
 }
 
-/** Suma otro mes de Pro con Binance Pay (desde el fin vigente: renovar antes no pierde días). */
-export function BinanceRenewButton({ preview = false }: { preview?: boolean }) {
+/**
+ * Suma otro mes de Pro con Binance Pay (desde el fin vigente: renovar antes no pierde días). Con la cuenta de comercio
+ * abre la página de pago de Binance; con la cuenta personal ("transfer"), el paso de enviar al Pay ID aquí mismo.
+ */
+export function BinanceRenewButton({ preview = false, mode = "merchant" }: { preview?: boolean; mode?: BinanceMode | null }) {
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [paidUntil, setPaidUntil] = useState<string | null | undefined>(undefined);
+
+  if (mode === "transfer") {
+    if (paidUntil !== undefined) {
+      return <Notice>¡Listo! Recibimos tu pago{paidUntil ? `: tienes Pro hasta el ${shortDate(paidUntil)}` : ""}.</Notice>;
+    }
+    return (
+      <div className="flex flex-col gap-4">
+        <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open} className={buttonClass("secondary")}>
+          {open ? "Cerrar" : "Sumar un mes con Binance Pay"}
+        </button>
+        {open ? (
+          <BinanceTransferPanel
+            preview={preview}
+            onPaid={(result) => {
+              setPaidUntil(result.paidUntil);
+              router.refresh();
+            }}
+          />
+        ) : null}
+      </div>
+    );
+  }
 
   async function renew() {
     setMessage(null);

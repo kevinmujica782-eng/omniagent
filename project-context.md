@@ -139,7 +139,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - Pro cuesta 19.99 USDT por mes pagado por adelantado, sin renovación automática. Se paga con el saldo de Binance, el mismo de la tarjeta Binance Visa.
   - Cada pago suma un mes. Omni avisa 3 días antes de vencer y, al vencer, la cuenta vuelve a Gratis (cron `omniagent-cobros`, cada hora).
   - Las órdenes se firman con HMAC-SHA512 y el webhook se verifica con RSA. Tabla `binance_orders`; código en `src/modules/billing/binance*.ts`.
-  - Falta que el dueño ponga `BINANCE_PAY_API_KEY` y `BINANCE_PAY_SECRET_KEY` en Netlify.
+  - La cuenta de comercio exige una empresa registrada (al pedirla, Binance ofrece cerrar la cuenta personal): desde el 17 oct 2026 se cobra en la **cuenta personal** (ver «Binance Pay a la cuenta personal»).
 - **Notificaciones push** (Web Push con VAPID y service worker `public/sw.js`):
   - Se activan en **Cuenta → App y notificaciones**, donde también se instala la app.
   - Cada fila nueva de `notifications` de alguien con aparatos registrados (`push_subscriptions`) dispara el trigger `on_notification_push`. El trigger llama a `/api/cron/push` con pg_net y el `CRON_SECRET` de Vault.
@@ -241,6 +241,17 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 - **Límites:** no lee HEIC (el navegador del teléfono suele convertirlas a JPG), ni PDF escaneados con contraseña (pdf-lib no descifra).
 - **Prueba en producción:** el workflow «Probar lectura con IA» (`smoke-scan.yml`, a mano) crea una cuenta de prueba, sube la foto de un estado de cuenta ficticio (`tests/fixtures/estado-de-cuenta-foto.jpg`), la lee con Claude, revisa que la vista previa traiga los 5 movimientos comprobados con el documento, la importa y elimina la cuenta. También revisa el manifiesto de Slack y el enlace para crear la app.
 
+### Binance Pay a la cuenta personal (17 oct 2026)
+- **Por qué:** el dueño decidió dejar la app como está y empezar a cobrar. La cuenta de comercio de Binance exige una empresa registrada, y al pedirla Binance ofrecía cerrar su cuenta personal para convertirla. Se descartó: Omni cobra en la cuenta personal tal como está.
+- **Cómo paga la persona:** en la pantalla de Pro, **Desbloquear Omni Pro** abre el paso de pago: el Pay ID (con botón para copiarlo), «Envía 19.99 USDT» (o USDC; 39.98 = 2 meses, hasta 12) y un campo para pegar el **ID de la orden** que muestra Binance. Omni lo busca en el historial de Binance Pay de la cuenta y activa Pro en el momento. En Cuenta, **Sumar un mes con Binance Pay** abre el mismo paso.
+- **Qué revisa el servidor (`binance-transfer.ts`, reglas en `binance-transfer-rules.ts`):** envío recibido (`C2C`) en USDT o USDC, monto de al menos 19.99 por mes, pago posterior a cuando la persona empezó a pagar en Omni (fila `TRANSFER` `PENDING` en `binance_orders`, con 48 h de margen) y el ID del pago de Binance único (`transaction_id`): el mismo pago no activa Pro dos veces ni en otra cuenta. Acepta el `transactionId` del historial, el `orderId` o solo sus números; limpia etiquetas y espacios de lo que se pega.
+- **Llave de solo lectura:** la normal de binance.com (Gestión de API), con solo «Habilitar lectura» y sin restricción de IP. Antes de usarla y cada hora, el servidor revisa sus permisos (`/sapi/v1/account/apiRestrictions`) y se detiene si puede retirar, transferir u operar.
+- **Relevo en Supabase (`supabase/functions/binance-relay`):** Binance responde 451 a los servidores de EE. UU. y Netlify corre allí (probado el 16 oct: us-east-1 → 451; París, Fráncfort y São Paulo → 200). El servidor firma cada consulta (HMAC-SHA256) y la manda a la función `binance-relay` con `x-region: eu-west-3` (respaldo `sa-east-1`). El relevo no guarda llaves, solo deja pasar tres rutas de lectura y solo responde al token `BINANCE_RELAY_TOKEN` (en el código está su SHA-256). Desplegado el 16 oct con «Verify JWT» apagado; el token ya está en Netlify como secreto. La función de prueba `binance-probe` quedó respondiendo 410.
+- **Rutas:** `POST /api/v1/billing/binance/transfer` (empezar a pagar: Pay ID, nombre y precio) y `POST /api/v1/billing/binance/transfer/claim` (`{ "codigo" }`, 20 intentos cada 10 min: cada consulta al historial pesa 3000 en el límite de Binance). `/api/health?binance=1` (con `CRON_SECRET`) prueba el relevo y los permisos de la llave. `billingOverview` dice `binanceMode` (`merchant`, `transfer` o null).
+- **Base de datos:** `binance_orders` suma `kind` (MERCHANT o TRANSFER), `transaction_id` (único), `claim_code` y `payer_name`.
+- **Probado:** pruebas unitarias de las reglas (firma con el ejemplo de la documentación de Binance, historial, ID de la orden, meses, permisos), 6 de integración contra Postgres (meses, renovación, pago usado en otra cuenta, pagos que no sirven y tres reclamos simultáneos del mismo pago) y un recorrido en Chromium de 22 comprobaciones (vista previa, servidor simulado, copiar el Pay ID, reintentos, pago incompleto, confirmación, Cuenta en claro y oscuro).
+- **Falta (dueño):** crear la llave de solo lectura y mandar las dos llaves y el Pay ID para ponerlos en Netlify; después, un pago real de prueba.
+
 ### Pruebas de integración contra Postgres (12 oct 2026)
 - **Job «Base de datos (Postgres)» en `ci.yml`:** levanta un Postgres 16, crea las tablas con `prisma db push`, aplica las restricciones y el trigger (`tests/integration/db/constraints.sql`, espejo del §4.1 de supabase-setup.sql) y corre `tests/integration/db/*.int.test.ts` con `vitest.integration.db.config.mts`.
 - **Qué prueba contra una base real:** el trigger de un solo Dot por defecto, el nombre único por persona, la regla de no archivar el Dot por defecto, y el upsert del conocimiento base con su versión. Ejercita los servicios reales (`assistants`, `knowledge`), no imitaciones.
@@ -255,7 +266,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 - **Dónde:** `src/components/paywall/` (`paywall.tsx` y `autopilot-dial.tsx`); datos en `modules/billing/paywall.ts`; pago en `lib/purchase.ts`. Reemplaza la hoja anterior: la abren los límites del plan Gratis (402 `plan_limit`, con la fila del límite marcada), la tarjeta del chat, el Inicio y la cuenta.
 - **Diseño:** siempre oscura (clase `theme-dark`, que reutiliza los tokens oscuros), a pantalla completa en el teléfono con el botón fijo abajo y en dos columnas desde 1024 px. La órbita de 24 horas (la marca de Omni) muestra las revisiones de un día con Pro y da una sola vuelta al abrir. La columna de Pro tiene el anillo brillante, la luna ámbar y la etiqueta "Recomendado".
 - **Honestidad:** filas, precio y resumen salen de `PLANS`. No promete "ilimitado" (Pro tiene límites). Desde el 6 oct 2026 el correo real sí existe (IMAP/SMTP), pero la pantalla no nombra proveedores. Permitir o Denegar aparece en los dos planes porque existe en los dos.
-- **Pago:** `purchasePro()` usa **Binance Pay** cuando está configurado, en la web, el `.apk` y el iPhone: abre el pago y, al volver, `/cuenta` confirma la orden. Si no, usa Stripe Checkout en la web. Google Play con RevenueCat queda solo para la app vieja de Capacitor.
+- **Pago:** `purchasePro()` usa **Binance Pay** cuando está configurado, en la web, el `.apk` y el iPhone: abre el pago y, al volver, `/cuenta` confirma la orden. Si no, usa Stripe Checkout en la web. Google Play con RevenueCat queda solo para la app vieja de Capacitor. Con Binance Pay a la cuenta personal (`binanceMode: "transfer"`), el botón abre el paso de pago dentro de la misma pantalla (Pay ID e ID de la orden) y la confirmación aparece ahí mismo.
 
 ### Producción (publicada el 2 oct 2026)
 - **Web y API:** https://omniagent-app.netlify.app. Es el proyecto `omniagent-app` de Netlify (Node 24, `@netlify/plugin-nextjs`, `netlify.toml`). Se publica desde GitHub Actions con el workflow «Publicar en Netlify», que usa el `proxy_path` de *deploy-site* del MCP de Netlify; también se puede conectar el repositorio desde Netlify.
@@ -282,7 +293,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
 - **Pendiente del dueño (6 oct 2026):**
   - **Publicar.** En Netlify, conectar el repositorio para que cada push a `main` se publique solo y lanzar un deploy. Producción sigue en el deploy `6ac18a8b…` del 3 oct, sin Binance, push, correo real, `/descargar` ni `assetlinks.json`.
   - Apagar la insignia «Powered by Netlify», que tapa el menú de abajo de la app.
-  - **Binance Pay:** cuenta de comercio en merchant.binance.com y las dos llaves en las variables de Netlify (`docs/BINANCE_PAY.md`).
+  - **Binance Pay (actualizado el 17 oct 2026):** ya no hace falta la cuenta de comercio. Falta la llave de API de solo lectura de la cuenta personal y el Pay ID en Netlify (`BINANCE_READ_API_KEY`, `BINANCE_READ_API_SECRET`, `BINANCE_PAY_ID`; ver `docs/BINANCE_PAY.md`).
   - Google Play ya no es el plan; `docs/GOOGLE_PLAY.md` queda como referencia.
 
 ### Cómo retomar
