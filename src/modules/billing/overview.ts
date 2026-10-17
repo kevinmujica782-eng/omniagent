@@ -2,6 +2,7 @@ import "server-only";
 import { env } from "@/lib/env";
 import type { BillingOverview } from "@/types/billing";
 import { binanceConfigured } from "./binance";
+import { transferConfigured } from "./binance-transfer";
 import { getEntitlements, usageSummary } from "./entitlements";
 import { AGENT_FEATURE_ORDER, AGENT_FEATURES, PLANS } from "./plans";
 import { billingNotice } from "./status";
@@ -12,6 +13,8 @@ export async function billingOverview(userId: string, now = new Date()): Promise
   const usage = await usageSummary(userId, entitlements, now);
   const limits = PLANS[entitlements.plan];
   const config = env();
+  // Con cuenta de comercio, Binance Pay abre su página de pago; sin ella, la persona envía al Pay ID y pega el ID de la orden.
+  const binanceMode = binanceConfigured() ? "merchant" : transferConfigured() ? "transfer" : null;
   return {
     plan: entitlements.plan,
     planName: limits.name,
@@ -29,6 +32,7 @@ export async function billingOverview(userId: string, now = new Date()): Promise
     })),
     usage,
     checkoutAvailable: Boolean(config.STRIPE_SECRET_KEY && config.STRIPE_PRICE_PRO_MONTHLY),
-    binanceAvailable: binanceConfigured(),
+    binanceAvailable: binanceMode !== null,
+    binanceMode,
   };
 }

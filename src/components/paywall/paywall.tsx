@@ -1,25 +1,30 @@
 "use client";
 
-import { Check, CircleAlert, Loader, Lock, RotateCcw, ShieldCheck, X } from "lucide-react";
+import { Check, ChevronLeft, CircleAlert, Loader, Lock, RotateCcw, ShieldCheck, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { BinanceTransferPanel } from "@/components/binance-transfer";
 import { AutopilotDial } from "@/components/paywall/autopilot-dial";
 import { apiFetch, errorMessage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
+import { shortDate } from "@/lib/format";
 import { PurchaseError, purchaseChannel, purchasePro, storePrice, waitForPro, type PurchaseChannel } from "@/lib/purchase";
 import type { UpgradeRequest } from "@/lib/upgrade";
 import { autopilotPerMonth, paywallRows, rowForLimit, type PaywallRow } from "@/modules/billing/paywall";
 import { PLANS, type PlanId } from "@/modules/billing/plans";
+import type { BinanceMode } from "@/types/billing";
 
 // Pantalla de Omni Pro (paywall). Siempre oscura (clase theme-dark), a pantalla completa en el teléfono y en dos
 // columnas en pantallas grandes. Los números salen de PLANS; el botón usa la pasarela que corresponde: Binance Pay
 // cuando está configurado (web y app); si no, Stripe en la web y Google Play (RevenueCat) en la app de Android.
+// Con Binance Pay a una cuenta personal (binanceMode "transfer"), el botón abre el paso de pago dentro de la misma
+// pantalla: enviar al Pay ID y pegar el ID de la orden.
 
 const FREE = PLANS.FREE;
 const PRO = PLANS.PRO;
 
-type Phase = "idle" | "paying" | "confirming" | "active";
-type BillingState = { plan: PlanId; checkoutAvailable: boolean; binanceAvailable: boolean };
+type Phase = "idle" | "paying" | "confirming" | "transfer" | "active";
+type BillingState = { plan: PlanId; checkoutAvailable: boolean; binanceAvailable: boolean; binanceMode: BinanceMode | null };
 
 /** Un mes de Pro en USDT con Binance Pay: el mismo número que el precio en dólares ("$19.99" → "19.99 USDT"). */
 const USDT_PRICE = `${PRO.price.replace(/[^\d.]/g, "")} USDT`;
@@ -43,11 +48,13 @@ export function Paywall({ request, onClose, userId = null, preview = false, init
   const rootRef = useRef<HTMLDivElement>(null);
   const [channel, setChannel] = useState<PurchaseChannel>("stripe");
   const [billing, setBilling] = useState<BillingState | null>(
-    initialPlan ? { plan: initialPlan, checkoutAvailable: true, binanceAvailable: true } : null,
+    initialPlan ? { plan: initialPlan, checkoutAvailable: true, binanceAvailable: true, binanceMode: "transfer" } : null,
   );
   const [price, setPrice] = useState(PRO.price);
   const [phase, setPhase] = useState<Phase>(initialPlan === "PRO" ? "active" : "idle");
   const [message, setMessage] = useState<string | null>(null);
+  // Pagado con Binance Pay a la cuenta personal: hasta cuándo (undefined mientras no se haya pagado así).
+  const [transferPaidUntil, setTransferPaidUntil] = useState<string | null | undefined>(undefined);
   const busy = phase === "paying" || phase === "confirming";
   const highlighted = rowForLimit(request.limit ?? null, request.feature);
   const month = autopilotPerMonth(PRO);
@@ -76,7 +83,12 @@ export function Paywall({ request, onClose, userId = null, preview = false, init
     apiFetch<BillingState>("/api/v1/billing")
       .then((data) => {
         if (!alive) return;
-        setBilling({ plan: data.plan, checkoutAvailable: data.checkoutAvailable, binanceAvailable: data.binanceAvailable });
+        setBilling({
+          plan: data.plan,
+          checkoutAvailable: data.checkoutAvailable,
+          binanceAvailable: data.binanceAvailable,
+          binanceMode: data.binanceMode ?? null,
+        });
         if (data.plan === "PRO") setPhase("active");
         const next = purchaseChannel(data.binanceAvailable);
         setChannel(next);
@@ -116,6 +128,12 @@ export function Paywall({ request, onClose, userId = null, preview = false, init
 
   async function unlock() {
     setMessage(null);
+    // Binance Pay a la cuenta personal: el pago se hace en un paso dentro de esta pantalla.
+    if (channel === "binance" && billing?.binanceMode === "transfer") {
+      setPhase("transfer");
+      rootRef.current?.scrollTo({ top: 0 });
+      return;
+    }
     if (preview) {
       setMessage(
         channel === "binance"
@@ -205,45 +223,128 @@ export function Paywall({ request, onClose, userId = null, preview = false, init
           </button>
         </div>
 
-        <div className="grid flex-1 content-start gap-9 pb-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:content-center lg:items-center lg:gap-16 lg:pb-14">
-          <section className="text-center lg:text-left">
-            <AutopilotDial plan={PRO} className="lg:items-start" />
-            <h2 id={titleId} className="mx-auto mt-7 max-w-[15ch] text-[31px] font-semibold leading-[1.12] tracking-[-0.02em] text-balance sm:text-4xl lg:mx-0 lg:text-[44px]">
-              Pon a Omni en piloto automático
-            </h2>
-            {/* El resumen del tiempo que Pro trabaja por ti, con los números del plan. */}
-            <p className="mx-auto mt-4 max-w-[42ch] text-[15px] leading-relaxed text-muted text-pretty lg:mx-0 lg:text-base">
-              Cada mes, Omni hace por ti <strong className="font-semibold text-ink tabular-nums">{month.prices.toLocaleString("es-US")}</strong> revisiones de
-              cada precio y <strong className="font-semibold text-ink tabular-nums">{month.mail.toLocaleString("es-US")}</strong> de tu correo, y te deja listo
-              el informe de tus gastos. Tú solo decides.
-            </p>
-            <TrustList channel={channel} className="mt-8 hidden lg:flex" />
-          </section>
+        {phase === "transfer" || (phase === "active" && transferPaidUntil !== undefined) ? (
+          <TransferStep
+            titleId={titleId}
+            price={price}
+            preview={preview}
+            paidUntil={phase === "active" ? (transferPaidUntil ?? null) : undefined}
+            onBack={() => setPhase("idle")}
+            onPaid={(until) => {
+              setTransferPaidUntil(until);
+              setPhase("active");
+              rootRef.current?.scrollTo({ top: 0 });
+            }}
+            onDone={close}
+          />
+        ) : (
+          <>
+            <div className="grid flex-1 content-start gap-9 pb-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:content-center lg:items-center lg:gap-16 lg:pb-14">
+              <section className="text-center lg:text-left">
+                <AutopilotDial plan={PRO} className="lg:items-start" />
+                <h2 id={titleId} className="mx-auto mt-7 max-w-[15ch] text-[31px] font-semibold leading-[1.12] tracking-[-0.02em] text-balance sm:text-4xl lg:mx-0 lg:text-[44px]">
+                  Pon a Omni en piloto automático
+                </h2>
+                {/* El resumen del tiempo que Pro trabaja por ti, con los números del plan. */}
+                <p className="mx-auto mt-4 max-w-[42ch] text-[15px] leading-relaxed text-muted text-pretty lg:mx-0 lg:text-base">
+                  Cada mes, Omni hace por ti <strong className="font-semibold text-ink tabular-nums">{month.prices.toLocaleString("es-US")}</strong> revisiones de
+                  cada precio y <strong className="font-semibold text-ink tabular-nums">{month.mail.toLocaleString("es-US")}</strong> de tu correo, y te deja listo
+                  el informe de tus gastos. Tú solo decides.
+                </p>
+                <TrustList channel={channel} className="mt-8 hidden lg:flex" />
+              </section>
 
-          <section>
-            {request.reason ? (
-              <p className="mb-5 flex items-start gap-2.5 rounded-2xl bg-attention-soft px-4 py-3 text-[14px] leading-snug text-attention">
-                <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                <span>{request.reason}</span>
-              </p>
-            ) : null}
-            <PlanComparison rows={paywallRows(FREE, PRO)} price={price} highlighted={highlighted} />
-            <div className="mt-8 hidden lg:block">{checkout}</div>
-            <TrustList channel={channel} className="mt-8 lg:hidden" />
-            {phase !== "active" ? (
-              <button type="button" onClick={close} disabled={busy} className="mx-auto mt-6 block text-sm font-medium text-muted underline-offset-4 hover:text-ink hover:underline lg:mx-0">
-                Seguir con Gratis
-              </button>
-            ) : null}
-          </section>
-        </div>
+              <section>
+                {request.reason ? (
+                  <p className="mb-5 flex items-start gap-2.5 rounded-2xl bg-attention-soft px-4 py-3 text-[14px] leading-snug text-attention">
+                    <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+                    <span>{request.reason}</span>
+                  </p>
+                ) : null}
+                <PlanComparison rows={paywallRows(FREE, PRO)} price={price} highlighted={highlighted} />
+                <div className="mt-8 hidden lg:block">{checkout}</div>
+                <TrustList channel={channel} className="mt-8 lg:hidden" />
+                {phase !== "active" ? (
+                  <button type="button" onClick={close} disabled={busy} className="mx-auto mt-6 block text-sm font-medium text-muted underline-offset-4 hover:text-ink hover:underline lg:mx-0">
+                    Seguir con Gratis
+                  </button>
+                ) : null}
+              </section>
+            </div>
 
-        {/* En el teléfono, el botón queda siempre a mano, con el precio y la renovación al lado. */}
-        <div className="sticky bottom-0 z-10 -mx-4 mt-auto border-t border-line bg-canvas/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:-mx-8 sm:px-8 lg:hidden">
-          {checkout}
-        </div>
+            {/* En el teléfono, el botón queda siempre a mano, con el precio y la renovación al lado. */}
+            <div className="sticky bottom-0 z-10 -mx-4 mt-auto border-t border-line bg-canvas/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-lg sm:-mx-8 sm:px-8 lg:hidden">
+              {checkout}
+            </div>
+          </>
+        )}
       </div>
     </div>
+  );
+}
+
+// ─── Pago con Binance Pay a la cuenta personal ───────────────────────────
+
+function TransferStep({
+  titleId,
+  price,
+  preview,
+  paidUntil,
+  onBack,
+  onPaid,
+  onDone,
+}: {
+  titleId: string;
+  price: string;
+  preview: boolean;
+  /** Hasta cuándo quedó pagado, ya confirmado el pago (undefined mientras se paga). */
+  paidUntil: string | null | undefined;
+  onBack: () => void;
+  onPaid: (paidUntil: string | null) => void;
+  onDone: () => void;
+}) {
+  if (paidUntil !== undefined) {
+    return (
+      <section className="mx-auto w-full max-w-md flex-1 pb-[max(2rem,env(safe-area-inset-bottom))] pt-10">
+        <div className="rounded-2xl border border-primary/40 bg-primary-soft px-5 py-6">
+          <Check className="size-6 text-primary" aria-hidden />
+          <h2 id={titleId} className="mt-3 text-[26px] font-semibold leading-[1.15] tracking-[-0.02em]">
+            Ya tienes Omni Pro
+          </h2>
+          <p className="mt-2 text-[15px] leading-relaxed text-muted">
+            {paidUntil ? `Recibimos tu pago: Pro sigue hasta el ${shortDate(paidUntil)}. ` : "Recibimos tu pago. "}Tus agentes ya trabajan en piloto
+            automático.
+          </p>
+          <button
+            type="button"
+            onClick={onDone}
+            className="paywall-cta mt-6 h-12 w-full rounded-2xl bg-primary text-base font-semibold text-on-primary hover:bg-primary-hover"
+          >
+            Listo
+          </button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="mx-auto w-full max-w-md flex-1 pb-[max(2rem,env(safe-area-inset-bottom))] pt-1">
+      <button
+        type="button"
+        onClick={onBack}
+        className="-ml-2 inline-flex items-center gap-1 rounded-full px-2 py-1.5 text-sm font-medium text-muted transition-colors hover:text-ink"
+      >
+        <ChevronLeft className="size-4" aria-hidden />
+        Planes
+      </button>
+      <h2 id={titleId} className="mt-4 text-[28px] font-semibold leading-[1.15] tracking-[-0.02em] text-balance">
+        Paga con Binance Pay
+      </h2>
+      <p className="mt-2 text-[15px] leading-relaxed text-muted">
+        Un mes de Omni Pro por <span className="font-semibold text-ink tabular-nums">{price}</span>. No se renueva solo: te avisamos antes de
+        que venza.
+      </p>
+      <BinanceTransferPanel className="mt-7" preview={preview} onPaid={(result) => onPaid(result.paidUntil)} />
+    </section>
   );
 }
 

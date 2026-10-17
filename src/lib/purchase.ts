@@ -1,6 +1,8 @@
 // Comprar Omni Pro desde la app. Un solo punto para las pasarelas:
-// - Binance Pay (la principal, en la web y en la app): el servidor crea la orden y la persona paga en Binance con el
-//   saldo de su cuenta. Al volver, /cuenta confirma la orden en Binance; el webhook hace lo mismo.
+// - Binance Pay (la principal, en la web y en la app). Con cuenta de comercio, el servidor crea la orden y la persona
+//   paga en Binance con el saldo de su cuenta; al volver, /cuenta confirma la orden y el webhook hace lo mismo. Con una
+//   cuenta personal (binanceMode "transfer"), no pasa por aquí: la pantalla de Pro muestra el Pay ID y la persona pega
+//   el ID de la orden (src/components/binance-transfer.tsx).
 // - Web: Stripe Checkout. El servidor crea la sesión y la persona paga en la página de Stripe (Omni nunca ve la
 //   tarjeta). Al volver, /cuenta sincroniza la suscripción y el webhook hace lo mismo.
 // - App de Android: Google Play Billing con RevenueCat, como exige la política de pagos de Google Play (dentro de la

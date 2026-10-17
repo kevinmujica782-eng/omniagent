@@ -40,6 +40,18 @@ const schema = z.object({
   // Binance Pay (comercio): llave de API y llave secreta de merchant.binance.com. Las dos o ninguna.
   BINANCE_PAY_API_KEY: z.string().optional(),
   BINANCE_PAY_SECRET_KEY: z.string().optional(),
+  // Binance Pay a una cuenta personal (sin comercio): la persona envía USDT a BINANCE_PAY_ID y pega el ID de la orden;
+  // el servidor lo busca en el historial con una llave de API normal de binance.com de SOLO LECTURA. Binance bloquea
+  // los servidores de EE. UU.: la consulta pasa por la función binance-relay de Supabase (supabase/functions), que se
+  // invoca en BINANCE_RELAY_REGIONS. Pay ID, las dos llaves y el token del relevo: todos o ninguno.
+  BINANCE_PAY_ID: z.string().optional(),
+  BINANCE_PAY_NAME: z.string().optional(),
+  BINANCE_READ_API_KEY: z.string().optional(),
+  BINANCE_READ_API_SECRET: z.string().optional(),
+  BINANCE_RELAY_TOKEN: z.string().optional(),
+  // Por defecto, {NEXT_PUBLIC_SUPABASE_URL}/functions/v1/binance-relay.
+  BINANCE_RELAY_URL: z.string().url().optional(),
+  BINANCE_RELAY_REGIONS: z.string().default("eu-west-3,sa-east-1"),
   // Notificaciones push: si faltan, la app genera sus llaves VAPID y las guarda cifradas en app_settings.
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),

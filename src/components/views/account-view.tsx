@@ -159,7 +159,7 @@ export function AccountView({
               // La pantalla de Pro compara los planes y cobra con Binance Pay, Stripe (web) o Google Play (Android).
               <UpgradeButton>Desbloquear Omni Pro</UpgradeButton>
             ) : billing.source === "BINANCE" ? (
-              <BinanceRenewButton preview={preview} />
+              <BinanceRenewButton preview={preview} mode={billing.binanceMode} />
             ) : billing.source === "STRIPE" ? (
               preview ? (
                 <span className={buttonClass("secondary")}>Administrar suscripción</span>

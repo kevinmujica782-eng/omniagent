@@ -48,6 +48,7 @@ function billingFor(
     },
     checkoutAvailable: true,
     binanceAvailable: true,
+    binanceMode: "transfer",
   };
 }
 

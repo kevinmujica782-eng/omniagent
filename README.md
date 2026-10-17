@@ -20,7 +20,7 @@ Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendacione
 | **Pedidos y devoluciones** | Sigue tus pedidos (compras con OmniAgent, correos de tiendas y paqueterías, o agregados a mano) contra la fecha prometida. Si uno va 2 días tarde, **prepara el reclamo solo**; si llegó dañado, equivocado o distinto al anuncio, lo prepara con un toque. El correo a la tienda sale desde tu bandeja **solo si lo apruebas** (en Amazon, Mercado Libre y otros marketplaces te deja el texto listo y te dice dónde reclamar). Si la tienda no responde, propone seguimientos; si tampoco, te dice cómo escalar (plataforma, banco o protección al consumidor). Lee las respuestas de la tienda y confirma el reembolso en tus movimientos de Finanzas. |
 | **Metas** | Metas con monto, fecha, aporte mensual sugerido y pasos. |
 | **Ideas** | Sugerencias proactivas a partir de tus datos (incluye las 3 mejores recomendaciones del análisis financiero). |
-| **Planes y pagos** | Gratis y **Pro ($19.99 al mes)**, que pone a los agentes en piloto automático: correo revisado cada 3 horas, precios cada hora, informe mensual, alertas redactadas por Omni y el modelo más capaz. Los límites se validan en el servidor. **Pantalla de Omni Pro** a pantalla completa, siempre oscura, con la comparación Gratis / Pro y el botón **Desbloquear Omni Pro**. Stripe en la web (Checkout en español, portal, activación al volver del pago, webhooks idempotentes y aviso de cobro fallido) y RevenueCat para Google Play. |
+| **Planes y pagos** | Gratis y **Pro ($19.99 al mes)**, que pone a los agentes en piloto automático: correo revisado cada 3 horas, precios cada hora, informe mensual, alertas redactadas por Omni y el modelo más capaz. Los límites se validan en el servidor. **Pantalla de Omni Pro** a pantalla completa, siempre oscura, con la comparación Gratis / Pro y el botón **Desbloquear Omni Pro**. **Binance Pay** (19.99 USDT al mes, con cuenta de comercio o enviando al Pay ID de una cuenta personal y pegando el ID de la orden: ver [`docs/BINANCE_PAY.md`](docs/BINANCE_PAY.md)), Stripe en la web (Checkout en español, portal, activación al volver del pago, webhooks idempotentes y aviso de cobro fallido) y RevenueCat para Google Play. |
 | **Seguridad** | Supabase Auth, RLS en todas las tablas, tokens cifrados (AES-256-GCM), tokens del sandbox firmados (HMAC), webhooks idempotentes, bitácora de auditoría, límites de tasa, CSP y HSTS, y **eliminación de la cuenta** desde la app. |
 | **Producción** | Errores con formato estable e id de solicitud, logs JSON sin datos sensibles, `/api/health`, revisión de la configuración al arrancar, pantallas de error propias, más de 300 pruebas unitarias (`npm test`), Docker, CI/CD con GitHub Actions y guía de despliegue en [`docs/DEPLOY.md`](docs/DEPLOY.md). |
 | **Android** | Capacitor 8 configurado (modo hosted, target API 36) y API lista para token Bearer. |
@@ -33,7 +33,7 @@ Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendacione
 - **Prisma 7** (`prisma-client` generator, driver adapter `@prisma/adapter-pg`, `prisma.config.ts`)
 - **Router de IA propio** (APIs oficiales con `fetch`, sin SDK): Claude (`claude-haiku-4-5-20251001` en Gratis y `claude-sonnet-5-5` en Pro), ChatGPT, Gemini y Grok, todos configurables
 - **zod 4**: validación de API y esquemas de las herramientas (se convierten a JSON Schema)
-- **Stripe** (web) + **RevenueCat** (Google Play Billing)
+- **Binance Pay** (comercio o cuenta personal, con un relevo en Supabase Edge Functions porque Binance bloquea EE. UU.) + **Stripe** (web) + **RevenueCat** (Google Play Billing)
 - **Plaid** (opcional) para cuentas reales; sandbox propio por defecto
 - **pdf-lib** (leer y llenar formularios) y **pdf.js** (`pdfjs-dist`, texto y posiciones para PDF sin campos)
 - **Capacitor 8** para Android
@@ -114,7 +114,7 @@ omniagent/
     │   │   ├── merchants.ts     # tiendas de prueba, marketplaces reales (dónde reclamar) y paqueterías
     │   │   ├── returns.service.ts, views.ts, sandbox.ts, jobs.ts
     │   │   └── returns.tools.ts # 5 herramientas de pedidos y devoluciones
-    │   ├── billing/             # plans.ts (Gratis/Pro y funciones), status.ts, entitlements.ts, plan-change.ts, stripe.ts, revenuecat.ts, upgrade.ts
+    │   ├── billing/             # plans.ts (Gratis/Pro y funciones), status.ts, entitlements.ts, plan-change.ts, binance*.ts (Binance Pay), stripe.ts, revenuecat.ts, upgrade.ts
     │   ├── account/             # eliminar la cuenta (Stripe, bancos, archivos y Supabase Auth)
     │   ├── notifications/  goals/  ideas/  connections/
     ├── components/

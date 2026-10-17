@@ -31,8 +31,14 @@ export function checkConfig(env: Env, production: boolean): ConfigReport {
   const binance = ["BINANCE_PAY_API_KEY", "BINANCE_PAY_SECRET_KEY"];
   const binanceSet = binance.filter((key) => present(env, key));
   if (binanceSet.length === 1) report.critical.push(...binance.filter((key) => !present(env, key)));
+  // Binance Pay a una cuenta personal: el Pay ID, la llave de solo lectura y el token del relevo de Supabase.
+  const transfer = ["BINANCE_PAY_ID", "BINANCE_READ_API_KEY", "BINANCE_READ_API_SECRET", "BINANCE_RELAY_TOKEN"];
+  const transferSet = transfer.filter((key) => present(env, key));
+  if (transferSet.length > 0 && transferSet.length < transfer.length) report.critical.push(...transfer.filter((key) => !present(env, key)));
   // Sin ninguna pasarela, nadie puede pagar Pro.
-  if (stripeSet.length === 0 && binanceSet.length === 0) report.recommended.push("BINANCE_PAY_API_KEY");
+  if (stripeSet.length === 0 && binanceSet.length === 0 && transferSet.length === 0) {
+    report.recommended.push("BINANCE_PAY_ID (Binance Pay a tu cuenta) o BINANCE_PAY_API_KEY (comercio)");
+  }
   if (present(env, "STRIPE_SECRET_KEY") && production && env.STRIPE_SECRET_KEY!.startsWith("sk_test_")) {
     report.warnings.push("Stripe está en modo de prueba (sk_test_) en producción.");
   }
