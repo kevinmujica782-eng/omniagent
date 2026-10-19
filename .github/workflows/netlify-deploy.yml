@@ -36,9 +36,16 @@ jobs:
       - name: Publicar
         env:
           SITE_ID: ${{ inputs.site_id }}
-          PROXY_PATH: ${{ inputs.proxy_path }}
         run: |
+          # El proxy_path sirve para publicar mientras no vence, y el repositorio es público. GitHub muestra en el
+          # log las variables de `env:` y el script con cada ${{ }} ya reemplazado, así que se lee del evento y se
+          # oculta antes de usarlo.
+          PROXY_PATH=$(jq -r '.inputs.proxy_path // ""' "$GITHUB_EVENT_PATH")
           echo "::add-mask::$PROXY_PATH"
+          case "$PROXY_PATH" in
+            https://netlify-mcp.netlify.app/proxy/*) ;;
+            *) echo "::error title=Netlify::El proxy_path está vacío o no viene de deploy-site."; exit 1 ;;
+          esac
           set +e
           npx -y @netlify/mcp@latest --site-id "$SITE_ID" --proxy-path "$PROXY_PATH" 2>&1 | tee "$RUNNER_TEMP/deploy.log"
           code=${PIPESTATUS[0]}
