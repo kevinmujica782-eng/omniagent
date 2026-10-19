@@ -38,8 +38,8 @@ jobs:
           SITE_ID: ${{ inputs.site_id }}
         run: |
           # El proxy_path sirve para publicar mientras no vence, y el repositorio es público. GitHub muestra en el
-          # log las variables de `env:` y el script con cada ${{ }} ya reemplazado, así que se lee del evento y se
-          # oculta antes de usarlo.
+          # log las variables de `env:` y el script con sus expresiones ya reemplazadas, así que se lee del evento y
+          # se oculta antes de usarlo.
           PROXY_PATH=$(jq -r '.inputs.proxy_path // ""' "$GITHUB_EVENT_PATH")
           echo "::add-mask::$PROXY_PATH"
           case "$PROXY_PATH" in
