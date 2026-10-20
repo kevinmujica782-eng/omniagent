@@ -237,6 +237,15 @@ async function openIntent(userId: string, now: Date) {
   });
 }
 
+/**
+ * Que la llave responda y sea de solo lectura antes de mostrar el Pay ID: si falla, la persona ve que el pago no está
+ * disponible en vez de pagar algo que después no se podría confirmar. Usa la misma revisión en caché (una por hora).
+ */
+export async function assertTransferKeyWorks(): Promise<void> {
+  if (!transferConfigured()) throw Errors.notConfigured("El pago con Binance Pay");
+  await ensureReadOnlyKey(Date.now());
+}
+
 /** Abre (o reusa) la solicitud de pago y devuelve a dónde pagar. */
 export async function startTransfer(userId: string, now = new Date()): Promise<TransferStart> {
   if (!transferConfigured()) throw Errors.notConfigured("El pago con Binance Pay");
