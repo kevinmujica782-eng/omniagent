@@ -90,32 +90,48 @@ export function SalesPage() {
 
   const features: { key: string; title: string; body: string; composer: boolean; content: ReactNode }[] = [
     {
-      key: "precios",
-      title: "Te avisa cuando baja un precio",
-      body: "Pega el enlace de un producto de una tienda en línea y Omni vigila su precio. Te avisa cuando baja.",
+      key: "finanzas",
+      title: "Analiza tu dinero automáticamente",
+      body: "Sube un estado de cuenta en PDF o foto. Omni encuentra gastos hormiga, suscripciones que no usas, y te dice dónde ahorrar.",
       composer: true,
       content: (
         <ChatScreen
           messages={[
-            m("p1", "user", "Avísame si los audífonos Aura X2 bajan de $260"),
-            m("p2", "assistant", "Listo. Reviso el precio en segundo plano y te aviso si baja 15% o llega a $260.", [
+            m("f1", "user", "¿A dónde se va mi dinero?"),
+            m("f2", "assistant", "Gastas $4,212 al mes. Encontré 5 suscripciones inactivas y $340 en compras innecesarias.", [demo.financeSummary]),
+          ]}
+        />
+      ),
+    },
+    {
+      key: "precios",
+      title: "Vigila precios y boletos",
+      body: "Pega enlaces de productos, vuelos o hoteles. Omni avisa cuando bajan y te muestra la gráfica de precios.",
+      composer: true,
+      content: (
+        <ChatScreen
+          messages={[
+            m("p1", "user", "Avísame si los audífonos bajan de $260 o si hay vuelos baratos a Miami"),
+            m("p2", "assistant", "Listo. Reviso en segundo plano cada hora.", [
               demo.tracking,
             ]),
-            m("p3", "assistant", "Hoy bajaron a **$247**, 24% menos de lo normal."),
+            m("p3", "assistant", "Los audífonos bajaron a **$247**, 24% menos."),
           ]}
         />
       ),
     },
     {
       key: "tramites",
-      title: "Trámites sin olvidos",
-      body: "Conecta tu correo: Omni encuentra lo que tienes pendiente, te ayuda a llenar formularios en PDF y te recuerda las fechas.",
+      title: "Trámites sin olvidos, formularios automáticos",
+      body: "Conecta tu correo: Omni detecta qué tienes pendiente, llena formularios en PDF, te avisa de fechas límite.",
       composer: true,
       content: (
         <ChatScreen
           messages={[
-            m("t1", "assistant", "Anoté el permiso de la excursión. ¿Agendo la salida en tu calendario?", [
+            m("t1", "assistant", "Encontré 2 trámites: el permiso de escuela (vence en 5 días) y tu afiliación dental.", [
               demo.task,
+            ]),
+            m("t2", "assistant", "¿Lleno el formulario de permiso con tus datos guardados?", [
               demo.calendar,
             ]),
           ]}
@@ -123,29 +139,56 @@ export function SalesPage() {
       ),
     },
     {
+      key: "compras",
+      title: "Compras sin sorpresas",
+      body: "Omni vigila tus pedidos, detecta retrasos, y reclama automáticamente si algo va mal o no llega.",
+      composer: true,
+      content: (
+        <ChatScreen
+          messages={[
+            m("c1", "assistant", "Tu pedido de Amazon llegaba hoy. Aún no ha llegado. ¿Preparo un reclamo?", []),
+            m("c2", "user", "Sí, por favor"),
+            m("c3", "assistant", "Listo. Envié el reclamo a Amazon. Te aviso cuando respondan.", []),
+          ]}
+        />
+      ),
+    },
+    {
       key: "metas",
-      title: "Tus metas, con un plan",
-      body: "Dile cuánto quieres ahorrar y para cuándo. Omni te arma el plan y te dice cómo vas.",
+      title: "Metas y planes de ahorro",
+      body: "Dile cuánto quieres ahorrar y para cuándo. Omni te arma el plan mensual y te dice cómo vas.",
       composer: false,
       content: (
         <ListScreen title="Metas">
           <p className="mb-2 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
-            <Dot tone="attention" />
-            Siguiendo
-          </p>
-          <Panel>
-            {demo.trackingList.slice(0, 2).map((item) => (
-              <TrackingRow key={item.itemId} item={item} />
-            ))}
-          </Panel>
-          <p className="mb-2 mt-5 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
             <Dot tone="primary" />
-            Metas
+            Mis metas
           </p>
           <Panel>
             {demo.goals.slice(0, 2).map((goal) => (
               <GoalRow key={goal.goalId} goal={goal} />
             ))}
+          </Panel>
+        </ListScreen>
+      ),
+    },
+    {
+      key: "documentos",
+      title: "Tus documentos organizados",
+      body: "Guarda datos personales cifrados (teléfono, dirección, CURP). Omni los usa para rellenar formularios en segundos.",
+      composer: false,
+      content: (
+        <ListScreen title="Mis datos">
+          <p className="mb-2 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
+            <FileText className="size-4" />
+            Guardados
+          </p>
+          <Panel>
+            <div className="space-y-3 px-4 py-3">
+              <p className="flex items-center justify-between text-sm"><span>Teléfono</span><span className="text-muted">•••••5420</span></p>
+              <p className="flex items-center justify-between text-sm"><span>Correo</span><span className="text-muted">tu@correo.com</span></p>
+              <p className="flex items-center justify-between text-sm"><span>Dirección</span><span className="text-muted">Guardada</span></p>
+            </div>
           </Panel>
         </ListScreen>
       ),
@@ -202,9 +245,10 @@ export function SalesPage() {
           <h2 id="que-hace" className="max-w-2xl text-3xl font-semibold tracking-tight text-balance text-ink">
             Lo que Omni hace por ti
           </h2>
-          <p className="mt-3 max-w-xl leading-relaxed text-muted">
-            Todo desde la misma conversación. Para tus finanzas, subes tu estado de cuenta y Omni te dice a dónde se va tu dinero:
-            gastos hormiga, suscripciones que ya no usas y dónde puedes ahorrar.
+          <p className="mt-3 max-w-2xl leading-relaxed text-muted">
+            Todo desde un chat. Omni analiza tus gastos y suscripciones, vigila precios y boletos, llena tus formularios automáticamente,
+            recuerda tus trámites, rastrea tus compras y reclamos, te ayuda a ahorrar, y guarda tus datos de forma segura. Nada se paga,
+            se envía ni se cancela sin tu aprobación.
           </p>
         </div>
         <div className="no-scrollbar mt-8 flex snap-x snap-mandatory gap-6 overflow-x-auto px-4 pb-4 sm:px-6 lg:mx-auto lg:grid lg:max-w-5xl lg:grid-cols-3 lg:gap-8 lg:overflow-visible">
