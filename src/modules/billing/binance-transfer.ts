@@ -120,6 +120,20 @@ async function syncClock(): Promise<void> {
   if (status === 200 && Number.isFinite(serverTime)) clockOffsetMs = serverTime - Date.now();
 }
 
+/**
+ * Lo último que falló con la llave, para la salud con CRON_SECRET: el estado HTTP, el código y el mensaje de Binance,
+ * o los permisos de más. Nunca lleva la llave, la firma ni datos del historial.
+ */
+let lastKeyProblem: string | null = null;
+
+function describeBinanceError(status: number, code: number | null, json: unknown): string {
+  const msg = (json as { msg?: unknown } | null)?.msg;
+  const parts = [`HTTP ${status}`];
+  if (code !== null) parts.push(`código ${code}`);
+  if (typeof msg === "string" && msg) parts.push(msg.slice(0, 160));
+  return parts.join(", ");
+}
+
 /** GET firmado (USER_DATA) con la llave de solo lectura. Los errores salen como un mensaje para la persona. */
 async function signedGet(path: BinancePath, params: Record<string, string | number>): Promise<unknown> {
   const config = env();
@@ -135,13 +149,16 @@ async function signedGet(path: BinancePath, params: Record<string, string | numb
       continue;
     }
     if (status === 401 || (code !== null && KEY_REJECTED_CODES.has(code))) {
+      lastKeyProblem = `Binance rechazó la llave (${describeBinanceError(status, code, json)})`;
       log.error("binance.transfer.key_rejected", { path, status, code });
       throw new AppError(503, "binance_unavailable", "El pago con Binance Pay no está disponible ahora. Escríbenos y lo revisamos.");
     }
     if (status === 418 || status === 429) {
+      lastKeyProblem = `Binance limitó las consultas (HTTP ${status})`;
       log.warn("binance.transfer.rate_limited", { path, status });
       throw new AppError(503, "binance_busy", "Binance está recibiendo demasiadas consultas. Prueba otra vez en un minuto.");
     }
+    lastKeyProblem = `Binance respondió con error (${describeBinanceError(status, code, json)})`;
     log.error("binance.transfer.request_failed", { path, status, code });
     throw new AppError(502, "binance_error", UNAVAILABLE);
   }
@@ -159,6 +176,7 @@ async function ensureReadOnlyKey(nowMs: number): Promise<void> {
   const problems = keyPermissionProblems(await signedGet(BINANCE_PATHS.restrictions, {}));
   if (problems.length > 0) {
     keyCheckedAt = 0;
+    lastKeyProblem = `La llave no es solo de lectura: ${problems.join(", ")}`;
     log.error("binance.transfer.key_not_read_only", { problems });
     throw new AppError(503, "binance_unavailable", "El pago con Binance Pay está en pausa mientras revisamos la configuración. Escríbenos y lo resolvemos.");
   }
@@ -356,8 +374,15 @@ async function claimedResult(
   };
 }
 
-/** Para la salud del sistema (con CRON_SECRET): ¿llega el relevo a Binance y la llave es de solo lectura? */
-export async function transferHealth(): Promise<{ relay: "ok" | "error"; key: "ok" | "error" | "not_configured" }> {
+/**
+ * Para la salud del sistema (con CRON_SECRET): ¿llega el relevo a Binance y la llave es de solo lectura? Si la llave
+ * falla, `detail` dice por qué (estado y código de Binance, o los permisos de más).
+ */
+export async function transferHealth(): Promise<{
+  relay: "ok" | "error";
+  key: "ok" | "error" | "not_configured";
+  detail?: string;
+}> {
   if (!relayUrl() || !env().BINANCE_RELAY_TOKEN) return { relay: "error", key: "not_configured" };
   let relayOk: "ok" | "error" = "error";
   try {
@@ -368,9 +393,11 @@ export async function transferHealth(): Promise<{ relay: "ok" | "error"; key: "o
   if (!transferConfigured()) return { relay: relayOk, key: "not_configured" };
   try {
     keyCheckedAt = 0;
+    lastKeyProblem = null;
     await ensureReadOnlyKey(Date.now());
     return { relay: relayOk, key: "ok" };
-  } catch {
-    return { relay: relayOk, key: "error" };
+  } catch (error) {
+    const detail = lastKeyProblem ?? (error instanceof AppError ? error.code : "error inesperado");
+    return { relay: relayOk, key: "error", detail };
   }
 }
