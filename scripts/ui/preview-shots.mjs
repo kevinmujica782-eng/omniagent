@@ -5,6 +5,7 @@
 // revisar páginas largas; la foto extra se llama «{pantalla}-completa-{equipo}.png». Con «@texto» (por ejemplo
 // «cuenta@Modelo de IA») se captura además desde el primer elemento con ese texto exacto, para las secciones que
 // quedan abajo en pantallas con desplazamiento interno; la foto extra se llama «{pantalla}-{texto}-{equipo}.png».
+// Una entrada que empieza con «/» (por ejemplo «/conoce:completa») es una ruta de la app en vez de una pantalla de /preview.
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
@@ -31,6 +32,16 @@ function slug(text) {
     .replace(/^-|-$/g, "");
 }
 
+/** Nombre del archivo de la captura: la pantalla tal cual, o la ruta sin barras («/conoce» → «conoce»). */
+function fileName(name) {
+  return name.startsWith("/") ? slug(name) || "inicio-publico" : name;
+}
+
+/** Una pantalla de /preview, o una ruta de la app si empieza con «/» (por ejemplo «/conoce»). */
+function screenUrl(name) {
+  return name.startsWith("/") ? `${APP_URL}${name}` : `${APP_URL}/preview?screen=${name}`;
+}
+
 const DEVICES = [
   { name: "telefono", viewport: { width: 390, height: 844 }, scale: 2, mobile: true },
   { name: "compu", viewport: { width: 1280, height: 860 }, scale: 1, mobile: false },
@@ -55,20 +66,20 @@ try {
       if (message.type() === "error") errors.push(message.text());
     });
     for (const screen of SCREENS) {
-      const response = await page.goto(`${APP_URL}/preview?screen=${screen.name}`, { waitUntil: "networkidle" });
+      const response = await page.goto(screenUrl(screen.name), { waitUntil: "networkidle" });
       console.log(`${device.name} ${screen.name} → HTTP ${response?.status()}`);
       // La luna da su vuelta de entrada (1,2 s) antes de la captura.
       await page.waitForTimeout(1800);
-      await page.screenshot({ path: join(OUT_DIR, `${screen.name}-${device.name}.png`) });
+      await page.screenshot({ path: join(OUT_DIR, `${fileName(screen.name)}-${device.name}.png`) });
       if (screen.full) {
-        await page.screenshot({ path: join(OUT_DIR, `${screen.name}-completa-${device.name}.png`), fullPage: true });
+        await page.screenshot({ path: join(OUT_DIR, `${fileName(screen.name)}-completa-${device.name}.png`), fullPage: true });
       }
       if (screen.anchor) {
         const target = page.getByText(screen.anchor, { exact: true }).first();
         if (await target.count()) {
           await target.evaluate((element) => element.scrollIntoView({ block: "start" }));
           await page.waitForTimeout(400);
-          await page.screenshot({ path: join(OUT_DIR, `${screen.name}-${slug(screen.anchor)}-${device.name}.png`) });
+          await page.screenshot({ path: join(OUT_DIR, `${fileName(screen.name)}-${slug(screen.anchor)}-${device.name}.png`) });
         } else {
           console.log(`${device.name} ${screen.name}: no encontré «${screen.anchor}»`);
         }
