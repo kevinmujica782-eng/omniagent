@@ -28,7 +28,8 @@ const STEPS = [
   },
 ];
 
-function ChatScreen({ messages }: { messages: ChatMessageView[] }) {
+/** También la usa la página /conoce. */
+export function ChatScreen({ messages }: { messages: ChatMessageView[] }) {
   return (
     <div className="flex h-full flex-col justify-end gap-3 px-4 py-4">
       {messages.map((message) => (
@@ -38,7 +39,8 @@ function ChatScreen({ messages }: { messages: ChatMessageView[] }) {
   );
 }
 
-function ListScreen({ title, children }: { title: string; children: ReactNode }) {
+/** También la usa la página /conoce. */
+export function ListScreen({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="h-full px-4 pt-5">
       <h3 className="mb-3 px-1 text-xl font-semibold tracking-tight text-ink">{title}</h3>
