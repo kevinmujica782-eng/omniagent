@@ -84,85 +84,93 @@ const FAQ: { q: string; a: string }[] = [
   },
 ];
 
+// Ejemplo de Dots con los mismos textos de ayuda de la pantalla «Tus Dots».
+const DOTS: { name: string; role: string; main?: boolean }[] = [
+  { name: "Ahorrista", role: "Me cuida el bolsillo", main: true },
+  { name: "Tramitador", role: "Me ayuda con el papeleo" },
+  { name: "Cazaofertas", role: "Me avisa cuando algo baja" },
+];
+
 export function SalesPage() {
   const demo = demoData();
   const m = demo.message;
 
   const features: { key: string; title: string; body: string; composer: boolean; content: ReactNode }[] = [
     {
-      key: "finanzas",
-      title: "Analiza tu dinero automáticamente",
-      body: "Sube un estado de cuenta en PDF o foto. Omni encuentra gastos hormiga, suscripciones que no usas, y te dice dónde ahorrar.",
+      key: "gastos",
+      title: "Mira a dónde se va tu dinero",
+      body: "Sube tu estado de cuenta en PDF o tómale una foto. Omni encuentra los gastos hormiga y las suscripciones que ya no usas, y te dice cuánto puedes ahorrar.",
       composer: true,
       content: (
         <ChatScreen
           messages={[
-            m("f1", "user", "¿A dónde se va mi dinero?"),
-            m("f2", "assistant", "Gastas $4,212 al mes. Encontré 5 suscripciones inactivas y $340 en compras innecesarias.", [demo.financeSummary]),
+            m("g1", "user", "¿En qué se me va el dinero sin darme cuenta?"),
+            m("g2", "assistant", "En compras pequeñas: **$132 al mes**. Y tienes 3 suscripciones que no usas.", [demo.ant]),
           ]}
         />
       ),
     },
     {
       key: "precios",
-      title: "Vigila precios y boletos",
-      body: "Pega enlaces de productos, vuelos o hoteles. Omni avisa cuando bajan y te muestra la gráfica de precios.",
+      title: "Te avisa cuando un precio baja de verdad",
+      body: "Pega el enlace de un producto, un boleto, un vuelo o un hotel. Omni revisa el precio por ti y lo compara con el de los últimos 30 días.",
       composer: true,
       content: (
         <ChatScreen
           messages={[
-            m("p1", "user", "Avísame si los audífonos bajan de $260 o si hay vuelos baratos a Miami"),
-            m("p2", "assistant", "Listo. Reviso en segundo plano cada hora.", [
-              demo.tracking,
-            ]),
-            m("p3", "assistant", "Los audífonos bajaron a **$247**, 24% menos."),
+            m("p1", "user", "Avísame si los audífonos Aura X2 bajan de $260"),
+            m("p2", "assistant", "Listo. Reviso el precio en segundo plano y te aviso si baja 15% o llega a $260.", [demo.tracking]),
+            m("p3", "assistant", "Hoy bajaron a **$247**, 24% menos de lo normal."),
           ]}
         />
       ),
     },
     {
       key: "tramites",
-      title: "Trámites sin olvidos, formularios automáticos",
-      body: "Conecta tu correo: Omni detecta qué tienes pendiente, llena formularios en PDF, te avisa de fechas límite.",
+      title: "Tus trámites, sin olvidos",
+      body: "Conecta tu correo: Omni encuentra lo pendiente, te ayuda a llenar formularios en PDF con tus datos y te recuerda las fechas.",
       composer: true,
       content: (
         <ChatScreen
           messages={[
-            m("t1", "assistant", "Encontré 2 trámites: el permiso de escuela (vence en 5 días) y tu afiliación dental.", [
-              demo.task,
-            ]),
-            m("t2", "assistant", "¿Lleno el formulario de permiso con tus datos guardados?", [
-              demo.calendar,
-            ]),
+            m("t1", "assistant", "Anoté el permiso de la excursión. ¿Agendo la salida en tu calendario?", [demo.task, demo.calendar]),
           ]}
         />
       ),
     },
     {
-      key: "compras",
-      title: "Compras sin sorpresas",
-      body: "Omni vigila tus pedidos, detecta retrasos, y reclama automáticamente si algo va mal o no llega.",
+      key: "reclamos",
+      title: "Si un pedido se atrasa, el reclamo ya está escrito",
+      body: "Omni sigue tus pedidos. Si uno llega tarde o llega mal, te prepara el reclamo. Lo apruebas y lo envía desde tu correo, o te lo deja listo para pegarlo en la tienda.",
       composer: true,
       content: (
         <ChatScreen
           messages={[
-            m("c1", "assistant", "Tu pedido de Amazon llegaba hoy. Aún no ha llegado. ¿Preparo un reclamo?", []),
-            m("c2", "user", "Sí, por favor"),
-            m("c3", "assistant", "Listo. Envié el reclamo a Amazon. Te aviso cuando respondan.", []),
+            m("r1", "assistant", "Tu pedido #4821 de Tienda Nova iba a llegar el lunes y lleva 3 días de retraso."),
+            m("r2", "assistant", "Te preparé el reclamo pidiendo el reembolso. Revísalo y, si está bien, apruébalo para enviarlo desde tu correo."),
           ]}
         />
       ),
     },
     {
       key: "metas",
-      title: "Metas y planes de ahorro",
-      body: "Dile cuánto quieres ahorrar y para cuándo. Omni te arma el plan mensual y te dice cómo vas.",
+      title: "Ahorra con un plan",
+      body: "Dile cuánto quieres juntar y para cuándo. Omni te dice cuánto apartar cada mes y te muestra cómo vas.",
       composer: false,
       content: (
         <ListScreen title="Metas">
           <p className="mb-2 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
+            <Dot tone="attention" />
+            Siguiendo
+          </p>
+          <Panel>
+            {demo.trackingList.slice(0, 2).map((item) => (
+              <TrackingRow key={item.itemId} item={item} />
+            ))}
+          </Panel>
+          <p className="mb-2 mt-5 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
             <Dot tone="primary" />
-            Mis metas
+            Metas
           </p>
           <Panel>
             {demo.goals.slice(0, 2).map((goal) => (
@@ -173,68 +181,42 @@ export function SalesPage() {
       ),
     },
     {
-      key: "documentos",
-      title: "Tus documentos organizados",
-      body: "Guarda datos personales cifrados (teléfono, dirección, CURP). Omni los usa para rellenar formularios en segundos.",
-      composer: false,
-      content: (
-        <ListScreen title="Mis datos">
-          <p className="mb-2 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
-            <FileText className="size-4" />
-            Guardados
-          </p>
-          <Panel>
-            <div className="space-y-3 px-4 py-3">
-              <p className="flex items-center justify-between text-sm"><span>Teléfono</span><span className="text-muted">•••••5420</span></p>
-              <p className="flex items-center justify-between text-sm"><span>Correo</span><span className="text-muted">tu@correo.com</span></p>
-              <p className="flex items-center justify-between text-sm"><span>Dirección</span><span className="text-muted">Guardada</span></p>
-            </div>
-          </Panel>
-        </ListScreen>
-      ),
-    },
-    {
-      key: "paginas-web",
-      title: "Crea páginas web automáticamente",
-      body: "Dile a Omni qué negocio o idea quieres promocionar. Omni escribe el texto, te muestra la vista previa y tú apruebas publicar.",
+      key: "pagina",
+      title: "Una página web para tu negocio",
+      body: "Cuéntale qué vendes, tus precios y cómo te contactan. Omni te arma una página con tu WhatsApp y tu horario, y se publica solo cuando la apruebas.",
       composer: true,
       content: (
         <ChatScreen
           messages={[
-            m("w1", "user", "Crea una página para vender mis servicios de fotografía"),
-            m("w2", "assistant", "Listo. Escribí la página con tu información y un galería. Revísala aquí. ¿Te gusta?", []),
-            m("w3", "user", "Cambié el color a negro y agregué más fotos"),
-            m("w4", "assistant", "Perfecto. Tu página ya está en vivo en **tudominio.com**. Compartela cuando quieras.", []),
+            m("w1", "user", "Hazme una página para mi barbería en La Candelaria. Corte $8, barba $5. Atiendo de lunes a sábado."),
+            m("w2", "assistant", "Lista. Le puse tus precios, tu horario y un botón a tu WhatsApp. Revísala y, si te gusta, apruébala para publicarla."),
           ]}
         />
       ),
     },
     {
       key: "dots",
-      title: "Múltiples asistentes (Dots)",
-      body: "Crea varios Omni con personalidades distintas: uno para finanzas, otro para trabajo, otro para compras. Cada uno con su rol.",
+      title: "Arma tu equipo de asistentes",
+      body: "Crea Dots: asistentes con su nombre, su forma de hablar y tus instrucciones. Uno para cuidar tu bolsillo, otro para tus trámites. Tú eliges cuál te responde.",
       composer: false,
       content: (
         <ListScreen title="Tus Dots">
-          <p className="mb-2 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
-            <Dot tone="primary" />
-            Asistentes
-          </p>
+          <p className="mb-3 px-1 text-xs leading-relaxed text-muted">El Dot por defecto es el que te responde en el chat.</p>
           <Panel>
-            <div className="space-y-2 px-4 py-3">
-              <div className="rounded border border-line p-2 text-sm">
-                <p className="font-semibold text-ink">💰 Omni Finanzas</p>
-                <p className="text-xs text-muted">Experto en ahorros y gastos</p>
+            {DOTS.map((dot) => (
+              <div key={dot.name} className="flex items-center gap-3 border-t border-line px-3 py-2.5 first:border-t-0">
+                <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
+                  {dot.name.charAt(0)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold text-ink">{dot.name}</span>
+                  <span className="block truncate text-xs text-muted">{dot.role}</span>
+                </span>
+                {dot.main ? (
+                  <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">Por defecto</span>
+                ) : null}
               </div>
-              <div className="rounded border border-line p-2 text-sm">
-                <p className="font-semibold text-ink">🛍️ Omni Compras</p>
-                <p className="text-xs text-muted">Vigila precios y ofertas</p>
-              </div>
-              <div className="rounded border border-line p-2 text-sm">
-                <p className="font-semibold text-ink">✅ Omni Trabajo</p>
-                <p className="text-xs text-muted">Gestiona tareas y proyectos</p>
-              </div>
-            </div>
+            ))}
           </Panel>
         </ListScreen>
       ),
@@ -292,9 +274,9 @@ export function SalesPage() {
             Lo que Omni hace por ti
           </h2>
           <p className="mt-3 max-w-2xl leading-relaxed text-muted">
-            Todo desde un chat. Omni analiza tus gastos y suscripciones, vigila precios y boletos, llena tus formularios automáticamente,
-            recuerda tus trámites, rastrea tus compras y reclamos, te ayuda a ahorrar, crea páginas web, y guarda tus datos de forma segura.
-            Tienes múltiples asistentes personalizados (Dots) y nada se paga, se envía ni se cancela sin tu aprobación.
+            Todo desde la misma conversación: revisa tus gastos, vigila precios, te recuerda tus trámites, prepara tus reclamos, te
+            ayuda a ahorrar y te arma una página web. También puedes crear tus propios asistentes. Nada se paga, se envía ni se publica
+            sin tu permiso.
           </p>
         </div>
         <div className="no-scrollbar mt-8 flex snap-x snap-mandatory gap-6 overflow-x-auto px-4 pb-4 sm:px-6 lg:mx-auto lg:grid lg:max-w-5xl lg:grid-cols-3 lg:gap-8 lg:overflow-visible">
