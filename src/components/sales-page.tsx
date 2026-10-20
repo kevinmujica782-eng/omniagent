@@ -193,6 +193,52 @@ export function SalesPage() {
         </ListScreen>
       ),
     },
+    {
+      key: "paginas-web",
+      title: "Crea páginas web automáticamente",
+      body: "Dile a Omni qué negocio o idea quieres promocionar. Omni escribe el texto, te muestra la vista previa y tú apruebas publicar.",
+      composer: true,
+      content: (
+        <ChatScreen
+          messages={[
+            m("w1", "user", "Crea una página para vender mis servicios de fotografía"),
+            m("w2", "assistant", "Listo. Escribí la página con tu información y un galería. Revísala aquí. ¿Te gusta?", []),
+            m("w3", "user", "Cambié el color a negro y agregué más fotos"),
+            m("w4", "assistant", "Perfecto. Tu página ya está en vivo en **tudominio.com**. Compartela cuando quieras.", []),
+          ]}
+        />
+      ),
+    },
+    {
+      key: "dots",
+      title: "Múltiples asistentes (Dots)",
+      body: "Crea varios Omni con personalidades distintas: uno para finanzas, otro para trabajo, otro para compras. Cada uno con su rol.",
+      composer: false,
+      content: (
+        <ListScreen title="Tus Dots">
+          <p className="mb-2 flex items-center gap-2 px-1 text-sm font-semibold text-ink">
+            <Dot tone="primary" />
+            Asistentes
+          </p>
+          <Panel>
+            <div className="space-y-2 px-4 py-3">
+              <div className="rounded border border-line p-2 text-sm">
+                <p className="font-semibold text-ink">💰 Omni Finanzas</p>
+                <p className="text-xs text-muted">Experto en ahorros y gastos</p>
+              </div>
+              <div className="rounded border border-line p-2 text-sm">
+                <p className="font-semibold text-ink">🛍️ Omni Compras</p>
+                <p className="text-xs text-muted">Vigila precios y ofertas</p>
+              </div>
+              <div className="rounded border border-line p-2 text-sm">
+                <p className="font-semibold text-ink">✅ Omni Trabajo</p>
+                <p className="text-xs text-muted">Gestiona tareas y proyectos</p>
+              </div>
+            </div>
+          </Panel>
+        </ListScreen>
+      ),
+    },
   ];
 
   return (
@@ -247,8 +293,8 @@ export function SalesPage() {
           </h2>
           <p className="mt-3 max-w-2xl leading-relaxed text-muted">
             Todo desde un chat. Omni analiza tus gastos y suscripciones, vigila precios y boletos, llena tus formularios automáticamente,
-            recuerda tus trámites, rastrea tus compras y reclamos, te ayuda a ahorrar, y guarda tus datos de forma segura. Nada se paga,
-            se envía ni se cancela sin tu aprobación.
+            recuerda tus trámites, rastrea tus compras y reclamos, te ayuda a ahorrar, crea páginas web, y guarda tus datos de forma segura.
+            Tienes múltiples asistentes personalizados (Dots) y nada se paga, se envía ni se cancela sin tu aprobación.
           </p>
         </div>
         <div className="no-scrollbar mt-8 flex snap-x snap-mandatory gap-6 overflow-x-auto px-4 pb-4 sm:px-6 lg:mx-auto lg:grid lg:max-w-5xl lg:grid-cols-3 lg:gap-8 lg:overflow-visible">
