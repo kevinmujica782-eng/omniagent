@@ -15,7 +15,7 @@ import type { StatementScanPageView, StatementScanView } from "@/types/cards";
 import { statementError } from "./limits";
 import type { ScanPageResult, ScanTranscription } from "./scan-assemble";
 import { scanPagesFromFiles, type ScanFile, type ScanMediaType } from "./scan-files";
-import { SCAN_SYSTEM_PROMPT, SCAN_TOOL_NAME, scanPagePrompt, scanPageSchema } from "./scan-schema";
+import { SCAN_SYSTEM_PROMPT, SCAN_TOOL_NAME, scanPagePrompt, scanPageSchema, scanRequestJsonSchema } from "./scan-schema";
 
 // Lectura con IA de estados de cuenta en fotos o escaneados. Netlify corta cada petición a los 60 s, así que no se lee
 // todo de una vez: al subir se guardan las páginas (cifradas) y la app pide cada página por separado, con avance
@@ -42,6 +42,9 @@ export type ScanPageReader = (input: {
   bytes: Uint8Array;
 }) => Promise<{ result: ScanPageResult; model: string }>;
 
+/** Lo que se le pide al modelo (sin uniones con null; ver scanRequestJsonSchema). Se arma una vez. */
+let requestSchema: Record<string, unknown> | undefined;
+
 /** Tope de cada página: la función tiene 60 s. */
 const PAGE_DEADLINE_MS = 54_000;
 /** Si el modelo más capaz rechaza el pedido después de esto, ya no queda tiempo para repetirlo con el rápido. */
@@ -62,6 +65,7 @@ export const readPageWithAI: ScanPageReader = async (input) => {
   const ask = (tier: AITier, deadlineMs: number) =>
     generateStructured({
       schema: scanPageSchema,
+      jsonSchema: (requestSchema ??= scanRequestJsonSchema()),
       name: SCAN_TOOL_NAME,
       system: SCAN_SYSTEM_PROMPT,
       prompt: [part, { type: "text", text: scanPagePrompt(input.page, input.pages) }],
