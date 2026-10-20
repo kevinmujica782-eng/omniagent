@@ -27,7 +27,7 @@ const TRUST: { icon: typeof ShieldCheck; title: string; body: string }[] = [
   {
     icon: FileText,
     title: "Sin la clave de tu banco",
-    body: "Para revisar tus gastos subes tu estado de cuenta en PDF, Excel o una foto. Omni no te pide la clave del banco.",
+    body: "Para revisar tus gastos subes tu estado de cuenta en PDF o le tomas una foto. Omni no te pide la clave del banco.",
   },
   {
     icon: Trash2,
