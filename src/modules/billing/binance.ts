@@ -1,5 +1,6 @@
 import "server-only";
 import { audit } from "@/lib/audit";
+import { CRON_BUDGET_MS, runBatch, timeLeft } from "@/lib/batch";
 import { prisma } from "@/lib/db";
 import { env, requireEnv } from "@/lib/env";
 import { AppError, Errors } from "@/lib/errors";
@@ -240,48 +241,71 @@ export async function paidUntil(userId: string): Promise<string | null> {
   return sub?.currentPeriodEnd?.toISOString() ?? null;
 }
 
+/** Suscripciones que se toman por corrida en cada paso (el tiempo máximo corta antes si hace falta). */
+const BILLING_BATCH = 500;
+
 /**
  * Tarea programada (cada hora): vence los meses pagados con Binance Pay (Pro → Gratis si no queda otra suscripción
- * vigente) y avisa unos días antes de que venzan, una vez por periodo.
+ * vigente) y avisa unos días antes de que venzan, una vez por periodo. Va por lotes con tiempo máximo: lo que no
+ * alcanza sigue en la próxima corrida, y un error con una suscripción no detiene a las demás.
  */
-export async function runBinanceBillingJobs(now = new Date()): Promise<Record<string, number>> {
+export async function runBinanceBillingJobs(now = new Date(), opts: { budgetMs?: number } = {}): Promise<Record<string, number>> {
+  const deadline = Date.now() + (opts.budgetMs ?? CRON_BUDGET_MS);
   const expired = await prisma.subscription.findMany({
     where: { provider: "BINANCE", status: "ACTIVE", currentPeriodEnd: { lte: now } },
+    orderBy: { currentPeriodEnd: "asc" },
+    take: BILLING_BATCH,
     select: { id: true, userId: true },
   });
   let downgraded = 0;
-  for (const sub of expired) {
-    await prisma.subscription.update({ where: { id: sub.id }, data: { status: "EXPIRED" } });
-    if ((await getEntitlements(sub.userId, now)).plan === "FREE") {
-      await applyPlanChange(sub.userId, "PRO", "FREE", now);
-      downgraded++;
-    }
-  }
+  const expiring = await runBatch(
+    expired,
+    async (sub) => {
+      await prisma.subscription.update({ where: { id: sub.id }, data: { status: "EXPIRED" } });
+      if ((await getEntitlements(sub.userId, now)).plan === "FREE") {
+        await applyPlanChange(sub.userId, "PRO", "FREE", now);
+        downgraded++;
+      }
+    },
+    { budgetMs: timeLeft(deadline), onError: (sub, error) => log.error("billing.binance_expire_failed", { subscriptionId: sub.id, error }) },
+  );
 
   const ending = await prisma.subscription.findMany({
     where: { provider: "BINANCE", status: "ACTIVE", currentPeriodEnd: { gt: now, lte: new Date(now.getTime() + REMINDER_DAYS * DAY_MS) } },
+    orderBy: { currentPeriodEnd: "asc" },
+    take: BILLING_BATCH,
     select: { userId: true, currentPeriodEnd: true },
   });
   let reminded = 0;
-  for (const sub of ending) {
-    if (!sub.currentPeriodEnd) continue;
-    const periodEnd = sub.currentPeriodEnd.toISOString();
-    const already = await prisma.appNotification.findFirst({
-      where: { userId: sub.userId, data: { path: ["binanceRenewal"], equals: periodEnd } },
-      select: { id: true },
-    });
-    if (already) continue;
-    await prisma.appNotification.create({
-      data: {
-        userId: sub.userId,
-        type: "REMINDER",
-        title: "Tu Omni Pro vence pronto",
-        body: `Pro sigue hasta el ${shortDate(sub.currentPeriodEnd)}. Renuévalo con Binance Pay para no perder el piloto automático.`,
-        href: "/cuenta#planes",
-        data: { binanceRenewal: periodEnd },
-      },
-    });
-    reminded++;
-  }
-  return { expired: expired.length, downgraded, reminded };
+  const reminders = await runBatch(
+    ending,
+    async (sub) => {
+      if (!sub.currentPeriodEnd) return;
+      const periodEnd = sub.currentPeriodEnd.toISOString();
+      const already = await prisma.appNotification.findFirst({
+        where: { userId: sub.userId, data: { path: ["binanceRenewal"], equals: periodEnd } },
+        select: { id: true },
+      });
+      if (already) return;
+      await prisma.appNotification.create({
+        data: {
+          userId: sub.userId,
+          type: "REMINDER",
+          title: "Tu Omni Pro vence pronto",
+          body: `Pro sigue hasta el ${shortDate(sub.currentPeriodEnd)}. Renuévalo con Binance Pay para no perder el piloto automático.`,
+          href: "/cuenta#planes",
+          data: { binanceRenewal: periodEnd },
+        },
+      });
+      reminded++;
+    },
+    { budgetMs: timeLeft(deadline), onError: (sub, error) => log.error("billing.binance_reminder_failed", { userId: sub.userId, error }) },
+  );
+  return {
+    expired: expiring.done,
+    downgraded,
+    reminded,
+    failed: expiring.failed + reminders.failed,
+    pending: expiring.pending + reminders.pending,
+  };
 }

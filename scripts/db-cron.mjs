@@ -1,6 +1,9 @@
 // Programa las tareas periódicas de OmniAgent dentro de Supabase (pg_cron + pg_net). Sirve con cualquier
-// hosting y con el plan Hobby de Vercel, que solo permite crons diarios: el motor cada minuto; compras, trámites y
-// devoluciones cada hora; finanzas cada día. Uso: npm run db:cron   ·   para quitarlas: npm run db:cron -- --remove
+// hosting y con el plan Hobby de Vercel, que solo permite crons diarios: el motor cada minuto, compras cada 10 minutos
+// y trámites cada 15 (los tres solo si hay algo que hacer); devoluciones, cobros y finanzas cada hora. Cada corrida
+// trabaja por lotes con tiempo máximo (src/lib/batch.ts): correr más seguido reparte el trabajo cuando hay muchas
+// personas, y la condición `when` evita llamar a la app cuando no hay nada pendiente.
+// Uso: npm run db:cron   ·   para quitarlas: npm run db:cron -- --remove
 //
 // Lee de .env.local / .env: DIRECT_URL, CRON_SECRET (el mismo de la app desplegada) y la URL pública
 // (CRON_TARGET_URL o NEXT_PUBLIC_APP_URL). La URL y el secreto se guardan cifrados en Supabase Vault: el texto de
@@ -11,9 +14,32 @@ import pg from "pg";
 dotenv.config({ path: [".env.local", ".env"], quiet: true });
 
 const JOBS = [
-  { name: "omniagent-compras", schedule: "5 * * * *", path: "/api/cron/concierge", what: "compras, cada hora" },
-  { name: "omniagent-tramites", schedule: "35 * * * *", path: "/api/cron/procedures", what: "trámites, cada hora" },
-  { name: "omniagent-finanzas", schedule: "0 11 * * *", path: "/api/cron/finance", what: "finanzas, cada día 11:00 UTC" },
+  {
+    name: "omniagent-compras",
+    schedule: "2-59/10 * * * *",
+    path: "/api/cron/concierge",
+    what: "compras, cada 10 minutos si hay precios por revisar",
+    when: `exists (
+    select 1 from public.watchlist_items
+    where status = 'ACTIVE' and source in ('sandbox', 'web') and next_check_at <= now()
+  )`,
+  },
+  {
+    name: "omniagent-tramites",
+    schedule: "7-59/15 * * * *",
+    path: "/api/cron/procedures",
+    what: "trámites, cada 15 minutos si hay bandejas o recordatorios pendientes",
+    // 3 horas = PLANS.PRO.mailCheckHours (src/modules/billing/plans.ts): la app decide por plan qué bandeja toca.
+    when: `exists (
+    select 1 from public.integration_connections
+    where provider in ('MAIL_DEMO', 'MAIL_IMAP') and status = 'ACTIVE'
+      and (last_synced_at is null or last_synced_at < now() - interval '3 hours')
+  ) or exists (
+    select 1 from public.tasks
+    where status in ('PENDING', 'IN_PROGRESS', 'WAITING_USER') and remind_at <= now() and reminded_at is null
+  )`,
+  },
+  { name: "omniagent-finanzas", schedule: "50 * * * *", path: "/api/cron/finance", what: "finanzas, cada hora (un informe mensual por corrida)" },
   { name: "omniagent-devoluciones", schedule: "45 * * * *", path: "/api/cron/returns", what: "devoluciones, cada hora" },
   { name: "omniagent-cobros", schedule: "25 * * * *", path: "/api/cron/billing", what: "vencimientos y avisos de Binance Pay, cada hora" },
   // Motor en segundo plano: lo que quedó en cola, reintentos, aprobaciones vencidas y trabajos a medias. Solo llama a
