@@ -1,11 +1,13 @@
 # App de Android: genera el proyecto nativo con Capacitor (modo hosted: abre la web publicada), los íconos y la pantalla
 # de carga, y compila el .aab firmado para Google Play y un .apk firmado para instalar directo en un teléfono.
 #
-# Llave de subida de Google Play: mobile/keystore/omniagent-upload.p12 (PKCS12 cifrado; sin su contraseña no sirve).
-# La contraseña NO está en el repositorio. Dos formas de darla:
-#   - Secreto del repositorio ANDROID_KEYSTORE_PASSWORD (Settings → Secrets and variables → Actions), recomendado.
-#   - O el campo "keystore_password" al correr el workflow (se lee del evento y se oculta en los logs).
-# Opcional: secreto ANDROID_KEYSTORE_BASE64 para usar otra llave en lugar del archivo del repositorio.
+# Llave de subida de Google Play: solo en los secretos del repositorio (Settings → Secrets and variables → Actions),
+# nunca en el código:
+#   - ANDROID_KEYSTORE_BASE64: el archivo .p12 (PKCS12) en base64.
+#   - ANDROID_KEYSTORE_PASSWORD: su contraseña. También se puede dar en el campo "keystore_password" al correr el
+#     workflow (se lee del evento y se oculta en los logs).
+#   - ANDROID_KEY_ALIAS (opcional): el alias de la llave; por defecto "omniagent".
+# La llave que estuvo en mobile/keystore/ hasta el 7 nov 2026 quedó en el historial público del repositorio: no se usa.
 # La web que abre la app: campo server_url o variable CAP_SERVER_URL (Settings → Secrets and variables → Variables).
 name: App de Android
 
@@ -70,7 +72,10 @@ jobs:
           if [ -z "$password" ]; then echo "::error::Falta la contraseña de la llave (secreto ANDROID_KEYSTORE_PASSWORD o campo keystore_password)"; exit 1; fi
           echo "::add-mask::$password"
           store="$RUNNER_TEMP/upload.p12"
-          if [ -n "$KEYSTORE_B64" ]; then echo "$KEYSTORE_B64" | base64 -d > "$store"; else cp mobile/keystore/omniagent-upload.p12 "$store"; fi
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Falta el secreto ANDROID_KEYSTORE_BASE64 (la llave de subida en base64; ver docs/GOOGLE_PLAY.md)"; exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$store" || { echo "::error::ANDROID_KEYSTORE_BASE64 no es base64 válido"; exit 1; }
           keytool -list -keystore "$store" -storetype PKCS12 -storepass "$password" > /dev/null || { echo "::error::La contraseña no abre la llave"; exit 1; }
           {
             echo "ANDROID_KEYSTORE_PATH=$store"

@@ -168,6 +168,12 @@ export interface StructuredRequest<T> {
   system: string;
   prompt: string | AIContentPart[];
   tier: AITier;
+  /**
+   * Proveedor que se intenta primero y su modelo exacto (opcional). El modelo vale solo para ese proveedor: si responde
+   * otro, usa el modelo de su nivel.
+   */
+  provider?: AIProviderId;
+  model?: string;
   maxOutputTokens: number;
   reasoning?: AIReasoningEffort;
   signal?: AbortSignal;
@@ -208,12 +214,14 @@ export async function generateStructured<T>(input: StructuredRequest<T>): Promis
   let succeeded = false;
   try {
     for (let attempt = 1; ; attempt++) {
+      // La corrección va al mismo proveedor que escribió la respuesta (si falla, el router sigue con otro).
+      const preferred = last ? last.provider : input.provider;
       const { response } = await aiRouter().complete({
         system: input.system,
         messages,
         tier: input.tier,
-        // La corrección va al mismo proveedor que escribió la respuesta (si falla, el router sigue con otro).
-        ...(last ? { provider: last.provider } : {}),
+        ...(preferred ? { provider: preferred } : {}),
+        ...(preferred && preferred === input.provider && input.model ? { model: input.model } : {}),
         responseFormat: format,
         maxOutputTokens: input.maxOutputTokens,
         reasoning: input.reasoning,

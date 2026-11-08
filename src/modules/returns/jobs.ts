@@ -1,4 +1,5 @@
 import "server-only";
+import { CRON_BUDGET_MS, runBatch } from "@/lib/batch";
 import { prisma } from "@/lib/db";
 import { log } from "@/lib/log";
 import { MAIL_PROVIDERS } from "@/modules/procedures/mail/mailbox";
@@ -9,12 +10,15 @@ import { pickReturnUsers } from "./rules/turns";
 // Trabajo programado de pedidos y devoluciones: para cada persona con pedidos en camino, reclamos que esperan
 // respuesta, reembolsos por confirmar, correo conectado o compras recientes, pone todo al día (retrasos,
 // seguimientos, respuestas y reembolsos). Primero quien tiene algo vencido; los demás, por turnos: cada corrida
-// empieza en otro punto de la lista, así nadie queda siempre afuera cuando hay más personas que lugares. Lotes
-// pequeños para caber en una función serverless. Llamar de más no duplica nada: cada paso es idempotente.
+// empieza en otro punto de la lista, así nadie queda siempre afuera cuando hay más personas que lugares. Va por
+// lotes: varias personas a la vez y sin empezar otra cuando se acaba el tiempo; quien no alcanza entra en la próxima
+// corrida. Llamar de más no duplica nada: cada paso es idempotente.
 
 const DAY = 86_400_000;
+/** Personas que se ponen al día a la vez. */
+const RETURNS_CONCURRENCY = 3;
 
-export async function runScheduledReturnJobs(opts: { limit?: number; now?: Date } = {}) {
+export async function runScheduledReturnJobs(opts: { limit?: number; now?: Date; budgetMs?: number } = {}) {
   const now = opts.now ?? new Date();
   const limit = opts.limit ?? 50;
   const [urgent, active, mailboxes, purchases] = await Promise.all([
@@ -39,9 +43,10 @@ export async function runScheduledReturnJobs(opts: { limit?: number; now?: Date 
     now,
   );
 
-  const result = { users: users.length, imported: 0, fromMail: 0, replies: 0, late: 0, followUps: 0, refunds: 0, errors: 0 };
-  for (const userId of users) {
-    try {
+  const result = { users: users.length, imported: 0, fromMail: 0, replies: 0, late: 0, followUps: 0, refunds: 0, errors: 0, pending: 0 };
+  const batch = await runBatch(
+    users,
+    async (userId) => {
       const run = await refreshReturns(userId, now);
       result.imported += run.imported;
       result.fromMail += run.fromMail;
@@ -49,10 +54,14 @@ export async function runScheduledReturnJobs(opts: { limit?: number; now?: Date 
       result.late += run.late;
       result.followUps += run.followUps;
       result.refunds += run.refunds;
-    } catch (error) {
-      result.errors += 1;
-      log.error("returns.refresh_failed", { userId, error });
-    }
-  }
+    },
+    {
+      budgetMs: opts.budgetMs ?? CRON_BUDGET_MS,
+      concurrency: RETURNS_CONCURRENCY,
+      onError: (userId, error) => log.error("returns.refresh_failed", { userId, error }),
+    },
+  );
+  result.errors = batch.failed;
+  result.pending = batch.pending;
   return result;
 }

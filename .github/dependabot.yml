@@ -1,0 +1,22 @@
+# Actualizaciones de librerías: Dependabot propone cambios agrupados (como mucho 3 a la vez) y CI los prueba antes de
+# unirlos. Los arreglos de seguridad urgentes llegan aparte si las alertas de Dependabot están activadas
+# (Settings → Code security → Dependabot alerts y Dependabot security updates).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: America/Caracas
+    open-pull-requests-limit: 3
+    groups:
+      menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2

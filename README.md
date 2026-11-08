@@ -31,7 +31,7 @@ Omni analiza tus finanzas (gastos hormiga, suscripciones sin uso, recomendacione
 - **Next.js 16** (App Router, `proxy.ts`, React 19) + **TypeScript** estricto + **Tailwind CSS 4**
 - **Supabase**: PostgreSQL + Auth (`@supabase/ssr`, `getClaims()`)
 - **Prisma 7** (`prisma-client` generator, driver adapter `@prisma/adapter-pg`, `prisma.config.ts`)
-- **Router de IA propio** (APIs oficiales con `fetch`, sin SDK): Claude (`claude-haiku-4-5-20251001` en Gratis y `claude-sonnet-5-5` en Pro), ChatGPT, Gemini y Grok, todos configurables
+- **Router de IA propio** (APIs oficiales con `fetch`, sin SDK): Claude (`claude-haiku-4-5-20251001` en Gratis, `claude-haiku-5-5` en Pro y `claude-sonnet-5-5` para leer estados de cuenta en foto), ChatGPT, Gemini y Grok, todos configurables
 - **zod 4**: validación de API y esquemas de las herramientas (se convierten a JSON Schema)
 - **Binance Pay** (comercio o cuenta personal, con un relevo en Supabase Edge Functions porque Binance bloquea EE. UU.) + **Stripe** (web) + **RevenueCat** (Google Play Billing)
 - **Plaid** (opcional) para cuentas reales; sandbox propio por defecto

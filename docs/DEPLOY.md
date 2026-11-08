@@ -17,7 +17,7 @@ Hay dos caminos, con el mismo código:
 ## 0. Una sola vez, antes del primer despliegue
 
 1. **Un proyecto de Supabase solo para producción.** Ponlo en la región de tus usuarios y la app en la misma región: cada consulta cruza esa distancia.
-2. **Sube `package-lock.json`.** Corre `npm install` en tu máquina (Node 22 o superior) y súbelo al repositorio. Así CI y Docker instalan exactamente las mismas versiones con `npm ci`.
+2. **`package-lock.json` ya está en el repositorio** (desde el 7 nov 2026, con Node 24 y npm 11). CI, Docker y Netlify instalan exactamente esas versiones. Para agregar o actualizar una librería usa Node 24 (`npm install <paquete>`, que la guarda con versión exacta por `.npmrc`) y sube el `package-lock.json` que cambió. Dependabot propone las actualizaciones cada semana (`.github/dependabot.yml`).
 3. **Crea las migraciones y guárdalas en el repositorio.** El repositorio trae el esquema (`prisma/schema.prisma`, 34 tablas), pero no la carpeta `prisma/migrations`: se genera en tu máquina contra una base de **desarrollo**.
 
    ```bash
@@ -49,7 +49,7 @@ La plantilla completa, con comentarios, está en `.env.example`. Las variables m
 | `DIRECT_URL` | migraciones y scripts | Para migrar | Session pooler (5432) o conexión directa. |
 | `TOKEN_ENCRYPTION_KEY` | al correr | Sí | `openssl rand -base64 32`. **No la cambies después**: los tokens guardados quedarían ilegibles. |
 | `SUPABASE_SECRET_KEY` | al correr | Con `DOCUMENT_STORAGE=supabase` | `sb_secret_…`. Solo para Storage. **Eliminar cuenta** no la usa: llama a la función `public.delete_auth_user` (`npm run db:security`). |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL_FREE`, `ANTHROPIC_MODEL_PRO` | al correr | Recomendada | Basta la llave de un proveedor (esta, `OPENAI_API_KEY`, `GEMINI_API_KEY` o `XAI_API_KEY`). Sin ninguna, el chat responde "no configurado". |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL_FREE`, `ANTHROPIC_MODEL_PRO`, `ANTHROPIC_MODEL_SCAN` | al correr | Recomendada | Por defecto Haiku 4.5 en Gratis, Haiku 5.5 en Pro y Sonnet 5.5 para leer estados de cuenta en foto. Basta la llave de un proveedor (esta, `OPENAI_API_KEY`, `GEMINI_API_KEY` o `XAI_API_KEY`). Sin ninguna, el chat responde "no configurado". |
 | `OPENAI_API_KEY`, `GEMINI_API_KEY` (o `GOOGLE_API_KEY`), `XAI_API_KEY` | al correr | No | Router de IA (`docs/ROUTER-IA.md`): cada llave suma ese proveedor a `/api/v1/ai/chat` y como respaldo de las funciones con IA. Modelos en `OPENAI_MODEL_FAST/SMART`, `GEMINI_MODEL_FAST/SMART` y `XAI_MODEL_FAST/SMART`; orden en `AI_PROVIDER_ORDER`. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_MONTHLY` | al correr | Las tres o ninguna | Con solo una parte, el pago abre pero Pro nunca se activa: la app lo marca como error al arrancar. |
 | `BINANCE_PAY_API_KEY`, `BINANCE_PAY_SECRET_KEY` | al correr | Las dos o ninguna | Cobro de Pro con Binance Pay con cuenta de comercio (19.99 USDT al mes). Ver `docs/BINANCE_PAY.md`. |
@@ -81,12 +81,13 @@ La app publicada vive en **https://omniagent-app.netlify.app**:
     - Pon `DB_BOOTSTRAP=1` en Netlify durante una publicación; `db push` aplica los cambios que no borran datos.
     - O pasa a migraciones: crea `prisma/migrations/0_init` con `prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script` y márcala como aplicada con `prisma migrate resolve --applied 0_init`.
 - **Tareas programadas:** las mismas de `npm run db:cron`, ya creadas en Supabase con pg_cron y pg_net. La URL y el `CRON_SECRET` están en Vault.
+  - Desde el 7 nov 2026 el script reparte más el trabajo: compras cada 10 minutos, trámites cada 15 (solo si hay algo pendiente) y finanzas cada hora. Producción sigue con el horario anterior hasta volver a correr `npm run db:cron`.
 - **Código y CI:** repositorio `kevinmujica782-eng/omniagent`, público en GitHub: no guardes secretos en el código ni los pases como entradas de un workflow.
   - **CI:** revisa tipos, corre las pruebas y compila en cada push.
   - **Publicar en Netlify:** sube el código a Netlify y lo compila allá. Pide el `proxy_path` que entrega la herramienta *deploy-site* del MCP de Netlify; ese valor vence pronto. Para publicar sin ese paso, conecta el repositorio desde Netlify (*Project configuration → Build & deploy → Link repository*) y cada push a `main` se publica solo.
   - **Simular compilación de Netlify:** repite la instalación y la compilación en GitHub y deja los errores como anotaciones.
-  - **App de Android:** compila el `.aab` (Google Play) y el `.apk` (instalar directo) firmados con la llave de subida `mobile/keystore/omniagent-upload.p12`.
-    - El archivo de la llave está cifrado en el repositorio. Su contraseña no se guarda ahí: va en el secreto `ANDROID_KEYSTORE_PASSWORD` o en el campo `keystore_password` al correr el workflow.
+  - **App de Android:** compila el `.aab` (Google Play) y el `.apk` (instalar directo) firmados con la llave de subida.
+    - La llave vive solo en los secretos `ANDROID_KEYSTORE_BASE64` (el `.p12` en base64) y `ANDROID_KEYSTORE_PASSWORD`; ver `docs/GOOGLE_PLAY.md`. La que estuvo en `mobile/keystore/` hasta el 7 nov 2026 quedó en el historial público y no se usa.
     - El `versionCode` es el número de corrida, así que cada compilación sube de versión.
 
 ## 2. Opción A: Vercel

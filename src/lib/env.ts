@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { DEFAULT_MODELS } from "@/modules/ai/ai.catalog";
+import { DEFAULT_MODELS, DEFAULT_SCAN_MODEL } from "@/modules/ai/ai.catalog";
 import { Errors } from "./errors";
 
 /**
@@ -13,6 +13,8 @@ const schema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL_FREE: z.string().default(DEFAULT_MODELS.anthropic.fast),
   ANTHROPIC_MODEL_PRO: z.string().default(DEFAULT_MODELS.anthropic.smart),
+  // Lectura de estados de cuenta en foto (todos los planes): el modelo más capaz de Claude.
+  ANTHROPIC_MODEL_SCAN: z.string().default(DEFAULT_SCAN_MODEL),
   ANTHROPIC_BASE_URL: z.string().url().optional(),
   // Router de IA (src/modules/ai, docs/ROUTER-IA.md): cada proveedor se activa con su llave. Los modelos `FAST` son
   // los del plan Gratis y los `SMART`, los de Pro.

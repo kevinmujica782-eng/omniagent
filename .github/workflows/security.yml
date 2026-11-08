@@ -54,9 +54,11 @@ jobs:
         with:
           node-version: 24
 
-      # No hay package-lock.json en el repositorio: se resuelve uno al vuelo solo para auditar (no instala nada).
-      - name: Resolver dependencias para auditar
-        run: npm install --package-lock-only --ignore-scripts
+      # Se auditan las versiones exactas de package-lock.json (las que se instalan). Si faltara, se resuelve uno al
+      # vuelo solo para auditar (no instala nada).
+      - name: Versiones a auditar
+        run: |
+          if [ ! -f package-lock.json ]; then npm install --package-lock-only --ignore-scripts; fi
 
       - name: Vulnerabilidades críticas (bloquea)
         run: npm audit --omit=dev --audit-level=critical

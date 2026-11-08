@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { anthropicModel, anthropicSupportsForcedTools, geminiModel, openAIModel, xaiModel } from "@/modules/ai/ai.catalog";
+import { DEFAULT_MODELS, anthropicModel, anthropicSupportsForcedTools, geminiModel, openAIModel, xaiModel } from "@/modules/ai/ai.catalog";
 import { AIProviderError } from "@/modules/ai/ai.errors";
 import { AttemptTimeout, parseDuration, parseRetryAfter } from "@/modules/ai/ai.http";
 import { anthropicProvider } from "@/modules/ai/providers/anthropic";
@@ -56,9 +56,16 @@ describe("router de IA: utilidades HTTP", () => {
     expect(anthropicSupportsForcedTools("claude-fable-5-1")).toBe(false);
     expect(anthropicSupportsForcedTools("claude-mythos-5-1")).toBe(false);
     expect(anthropicSupportsForcedTools("claude-haiku-4-5-20251001")).toBe(true);
+    expect(anthropicSupportsForcedTools("claude-haiku-5-5")).toBe(true);
     expect(anthropicSupportsForcedTools("claude-sonnet-4-20250514")).toBe(true);
     expect(anthropicSupportsForcedTools("claude-opus-4-1-20250805")).toBe(true);
     expect(anthropicSupportsForcedTools("claude-3-5-sonnet-20241022")).toBe(true);
+  });
+
+  it("Pro usa Claude Haiku 5.5 por defecto, con herramientas y JSON por herramienta forzada", () => {
+    expect(DEFAULT_MODELS.anthropic).toEqual({ fast: "claude-haiku-4-5-20251001", smart: "claude-haiku-5-5" });
+    const pro = anthropicModel(DEFAULT_MODELS.anthropic.smart, "smart");
+    expect(pro.capabilities).toMatchObject({ tools: true, jsonSchema: true, forcedToolChoice: true, temperature: false });
   });
 });
 
