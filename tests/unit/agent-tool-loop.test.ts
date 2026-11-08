@@ -336,6 +336,7 @@ describe("modelo de IA: textos y preferencia", () => {
   it("muestra cada modelo con el nombre que le da su proveedor", () => {
     expect(modelLabel("claude-haiku-4-5-20251001")).toBe("Claude Haiku 4.5");
     expect(modelLabel("claude-sonnet-5-5")).toBe("Claude Sonnet 5.5");
+    expect(modelLabel("claude-haiku-5-5")).toBe("Claude Haiku 5.5");
     expect(modelLabel("gpt-6-luna")).toBe("GPT-6 Luna");
     expect(modelLabel("gpt-6.1-sol")).toBe("GPT-6.1 Sol");
     expect(modelLabel("gemini-3.5-flash-lite")).toBe("Gemini 3.5 Flash-Lite");

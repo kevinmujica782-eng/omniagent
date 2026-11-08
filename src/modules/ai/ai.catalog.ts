@@ -4,13 +4,24 @@
 import { AI_PROVIDER_IDS, type AIProviderId, type AITier } from "@/types/ai";
 import type { AIRequestPrompt, ImageMediaType, ModelSpec } from "./ai.types";
 
-/** Modelos por defecto. Anthropic usa los del plan (ANTHROPIC_MODEL_FREE y ANTHROPIC_MODEL_PRO). */
+/**
+ * Modelos por defecto. Anthropic usa los del plan (ANTHROPIC_MODEL_FREE y ANTHROPIC_MODEL_PRO).
+ * Pro usa Claude Haiku 5.5 desde el 7 nov 2026: más nuevo que el de Gratis, con herramientas, y unas 20 veces más
+ * barato por token que Sonnet 5.5 (precios de lista de nov 2026), así un Pro que usa todo su cupo no cuesta más de lo
+ * que paga. Para volver a Sonnet: ANTHROPIC_MODEL_PRO=claude-sonnet-5-5.
+ */
 export const DEFAULT_MODELS: Record<AIProviderId, Record<AITier, string>> = {
-  anthropic: { fast: "claude-haiku-4-5-20251001", smart: "claude-sonnet-5-5" },
+  anthropic: { fast: "claude-haiku-4-5-20251001", smart: "claude-haiku-5-5" },
   openai: { fast: "gpt-6-luna", smart: "gpt-6.1-sol" },
   gemini: { fast: "gemini-3.5-flash-lite", smart: "gemini-3.8-flash" },
   xai: { fast: "grok-4.3", smart: "grok-4.7" },
 };
+
+/**
+ * Modelo de Claude para leer estados de cuenta en foto o escaneados (ANTHROPIC_MODEL_SCAN), para todos los planes:
+ * el más capaz, porque una cifra mal leída cuesta caro. Es poco volumen (8 páginas al mes en Gratis y 120 en Pro).
+ */
+export const DEFAULT_SCAN_MODEL = "claude-sonnet-5-5";
 
 /** Orden en que el router prueba los proveedores si el pedido no elige uno. */
 export const DEFAULT_PROVIDER_ORDER: readonly AIProviderId[] = ["anthropic", "openai", "gemini", "xai"];
@@ -19,7 +30,8 @@ const ALL_IMAGES: readonly ImageMediaType[] = ["image/png", "image/jpeg", "image
 
 /**
  * Claude Opus y Sonnet desde la 5.5, Fable y Mythos responden 400 si se los obliga a usar una herramienta
- * (`tool_choice` any o tool). Haiku y los modelos anteriores sí lo permiten.
+ * (`tool_choice` any o tool). Haiku (también Haiku 5.5, según su guía de migración) y los modelos anteriores sí lo
+ * permiten.
  */
 export function anthropicSupportsForcedTools(model: string): boolean {
   const match = /claude-(opus|sonnet|haiku|fable|mythos)-(\d+)(?:-(\d{1,2})(?!\d))?/.exec(model);

@@ -88,6 +88,25 @@ describe("router de IA: salida estructurada para los módulos", () => {
     ]);
   });
 
+  it("con proveedor y modelo exactos, el intento y la corrección usan ese modelo", async () => {
+    serve([claudeTool({ titular: "Bajó 50% hoy", veredicto: "comprar" }), claudeTool({ titular: "Bajó 24% hoy", veredicto: "comprar" })]);
+    const result = await generateStructured({
+      schema: alertSchema,
+      name: "redactar_alerta",
+      system: "Redactas avisos.",
+      prompt: "Datos",
+      tier: "fast",
+      provider: "anthropic",
+      model: "claude-haiku-5-5",
+      maxOutputTokens: 500,
+      attempts: 2,
+      review: (value) => (value.titular.includes("50%") ? "El 50% no sale de los datos." : null),
+    });
+    expect(result.value.titular).toBe("Bajó 24% hoy");
+    expect(sent.map((call) => call.body.model)).toEqual(["claude-haiku-5-5", "claude-haiku-5-5"]);
+    expect(sent[0].body.tool_choice).toEqual({ type: "tool", name: "redactar_alerta" });
+  });
+
   it("si la revisión encuentra un problema, pide la corrección al mismo proveedor", async () => {
     serve([claudeTool({ titular: "Bajó 50% hoy", veredicto: "comprar" }), claudeTool({ titular: "Bajó 24% hoy", veredicto: "comprar" })]);
     const result = await generateStructured({

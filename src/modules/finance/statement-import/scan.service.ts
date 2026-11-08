@@ -4,6 +4,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { audit } from "@/lib/audit";
 import { decryptBytes, encryptBytes } from "@/lib/crypto";
 import { prisma } from "@/lib/db";
+import { env } from "@/lib/env";
 import { AppError, Errors } from "@/lib/errors";
 import { log } from "@/lib/log";
 import { isUuid } from "@/lib/validation";
@@ -48,9 +49,11 @@ const PAGE_DEADLINE_MS = 54_000;
 const FALLBACK_WINDOW_MS = 20_000;
 
 /**
- * La IA transcribe la página: primero con el modelo más capaz (una cifra mal leída cuesta caro). Si ese modelo rechaza
- * el pedido por su forma (400: no por la imagen ni por la red), se repite con el modelo rápido, que recibe el JSON por
- * otra vía (herramienta obligatoria). El motivo del rechazo queda en los logs.
+ * La IA transcribe la página: primero con el modelo más capaz (una cifra mal leída cuesta caro): en Claude,
+ * ANTHROPIC_MODEL_SCAN (Sonnet 5.5 por defecto), aunque el nivel `smart` de Pro use un modelo más barato; los demás
+ * proveedores, con su modelo `smart`. Si ese modelo rechaza el pedido por su forma (400: no por la imagen ni por la
+ * red), se repite con el modelo rápido, que recibe el JSON por otra vía (herramienta obligatoria). El motivo del
+ * rechazo queda en los logs.
  */
 export const readPageWithAI: ScanPageReader = async (input) => {
   const started = Date.now();
@@ -66,6 +69,7 @@ export const readPageWithAI: ScanPageReader = async (input) => {
       system: SCAN_SYSTEM_PROMPT,
       prompt: [part, { type: "text", text: scanPagePrompt(input.page, input.pages) }],
       tier,
+      ...(tier === "smart" ? { provider: "anthropic" as const, model: env().ANTHROPIC_MODEL_SCAN } : {}),
       maxOutputTokens: 8_000,
       timeoutMs: Math.min(50_000, deadlineMs - 1_000),
       deadlineMs,

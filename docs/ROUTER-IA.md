@@ -118,7 +118,7 @@ Va en el mensaje del asistente siguiente: `{ role: "assistant", content, toolCal
 
 | Proveedor | API oficial | Rápido (`fast`, Gratis) | Capaz (`smart`, Pro) | Llave |
 | --- | --- | --- | --- | --- |
-| Anthropic | Messages (`/v1/messages`) | `ANTHROPIC_MODEL_FREE` (claude-haiku-4-5-20251001) | `ANTHROPIC_MODEL_PRO` (claude-sonnet-5-5) | `ANTHROPIC_API_KEY` |
+| Anthropic | Messages (`/v1/messages`) | `ANTHROPIC_MODEL_FREE` (claude-haiku-4-5-20251001) | `ANTHROPIC_MODEL_PRO` (claude-haiku-5-5; la lectura de estados de cuenta usa `ANTHROPIC_MODEL_SCAN`, claude-sonnet-5-5) | `ANTHROPIC_API_KEY` |
 | OpenAI | Responses (`/v1/responses`) | `OPENAI_MODEL_FAST` (gpt-6-luna) | `OPENAI_MODEL_SMART` (gpt-6.1-sol) | `OPENAI_API_KEY` |
 | Google | generateContent (`/v1beta/models/…:generateContent`) | `GEMINI_MODEL_FAST` (gemini-3.5-flash-lite) | `GEMINI_MODEL_SMART` (gemini-3.8-flash) | `GEMINI_API_KEY` o `GOOGLE_API_KEY` |
 | xAI | Chat Completions, compatible con OpenAI (`/v1/chat/completions`) | `XAI_MODEL_FAST` (grok-4.3) | `XAI_MODEL_SMART` (grok-4.7) | `XAI_API_KEY` |
