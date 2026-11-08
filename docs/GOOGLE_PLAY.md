@@ -128,12 +128,18 @@ Al pasar los 14 días, Play Console muestra **Solicitar acceso a producción**. 
 
 ## 8. Llave de subida y nuevas versiones
 
-- **La llave de subida** está en `mobile/keystore/omniagent-upload.p12`, alias `omniagent`, cifrada con una contraseña que no está en el repositorio.
+- **La llave de subida** vive solo en los secretos del repositorio (*Settings → Secrets and variables → Actions*), nunca en el código:
+  - `ANDROID_KEYSTORE_BASE64`: el archivo `.p12` (PKCS12) en base64.
+  - `ANDROID_KEYSTORE_PASSWORD`: su contraseña.
+  - Alias `omniagent` (o el secreto `ANDROID_KEY_ALIAS`).
   - Guarda una copia del archivo y la contraseña fuera de GitHub, por ejemplo en un gestor de contraseñas.
   - Si se pierde, Google permite cambiar la llave de subida desde Play Console. La llave de la app la guarda Google.
-  - Huella SHA-256: `B4:0E:3D:44:B3:BD:9A:FD:1E:06:A2:8B:D7:DC:06:4E:09:39:A5:BA:E4:CB:37:0D:F6:04:2D:24:58:67:E5:26`
-- **Otra versión:** en GitHub, *Actions → App de Android → Run workflow*, con la versión visible (por ejemplo `1.0.1`) y la contraseña de la llave.
-  - Para no escribir la contraseña cada vez, guárdala como secreto `ANDROID_KEYSTORE_PASSWORD` en *Settings → Secrets and variables → Actions*.
+  - Huella SHA-256 (llave del 7 nov 2026): `3B:83:E9:C8:09:EC:46:87:30:9B:53:51:23:95:39:FD:BC:F5:4B:28:38:54:89:19:D9:26:44:9D:4B:4E:86:49`
+- **La llave anterior** (`mobile/keystore/omniagent-upload.p12`, huella `B4:0E:3D:44:…:58:67:E5:26`) estuvo en el repositorio público del 2 oct al 7 nov 2026 y ya no se usa.
+  - Si alguna vez subiste a Play Console un `.aab` firmado con ella, pide el cambio de llave de subida en Play Console (*Integridad de la app → Firma de apps*) con el certificado `upload_certificate.pem` de la llave nueva.
+- **Otra versión:** en GitHub, *Actions → App de Android → Run workflow*, con la versión visible (por ejemplo `1.0.1`).
+  - Sin el secreto `ANDROID_KEYSTORE_BASE64` el workflow se detiene con un error que lo dice.
+  - La contraseña sale del secreto `ANDROID_KEYSTORE_PASSWORD`; si no existe, se escribe en el campo de la contraseña al correrlo.
   - El `.aab` y el `.apk` quedan en los *Artifacts* de esa corrida y en la rama `builds`.
   - El número de versión interno sube solo.
 - **Cambios en la web** (textos, pantallas, funciones): llegan a la app sin subir otra versión, porque la app abre la web publicada. Solo hace falta una versión nueva para cambiar íconos, permisos o plugins nativos.

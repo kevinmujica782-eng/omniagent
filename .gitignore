@@ -9,6 +9,8 @@ android/.gradle
 # Llaves de firma de Android: nunca en el repositorio
 *.jks
 *.keystore
+*.p12
+*.pfx
 keystore.properties
 dist/
 

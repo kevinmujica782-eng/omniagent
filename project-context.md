@@ -284,7 +284,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - «Capturas para Google Play»: crea una cuenta con datos de prueba, toma 6 capturas de 1080 × 1920 (sin la insignia de Netlify) y las deja en la rama `play-store`. La contraseña sale cifrada con una llave pública que se da al correrlo.
 - **IA:** `ANTHROPIC_API_KEY` está en Netlify desde el 3 oct 2026, como secreta y solo para producción. Ese día, «Probar producción» registró una cuenta sin correo y Omni respondió en menos de 2 s con Haiku 4.5; un mensaje simple costó menos de un centavo.
 - **Android:** paquete `com.omniagent.app`, versión 1.0.0 y API objetivo 36.
-  - La llave de subida está en `mobile/keystore/omniagent-upload.p12` (PKCS12 cifrado). Su contraseña no está en el repositorio: va como secreto `ANDROID_KEYSTORE_PASSWORD` o como campo del workflow.
+  - La llave de subida vive solo en los secretos `ANDROID_KEYSTORE_BASE64` y `ANDROID_KEYSTORE_PASSWORD` (desde el 7 nov 2026, llave nueva con huella `3B:83:E9:C8:…:4B:4E:86:49`). La de `mobile/keystore/omniagent-upload.p12` estuvo en el repositorio público y se retiró.
   - Los íconos y la pantalla de carga salen de `mobile/assets/`, y los gráficos de la tienda de `mobile/store/`.
 - **Agregado para Google Play:** páginas públicas `/privacidad`, `/terminos` y `/eliminar-cuenta`, con contacto kevinmujica782@gmail.com; botón «Reportar» en las respuestas de la IA (tabla `content_reports`); lo simulado marcado como «Demo»; «Continuar con Google» solo con `NEXT_PUBLIC_GOOGLE_AUTH=on`.
 - **Listo para Google Play (3 oct 2026):** `.aab` 1.0.0 (versionCode 4, API 36) firmado con la llave de subida; cuenta de revisión `kevinmujica782+revisor@gmail.com` con banco, correo, compras y pedidos de prueba (la contraseña la pone el dueño con SQL o crea otra cuenta: ver `docs/GOOGLE_PLAY.md`); capturas en la rama `play-store`; «Eliminar cuenta» sin `SUPABASE_SECRET_KEY` (función `public.delete_auth_user`, ya creada en producción). Las cuentas `+prueba-…` viejas ya se borraron.
@@ -297,7 +297,7 @@ El dueño decidió no publicar en Google Play y empezar a cobrar ya. Todo esto p
   - Google Play ya no es el plan; `docs/GOOGLE_PLAY.md` queda como referencia.
 
 ### Cómo retomar
-1. `npm install` (Node 22+; sube el `package-lock.json`), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`, `asistente`, `asistente-escuchando`, `asistente-procesando`, `asistente-activo`, `asistente-motor`, `chat-motor`, `pagina-web`...).
+1. `npm ci` (Node 24; `package-lock.json` fija las versiones), luego `npm run dev` y abrir `/preview` para ver todas las pantallas sin configurar nada (`?screen=inicio`, `inicio-gratis`, `pro`, `mejorar`, `cuenta`, `eliminar-cuenta`, `finanzas`, `tramites`, `formulario`, `compras`, `pago`, `devoluciones`, `reclamo`, `chat-devoluciones`, `asistente`, `asistente-escuchando`, `asistente-procesando`, `asistente-activo`, `asistente-motor`, `chat-motor`, `pagina-web`...).
 2. Configurar `.env.local` y correr las migraciones:
    - Instalación nueva: `npx prisma migrate dev --name init`.
    - Si ya tenías la fase 4: `npx prisma migrate dev --name plan_pro_y_panel`.

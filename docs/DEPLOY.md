@@ -17,7 +17,7 @@ Hay dos caminos, con el mismo código:
 ## 0. Una sola vez, antes del primer despliegue
 
 1. **Un proyecto de Supabase solo para producción.** Ponlo en la región de tus usuarios y la app en la misma región: cada consulta cruza esa distancia.
-2. **Sube `package-lock.json`.** Corre `npm install` en tu máquina (Node 22 o superior) y súbelo al repositorio. Así CI y Docker instalan exactamente las mismas versiones con `npm ci`.
+2. **`package-lock.json` ya está en el repositorio** (desde el 7 nov 2026, con Node 24 y npm 11). CI, Docker y Netlify instalan exactamente esas versiones. Para agregar o actualizar una librería usa Node 24 (`npm install <paquete>`, que la guarda con versión exacta por `.npmrc`) y sube el `package-lock.json` que cambió. Dependabot propone las actualizaciones cada semana (`.github/dependabot.yml`).
 3. **Crea las migraciones y guárdalas en el repositorio.** El repositorio trae el esquema (`prisma/schema.prisma`, 34 tablas), pero no la carpeta `prisma/migrations`: se genera en tu máquina contra una base de **desarrollo**.
 
    ```bash
@@ -85,8 +85,8 @@ La app publicada vive en **https://omniagent-app.netlify.app**:
   - **CI:** revisa tipos, corre las pruebas y compila en cada push.
   - **Publicar en Netlify:** sube el código a Netlify y lo compila allá. Pide el `proxy_path` que entrega la herramienta *deploy-site* del MCP de Netlify; ese valor vence pronto. Para publicar sin ese paso, conecta el repositorio desde Netlify (*Project configuration → Build & deploy → Link repository*) y cada push a `main` se publica solo.
   - **Simular compilación de Netlify:** repite la instalación y la compilación en GitHub y deja los errores como anotaciones.
-  - **App de Android:** compila el `.aab` (Google Play) y el `.apk` (instalar directo) firmados con la llave de subida `mobile/keystore/omniagent-upload.p12`.
-    - El archivo de la llave está cifrado en el repositorio. Su contraseña no se guarda ahí: va en el secreto `ANDROID_KEYSTORE_PASSWORD` o en el campo `keystore_password` al correr el workflow.
+  - **App de Android:** compila el `.aab` (Google Play) y el `.apk` (instalar directo) firmados con la llave de subida.
+    - La llave vive solo en los secretos `ANDROID_KEYSTORE_BASE64` (el `.p12` en base64) y `ANDROID_KEYSTORE_PASSWORD`; ver `docs/GOOGLE_PLAY.md`. La que estuvo en `mobile/keystore/` hasta el 7 nov 2026 quedó en el historial público y no se usa.
     - El `versionCode` es el número de corrida, así que cada compilación sube de versión.
 
 ## 2. Opción A: Vercel
