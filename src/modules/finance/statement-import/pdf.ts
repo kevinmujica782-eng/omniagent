@@ -72,7 +72,7 @@ export async function extractPdfText(bytes: Uint8Array, password?: string): Prom
         for (const raw of value.items) {
           if (typeof raw.str !== "string" || !raw.str.trim() || !raw.transform) continue;
           if (items.length >= MAX_TEXT_ITEMS) {
-            // pdf.js exige un Error como motivo; sin cancelar, su tarea sigue viva y doc.destroy() no termina nunca.
+            // pdf.js exige un Error como motivo; sin cancelar, su tarea sigue viva y el cierre no termina nunca.
             await reader.cancel(new Error("statement_text_limit")).catch(() => undefined);
             throw statementError(
               "too_many_rows",
@@ -90,7 +90,8 @@ export async function extractPdfText(bytes: Uint8Array, password?: string): Prom
     if (error instanceof AppError) throw error;
     throw statementError("corrupted_file", "No pude leer el contenido del PDF: puede estar dañado.");
   } finally {
-    // Con tope de tiempo: un cierre de pdf.js que no termina no debe dejar colgada la solicitud.
-    await Promise.race([doc.destroy().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, DESTROY_TIMEOUT_MS).unref())]);
+    // Con tope de tiempo: un cierre de pdf.js que no termina no debe dejar colgada la solicitud. Se cierra la tarea de
+    // carga (pdf.js 6 quitó doc.destroy()).
+    await Promise.race([task.destroy().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, DESTROY_TIMEOUT_MS).unref())]);
   }
 }

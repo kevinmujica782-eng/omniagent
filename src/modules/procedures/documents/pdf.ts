@@ -59,7 +59,8 @@ async function extractText(bytes: Uint8Array): Promise<{ items: TextItem[]; page
     }
     return { items, pages };
   } finally {
-    await doc.destroy();
+    // Se cierra la tarea de carga (pdf.js 6 quitó doc.destroy()).
+    await task.destroy();
   }
 }
 
