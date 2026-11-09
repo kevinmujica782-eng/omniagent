@@ -1,8 +1,9 @@
 import "server-only";
-import type { FinancialAccount, Prisma } from "@/generated/prisma/client";
+import type { FinancialAccount, Prisma, RecurringCharge } from "@/generated/prisma/client";
 import { prisma } from "@/lib/db";
 import { Errors } from "@/lib/errors";
-import { shortDate } from "@/lib/format";
+import { money, shortDate } from "@/lib/format";
+import { log } from "@/lib/log";
 import { isUuid } from "@/lib/validation";
 import type {
   AccountView,
@@ -15,13 +16,17 @@ import type {
 } from "@/types/cards";
 import {
   DAY_MS,
+  antMaxTicketFor,
   detectAntExpenses,
   detectRecurring,
+  inCurrency,
   monthlyEquivalent,
   monthlyWindows,
+  primaryCurrency,
   summarize,
   type TxLike,
 } from "./analyzers";
+import { checkCancellation } from "./cancellation-rules";
 import { SUBSCRIPTIONS_CATEGORY, isSubscriptionLike } from "./categories";
 
 const UNUSED_AFTER_DAYS = 60;
@@ -99,11 +104,99 @@ export async function refreshRecurringCharges(userId: string, signals: Record<st
       where: { userId, merchantName: candidate.merchant, direction: "DEBIT", recurringChargeId: null },
       data: { recurringChargeId: charge.id },
     });
+
+    // Bajas pedidas con Omni: con los movimientos nuevos se ve si se volvió a cobrar o si ya quedó hecha.
+    if (charge.status === "CANCELLATION_REQUESTED") {
+      await followUpCancellation(userId, charge).catch((error: unknown) =>
+        log.warn("finance.cancellation_followup_failed", { userId, error }),
+      );
+    }
   }
 
   // Cargos que ya no tienen movimientos (por ejemplo, tras desconectar una cuenta).
   await prisma.recurringCharge.deleteMany({ where: { userId, transactions: { none: {} } } });
   return candidates.length;
+}
+
+/** Hasta qué día llegan los movimientos de las cuentas donde se cobra ese cargo. */
+async function dataThroughFor(userId: string, recurringChargeId: string): Promise<Date | null> {
+  const accounts = await prisma.transaction.findMany({
+    where: { userId, recurringChargeId },
+    select: { accountId: true },
+    distinct: ["accountId"],
+  });
+  if (accounts.length === 0) return null;
+  const latest = await prisma.transaction.aggregate({
+    where: { userId, accountId: { in: accounts.map((a) => a.accountId) } },
+    _max: { postedAt: true },
+  });
+  return latest._max.postedAt ?? null;
+}
+
+/**
+ * Cumple lo que promete la baja asistida («si vuelve a cobrarse, te aviso»): si el comercio cobró después de pedir la
+ * baja, avisa y la deja otra vez para cancelar; si ya pasó la fecha del siguiente cobro y no apareció, la da por
+ * hecha, cierra la tarea de confirmar y avisa cuánto se ahorra. Si faltan movimientos, espera.
+ */
+async function followUpCancellation(userId: string, charge: RecurringCharge, now = new Date()) {
+  const action = await prisma.agentAction.findFirst({
+    where: { userId, type: "CANCEL_SUBSCRIPTION", status: "EXECUTED", payload: { path: ["recurringChargeId"], equals: charge.id } },
+    orderBy: { executedAt: "desc" },
+    select: { executedAt: true, result: true },
+  });
+  if (!action?.executedAt) return;
+
+  const outcome = checkCancellation({
+    requestedAt: action.executedAt,
+    cadence: charge.cadence,
+    lastChargedAt: charge.lastChargedAt,
+    dataThrough: await dataThroughFor(userId, charge.id),
+  });
+  if (outcome.status === "waiting") return;
+
+  const amount = Number(charge.amount);
+  if (outcome.status === "charged_again") {
+    // La baja no se completó en el comercio: vuelve a la lista para cancelarla otra vez.
+    const reopened = await prisma.recurringCharge.updateMany({
+      where: { id: charge.id, status: "CANCELLATION_REQUESTED" },
+      data: { status: "UNUSED_SUSPECTED" },
+    });
+    if (reopened.count === 0) return;
+    await prisma.appNotification.create({
+      data: {
+        userId,
+        type: "ACTION_REQUIRED",
+        title: `${charge.merchantName} se volvió a cobrar`,
+        body: `Te cobró ${money(amount, charge.currency, { cents: true })} el ${shortDate(outcome.chargedAt)}, después de que pediste la baja. Revisa que esté cancelada en ${charge.merchantName}; si quieres, Omni te prepara la baja otra vez.`,
+        href: "/finanzas",
+        data: { recurringChargeId: charge.id },
+      },
+    });
+    return;
+  }
+
+  const confirmed = await prisma.recurringCharge.updateMany({
+    where: { id: charge.id, status: "CANCELLATION_REQUESTED" },
+    data: { status: "CANCELED" },
+  });
+  if (confirmed.count === 0) return;
+  const taskId = (action.result as { taskId?: unknown } | null)?.taskId;
+  if (typeof taskId === "string" && isUuid(taskId)) {
+    await prisma.task.updateMany({
+      where: { id: taskId, userId, status: { notIn: ["DONE", "CANCELED"] } },
+      data: { status: "DONE", completedAt: now },
+    });
+  }
+  await prisma.appNotification.create({
+    data: {
+      userId,
+      type: "INSIGHT",
+      title: `Confirmado: ${charge.merchantName} ya no te cobra`,
+      body: `Pasó la fecha del siguiente cobro y no apareció en tus movimientos. Ahorras ${money(monthlyEquivalent(amount, charge.cadence), charge.currency, { cents: true })} al mes.`,
+      href: "/finanzas",
+      data: { recurringChargeId: charge.id },
+    },
+  });
 }
 
 export function accountView(row: FinancialAccount): AccountView {
@@ -131,19 +224,29 @@ export async function getFinanceOverview(userId: string, periodDays = 90): Promi
   const accounts = await prisma.financialAccount.findMany({
     where: { userId },
     select: { name: true, mask: true, currency: true },
+    orderBy: { createdAt: "asc" },
   });
   if (accounts.length === 0) return null;
 
   const now = new Date();
-  const txs = await loadTransactions(userId, new Date(now.getTime() - periodDays * DAY_MS));
+  const all = await loadTransactions(userId, new Date(now.getTime() - periodDays * DAY_MS));
+  // Un solo resumen por moneda: las cuentas en otra moneda no se suman (ver primaryCurrency).
+  const currency = primaryCurrency(
+    accounts.map((account) => account.currency),
+    all,
+  );
+  const txs = inCurrency(all, currency);
+  const included = inCurrency(accounts, currency);
   const summary = summarize(txs, periodDays, now);
 
   return {
     kind: "finance_summary",
-    sources: accounts.map((account) => (account.mask ? `${account.name} ••${account.mask}` : account.name)),
+    sources: (included.length > 0 ? included : accounts).map((account) =>
+      account.mask ? `${account.name} ••${account.mask}` : account.name,
+    ),
     periodDays,
     transactionCount: txs.length,
-    currency: accounts[0].currency,
+    currency,
     monthlyIncome: summary.monthlyIncome,
     monthlySpending: summary.monthlySpending,
     monthlySaved: summary.monthlySaved,
@@ -154,14 +257,22 @@ export async function getFinanceOverview(userId: string, periodDays = 90): Promi
 
 /** Ingresos y gastos de los últimos 3 periodos de 30 días. */
 export async function getMonthlyTrend(userId: string, timeZone?: string): Promise<MonthlyTrendCard | null> {
-  const account = await prisma.financialAccount.findFirst({ where: { userId }, select: { currency: true } });
-  if (!account) return null;
+  const accounts = await prisma.financialAccount.findMany({
+    where: { userId },
+    select: { currency: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (accounts.length === 0) return null;
   const now = new Date();
-  const txs = await loadTransactions(userId, new Date(now.getTime() - 91 * DAY_MS));
-  const windows = monthlyWindows(txs, now, 3);
+  const all = await loadTransactions(userId, new Date(now.getTime() - 91 * DAY_MS));
+  const currency = primaryCurrency(
+    accounts.map((account) => account.currency),
+    all,
+  );
+  const windows = monthlyWindows(inCurrency(all, currency), now, 3);
   return {
     kind: "monthly_trend",
-    currency: account.currency,
+    currency,
     months: windows.map((w) => ({
       label: `${shortDate(new Date(w.from.getTime() + DAY_MS), timeZone)} al ${shortDate(w.to, timeZone)}`,
       income: w.income,
@@ -171,23 +282,46 @@ export async function getMonthlyTrend(userId: string, timeZone?: string): Promis
   };
 }
 
-export async function getAntExpenses(userId: string, periodDays = 30, maxAmount = 15): Promise<AntExpensesCard | null> {
-  const account = await prisma.financialAccount.findFirst({ where: { userId }, select: { currency: true } });
-  if (!account) return null;
-  const txs = await loadTransactions(userId, new Date(Date.now() - periodDays * DAY_MS));
-  const result = detectAntExpenses(txs, { periodDays, maxAmount });
+/**
+ * Gastos hormiga de la moneda principal. Sin `maxAmount`, el tope de una compra pequeña sale de la moneda
+ * (15 dólares o su equivalente; en bolívares, el 2 % del gasto mensual): ver antMaxTicketFor.
+ */
+export async function getAntExpenses(userId: string, periodDays = 30, maxAmount?: number): Promise<AntExpensesCard | null> {
+  const accounts = await prisma.financialAccount.findMany({
+    where: { userId },
+    select: { currency: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (accounts.length === 0) return null;
+  const now = new Date();
+  const all = await loadTransactions(userId, new Date(now.getTime() - periodDays * DAY_MS));
+  const currency = primaryCurrency(
+    accounts.map((account) => account.currency),
+    all,
+  );
+  const txs = inCurrency(all, currency);
+  const limit = maxAmount ?? antMaxTicketFor(currency, summarize(txs, periodDays, now).monthlySpending);
+  const result = detectAntExpenses(txs, { periodDays, maxAmount: limit });
   return {
     kind: "ant_expenses",
-    currency: account.currency,
+    currency,
     periodDays,
-    maxAmount,
+    maxAmount: limit,
     monthlyProjection: result.monthlyProjection,
     items: result.items.slice(0, 6),
   };
 }
 
-export async function getSubscriptions(userId: string, onlySubscriptions = true): Promise<SubscriptionsCard | null> {
-  const rows = await prisma.recurringCharge.findMany({
+/**
+ * Suscripciones y cargos recurrentes en una sola moneda: la pedida (`currency`) o, si no, la que más se repite. Los
+ * montos de monedas distintas no se suman.
+ */
+export async function getSubscriptions(
+  userId: string,
+  onlySubscriptions = true,
+  currency?: string,
+): Promise<SubscriptionsCard | null> {
+  const found = await prisma.recurringCharge.findMany({
     where: {
       userId,
       status: { not: "CANCELED" },
@@ -195,6 +329,8 @@ export async function getSubscriptions(userId: string, onlySubscriptions = true)
     },
     orderBy: { amount: "desc" },
   });
+  if (found.length === 0) return null;
+  const rows = inCurrency(found, currency ?? primaryCurrency([found[0].currency], found));
   if (rows.length === 0) return null;
 
   const now = Date.now();

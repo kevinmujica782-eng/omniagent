@@ -12,7 +12,7 @@ import { createGoal } from "@/modules/goals/goals.service";
 import { createTask } from "@/modules/procedures/procedures.service";
 import type { AIProviderId, AITier } from "@/types/ai";
 import type { ApprovalCard, BudgetView, InsightsCard, RecommendationView } from "@/types/cards";
-import { DAY_MS } from "../analyzers";
+import { DAY_MS, inCurrency, primaryCurrency } from "../analyzers";
 import { listBudgets, upsertBudget } from "../budgets.service";
 import { proposeSubscriptionCancellation } from "../cancellation";
 import { loadTransactions } from "../finance.service";
@@ -43,17 +43,26 @@ export async function loadSnapshot(userId: string, timeZone?: string): Promise<F
   const accounts = await prisma.financialAccount.findMany({ where: { userId }, orderBy: { createdAt: "asc" } });
   if (accounts.length === 0) return null;
   const now = new Date();
-  const [txs, recurring, budgets] = await Promise.all([
+  const [allTxs, allRecurring, allBudgets] = await Promise.all([
     loadTransactions(userId, new Date(now.getTime() - (ANALYSIS_DAYS + 1) * DAY_MS)),
     prisma.recurringCharge.findMany({ where: { userId, status: { not: "CANCELED" } } }),
     listBudgets(userId),
   ]);
+  // El análisis es de una sola moneda (la de más movimientos): sumar bolívares con dólares daría cifras sin sentido.
+  const currency = primaryCurrency(
+    accounts.map((a) => a.currency),
+    allTxs,
+  );
+  const txs = inCurrency(allTxs, currency);
+  const recurring = inCurrency(allRecurring, currency);
+  const budgets = inCurrency(allBudgets, currency);
+  const sameCurrencyAccounts = inCurrency(accounts, currency);
   return buildSnapshot({
     txs,
     now,
     timeZone,
-    currency: accounts[0].currency,
-    accounts: accounts.map((a) => ({
+    currency,
+    accounts: (sameCurrencyAccounts.length > 0 ? sameCurrencyAccounts : accounts).map((a) => ({
       name: a.name,
       institution: a.institutionName,
       type: a.type,

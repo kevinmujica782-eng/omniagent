@@ -42,7 +42,11 @@ async function cancelSubscription(userId: string, p: Payload): Promise<Execution
   if (!charge) throw Errors.notFound("La suscripción");
 
   await prisma.recurringCharge.update({ where: { id: charge.id }, data: { status: "CANCELLATION_REQUESTED" } });
-  // Cancelación asistida: sin integración directa con el comercio, dejamos un seguimiento verificable.
+  // Cancelación asistida: sin integración directa con el comercio, la baja la termina la persona y Omni la sigue con
+  // los movimientos que lleguen (refreshRecurringCharges → followUpCancellation): avisa si se vuelve a cobrar y la da
+  // por hecha cuando pasa la fecha del siguiente cobro sin que aparezca.
+  const followUp =
+    "Cuando subas tu próximo estado de cuenta o se sincronice tu banco, Omni revisa que ya no se cobre y te avisa si vuelve a cobrarse.";
   const task = await prisma.task.create({
     data: {
       userId,
@@ -50,14 +54,12 @@ async function cancelSubscription(userId: string, p: Payload): Promise<Execution
       priority: "MEDIUM",
       source: "agent",
       title: `Confirmar la cancelación de ${charge.merchantName}`,
-      notes: charge.cancellationUrl
-        ? `Enlace para cancelar: ${charge.cancellationUrl}`
-        : "Omni revisará tu próximo estado de cuenta para confirmar que ya no se cobra.",
+      notes: charge.cancellationUrl ? `Enlace para cancelar: ${charge.cancellationUrl}\n${followUp}` : followUp,
       dueAt: charge.nextExpectedAt,
     },
   });
   return {
-    message: `${charge.merchantName} quedó marcada para cancelar. Si vuelve a cobrarse, te aviso.`,
+    message: `${charge.merchantName} quedó marcada para cancelar. Termina la baja en ${charge.merchantName}; con tus próximos movimientos reviso que ya no se cobre y, si vuelve a cobrarse, te aviso.`,
     mode: "assisted",
     taskId: task.id,
   };

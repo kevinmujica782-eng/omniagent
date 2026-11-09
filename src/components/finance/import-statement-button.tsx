@@ -34,7 +34,7 @@ const SCAN_WORKERS = 2;
 const READING_POLL_MS = 4_000;
 const MAX_POLLS_PER_PAGE = 45;
 const NEW_ACCOUNT = "new";
-const CURRENCIES = ["MXN", "USD", "COP", "CLP", "ARS", "PEN", "EUR"];
+const CURRENCIES = ["MXN", "USD", "VES", "COP", "CLP", "ARS", "PEN", "EUR"];
 const ACCOUNT_TYPES = [
   { value: "CHECKING", label: "Cuenta de débito" },
   { value: "CREDIT_CARD", label: "Tarjeta de crédito" },

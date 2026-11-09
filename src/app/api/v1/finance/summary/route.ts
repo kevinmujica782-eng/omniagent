@@ -22,7 +22,7 @@ export async function GET(request: Request) {
       getFinanceOverview(auth.userId, 90),
       getMonthlyTrend(auth.userId, profile?.timezone),
       getSubscriptions(auth.userId, true),
-      getAntExpenses(auth.userId, 30, 15),
+      getAntExpenses(auth.userId, 30),
       listBudgets(auth.userId),
       getLatestInsights(auth.userId),
       listCategories(auth.userId),

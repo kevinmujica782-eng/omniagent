@@ -1,9 +1,12 @@
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { safeNext } from "@/lib/validation";
+import { authErrorKey, safeNext } from "@/lib/validation";
 
-/** Confirmación por correo con token_hash (plantillas de email de Supabase personalizadas). */
+/**
+ * Confirmación por correo con token_hash (plantillas de email de Supabase personalizadas). Sirve también para
+ * recuperar la contraseña desde otro dispositivo: type=recovery y next=/restablecer.
+ */
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const tokenHash = url.searchParams.get("token_hash");
@@ -15,5 +18,5 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
     if (!error) return NextResponse.redirect(new URL(next, url.origin));
   }
-  return NextResponse.redirect(new URL("/login?error=confirm", url.origin));
+  return NextResponse.redirect(new URL(`/login?error=${authErrorKey(next, "confirm")}`, url.origin));
 }

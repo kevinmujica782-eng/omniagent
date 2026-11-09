@@ -7,7 +7,10 @@ export type AgentFeatureId = "mail_autopilot" | "monthly_report" | "hourly_price
 export interface PlanLimits {
   id: PlanId;
   name: string;
-  /** Precio de referencia para la UI. El cobro real lo definen Stripe (web) y Google Play (Android). */
+  /**
+   * Precio para la UI. Hoy Pro se paga con Binance Pay: el mismo número en USDT ("$19.99" → 19.99 USDT, ver
+   * binance-rules.ts), sin renovación automática. Si se activan Stripe o Google Play, el cobro lo definen ellos.
+   */
   price: string;
   period: string | null;
   priceLabel: string;

@@ -5,7 +5,7 @@ import { log } from "@/lib/log";
 import { listActions } from "@/modules/actions/actions.service";
 import { billingOverview } from "@/modules/billing/overview";
 import { listAlertViews } from "@/modules/concierge/alerts.service";
-import { monthlyEquivalent, type Cadence } from "@/modules/finance/analyzers";
+import { inCurrency, monthlyEquivalent, primaryCurrency, type Cadence } from "@/modules/finance/analyzers";
 import { listBudgets } from "@/modules/finance/budgets.service";
 import { getSubscriptions, loadTransactions } from "@/modules/finance/finance.service";
 import { MAIL_PROVIDERS } from "@/modules/procedures/mail/mailbox";
@@ -38,27 +38,32 @@ async function section<T>(name: string, userId: string, load: () => Promise<Sect
 }
 
 async function financeSection(userId: string, now: Date, timeZone: string, currency: string): Promise<SectionState<FinanceGlance>> {
-  const [accounts, lastSync] = await Promise.all([
-    prisma.financialAccount.count({ where: { userId } }),
+  const [accountRows, lastSync] = await Promise.all([
+    prisma.financialAccount.findMany({ where: { userId }, select: { currency: true }, orderBy: { createdAt: "asc" } }),
     prisma.integrationConnection.findFirst({
       where: { userId, provider: { in: [...BANK_PROVIDERS] }, status: "ACTIVE" },
       orderBy: { lastSyncedAt: "desc" },
       select: { lastSyncedAt: true },
     }),
   ]);
+  const accounts = accountRows.length;
   if (accounts === 0) return { status: "empty" };
   // Desde un día antes del mes pasado: alcanza para la comparación y para saber si hay historial previo.
   const since = new Date(monthStart(now, timeZone, -1).getTime() - 86_400_000);
-  const [txs, subscriptions, budgets] = await Promise.all([
-    loadTransactions(userId, since),
-    getSubscriptions(userId, true),
-    listBudgets(userId),
-  ]);
+  const [allTxs, budgets] = await Promise.all([loadTransactions(userId, since), listBudgets(userId)]);
+  // Una sola moneda en toda la tarjeta (la misma que Finanzas): no se suman bolívares con dólares.
+  const glanceCurrency = primaryCurrency(
+    accountRows.map((account) => account.currency),
+    allTxs,
+    currency,
+  );
+  const txs = inCurrency(allTxs, glanceCurrency);
+  const subscriptions = await getSubscriptions(userId, true, glanceCurrency);
   const unused = subscriptions?.items.filter((s) => s.status === "UNUSED_SUSPECTED") ?? [];
   return {
     status: "ok",
     data: {
-      currency: subscriptions?.currency ?? currency,
+      currency: glanceCurrency,
       ...monthToDate(txs, now, timeZone),
       unusedSubscriptions: { count: unused.length, monthly: subscriptions?.unusedMonthlyTotal ?? 0 },
       budgets: {
@@ -148,13 +153,20 @@ async function shoppingSection(userId: string, now: Date, currency: string, limi
   return { state, alerts, watching, paused, lastCheckAt: lastCheck?.lastCheckedAt ?? null, nextCheckAt: nextCheck?.nextCheckAt ?? null };
 }
 
-/** "Ahorro con Omni" del mes: compras por debajo de lo normal y suscripciones dadas de baja. */
+/**
+ * "Ahorro con Omni" del mes: solo dinero que de verdad se ahorra. Cuentan las compras del mes pagadas de verdad por
+ * debajo de lo normal (las de la hoja de pago de prueba no cobran, así que no ahorran nada) y lo que se deja de pagar
+ * al mes por las suscripciones cuya baja ya se confirmó (no las que solo se pidieron: ver followUpCancellation).
+ */
 async function savingsOf(userId: string, now: Date, timeZone: string, currency: string): Promise<SavingsGlance | null> {
   const since = monthStart(now, timeZone);
   const [orders, canceled] = await Promise.all([
-    prisma.purchaseOrder.findMany({ where: { userId, status: "PLACED", createdAt: { gte: since } }, select: { details: true, currency: true } }),
+    prisma.purchaseOrder.findMany({
+      where: { userId, status: "PLACED", paymentProvider: { not: "sandbox" }, createdAt: { gte: since } },
+      select: { details: true, currency: true },
+    }),
     prisma.recurringCharge.findMany({
-      where: { userId, status: { in: ["CANCELLATION_REQUESTED", "CANCELED"] }, updatedAt: { gte: since } },
+      where: { userId, status: "CANCELED" },
       select: { amount: true, cadence: true, currency: true },
     }),
   ]);
