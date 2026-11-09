@@ -10,6 +10,8 @@ export const metadata: Metadata = { title: "Entrar" };
 const ERRORS: Record<string, string> = {
   auth: "No pudimos completar el inicio de sesión. Inténtalo de nuevo.",
   confirm: "El enlace de confirmación no es válido o ya venció.",
+  reset:
+    "El enlace para crear tu contraseña nueva no sirve o ya venció. Pide otro con «¿Olvidaste tu contraseña?» y ábrelo desde este mismo dispositivo.",
 };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;

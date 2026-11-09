@@ -238,6 +238,7 @@ export function AccountView({
       <Section title="Ayuda y privacidad">
         <Panel>
           <LinkRow href={`mailto:${SUPPORT_EMAIL}`} icon={Mail} label="Escríbenos" detail={SUPPORT_EMAIL} external />
+          {preview ? null : <LinkRow href="/restablecer" icon={Lock} label="Cambiar contraseña" />}
           <LinkRow href="/privacidad" icon={ShieldCheck} label="Política de privacidad" />
           <LinkRow href="/terminos" icon={FileText} label="Términos de uso" />
           <LinkRow href="/eliminar-cuenta" icon={UserX} label="Cómo se borra tu cuenta" />
