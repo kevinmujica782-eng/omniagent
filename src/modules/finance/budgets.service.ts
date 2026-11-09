@@ -25,22 +25,28 @@ function toView(
   };
 }
 
+/** Lo gastado en el mes, por categoría y moneda: un presupuesto en bolívares no cuenta lo que se gastó en dólares. */
+const spentKey = (category: string, currency: string) => `${currency}:${category}`;
+
 async function spentThisMonth(userId: string, categories: string[]): Promise<Map<string, number>> {
   if (categories.length === 0) return new Map();
   const groups = await prisma.transaction.groupBy({
-    by: ["category"],
+    by: ["category", "currency"],
     where: { userId, direction: "DEBIT", postedAt: { gte: monthStartUtc() }, category: { in: categories } },
     _sum: { amount: true },
   });
   return new Map(
-    (groups as { category: string | null; _sum: { amount: unknown } }[]).map((g) => [g.category ?? "", Number(g._sum.amount ?? 0)]),
+    (groups as { category: string | null; currency: string; _sum: { amount: unknown } }[]).map((g) => [
+      spentKey(g.category ?? "", g.currency),
+      Number(g._sum.amount ?? 0),
+    ]),
   );
 }
 
 export async function listBudgets(userId: string): Promise<BudgetView[]> {
   const budgets = await prisma.categoryBudget.findMany({ where: { userId }, orderBy: { category: "asc" } });
   const spent = await spentThisMonth(userId, budgets.map((b) => b.category));
-  return budgets.map((budget) => toView(budget, spent.get(budget.category) ?? 0));
+  return budgets.map((budget) => toView(budget, spent.get(spentKey(budget.category, budget.currency)) ?? 0));
 }
 
 export async function upsertBudget(
@@ -50,7 +56,7 @@ export async function upsertBudget(
   const category = input.category.trim();
   if (!category) throw Errors.badRequest("Indica la categoría del presupuesto.");
   if (!(input.monthlyLimit > 0)) throw Errors.badRequest("El presupuesto debe ser mayor que cero.");
-  const account = await prisma.financialAccount.findFirst({ where: { userId }, select: { currency: true } });
+  const account = await prisma.financialAccount.findFirst({ where: { userId }, orderBy: { createdAt: "asc" }, select: { currency: true } });
   const monthlyLimit = Math.round(input.monthlyLimit * 100) / 100;
   const budget = await prisma.categoryBudget.upsert({
     where: { userId_category: { userId, category } },
@@ -58,7 +64,7 @@ export async function upsertBudget(
     update: { monthlyLimit, source: input.source ?? "user" },
   });
   const spent = await spentThisMonth(userId, [category]);
-  return toView(budget, spent.get(category) ?? 0);
+  return toView(budget, spent.get(spentKey(category, budget.currency)) ?? 0);
 }
 
 export async function deleteBudget(userId: string, budgetId: string) {

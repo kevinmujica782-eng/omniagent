@@ -1,5 +1,6 @@
 // Montos de estados de cuenta de distintos bancos y países:
-// "$1,234.56", "1.234,56", "(45.00)", "45.00-", "-$45", "1,200.00 CR", "MXN 1,000", "15.990" (pesos chilenos).
+// "$1,234.56", "1.234,56", "(45.00)", "45.00-", "-$45", "1,200.00 CR", "MXN 1,000", "15.990" (pesos chilenos),
+// "Bs. 1.234,56" y "Bs.S 45,50" (bolívares de Venezuela).
 
 export interface AmountValue {
   /** Valor absoluto en centavos. */
@@ -9,8 +10,16 @@ export interface AmountValue {
   marker: "CR" | "DR" | null;
 }
 
-const CURRENCY =
-  /US\$|MX\$|R\$|S\/\.?|[$€£¥₡₲₱₹]|\b(?:MXN|USD|EUR|COP|CLP|ARS|PEN|BRL|GBP|CAD|UYU|BOB|PYG|GTQ|CRC|DOP|HNL|NIO|PAB|VES|MN)\b|M\.N\./gi;
+/**
+ * Bolívar venezolano escrito como los bancos lo ponen junto al monto: "Bs", "Bs.", "Bs.S", "BsS", "Bs. D", "Bs.F".
+ * La letra suelta (S de soberano, D de digital, F de fuerte) solo cuenta si no es el principio de otra palabra.
+ */
+const BOLIVAR = String.raw`Bs\.?(?:\s?[SDF]\b\.?)?(?![A-Za-z])`;
+
+const CURRENCY = new RegExp(
+  String.raw`US\$|MX\$|R\$|S\/\.?|[$€£¥₡₲₱₹]|\b${BOLIVAR}|\b(?:MXN|USD|EUR|COP|CLP|ARS|PEN|BRL|GBP|CAD|UYU|BOB|PYG|GTQ|CRC|DOP|HNL|NIO|PAB|VES|VED|VEF|MN)\b|M\.N\.`,
+  "gi",
+);
 const MINUS = /^[-−–—]/;
 const TRAILING_MINUS = /[-−–—]$/;
 const SPACES = /[   ]/g;
@@ -99,7 +108,7 @@ function fractionCents(fraction: string): number {
   return Math.round(Number(`${fraction.slice(0, 2)}.${fraction.slice(2)}`));
 }
 
-const CURRENCY_TOKEN = String.raw`(?:US\$|MX\$|R\$|[$€£]|MXN|USD|EUR|COP|CLP|ARS|PEN)`;
+const CURRENCY_TOKEN = String.raw`(?:US\$|MX\$|R\$|[$€£]|${BOLIVAR}|MXN|USD|EUR|COP|CLP|ARS|PEN|VES|VED|VEF)`;
 const MONEY_TOKEN = new RegExp(
   String.raw`^[-−–+]?\s*\(?\s*(?:${CURRENCY_TOKEN}\s*)?[-−–]?\s*(?:\d{1,3}(?:[,.']\d{3})*[.,]\d{2}|\d+[.,]\d{2})\s*\)?\s*(?:${CURRENCY_TOKEN})?\s*(?:[-−–]|CR|DR)?\.?$`,
   "i",

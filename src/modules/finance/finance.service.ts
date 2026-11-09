@@ -15,10 +15,13 @@ import type {
 } from "@/types/cards";
 import {
   DAY_MS,
+  antMaxTicketFor,
   detectAntExpenses,
   detectRecurring,
+  inCurrency,
   monthlyEquivalent,
   monthlyWindows,
+  primaryCurrency,
   summarize,
   type TxLike,
 } from "./analyzers";
@@ -131,19 +134,29 @@ export async function getFinanceOverview(userId: string, periodDays = 90): Promi
   const accounts = await prisma.financialAccount.findMany({
     where: { userId },
     select: { name: true, mask: true, currency: true },
+    orderBy: { createdAt: "asc" },
   });
   if (accounts.length === 0) return null;
 
   const now = new Date();
-  const txs = await loadTransactions(userId, new Date(now.getTime() - periodDays * DAY_MS));
+  const all = await loadTransactions(userId, new Date(now.getTime() - periodDays * DAY_MS));
+  // Un solo resumen por moneda: las cuentas en otra moneda no se suman (ver primaryCurrency).
+  const currency = primaryCurrency(
+    accounts.map((account) => account.currency),
+    all,
+  );
+  const txs = inCurrency(all, currency);
+  const included = inCurrency(accounts, currency);
   const summary = summarize(txs, periodDays, now);
 
   return {
     kind: "finance_summary",
-    sources: accounts.map((account) => (account.mask ? `${account.name} ••${account.mask}` : account.name)),
+    sources: (included.length > 0 ? included : accounts).map((account) =>
+      account.mask ? `${account.name} ••${account.mask}` : account.name,
+    ),
     periodDays,
     transactionCount: txs.length,
-    currency: accounts[0].currency,
+    currency,
     monthlyIncome: summary.monthlyIncome,
     monthlySpending: summary.monthlySpending,
     monthlySaved: summary.monthlySaved,
@@ -154,14 +167,22 @@ export async function getFinanceOverview(userId: string, periodDays = 90): Promi
 
 /** Ingresos y gastos de los últimos 3 periodos de 30 días. */
 export async function getMonthlyTrend(userId: string, timeZone?: string): Promise<MonthlyTrendCard | null> {
-  const account = await prisma.financialAccount.findFirst({ where: { userId }, select: { currency: true } });
-  if (!account) return null;
+  const accounts = await prisma.financialAccount.findMany({
+    where: { userId },
+    select: { currency: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (accounts.length === 0) return null;
   const now = new Date();
-  const txs = await loadTransactions(userId, new Date(now.getTime() - 91 * DAY_MS));
-  const windows = monthlyWindows(txs, now, 3);
+  const all = await loadTransactions(userId, new Date(now.getTime() - 91 * DAY_MS));
+  const currency = primaryCurrency(
+    accounts.map((account) => account.currency),
+    all,
+  );
+  const windows = monthlyWindows(inCurrency(all, currency), now, 3);
   return {
     kind: "monthly_trend",
-    currency: account.currency,
+    currency,
     months: windows.map((w) => ({
       label: `${shortDate(new Date(w.from.getTime() + DAY_MS), timeZone)} al ${shortDate(w.to, timeZone)}`,
       income: w.income,
@@ -171,23 +192,46 @@ export async function getMonthlyTrend(userId: string, timeZone?: string): Promis
   };
 }
 
-export async function getAntExpenses(userId: string, periodDays = 30, maxAmount = 15): Promise<AntExpensesCard | null> {
-  const account = await prisma.financialAccount.findFirst({ where: { userId }, select: { currency: true } });
-  if (!account) return null;
-  const txs = await loadTransactions(userId, new Date(Date.now() - periodDays * DAY_MS));
-  const result = detectAntExpenses(txs, { periodDays, maxAmount });
+/**
+ * Gastos hormiga de la moneda principal. Sin `maxAmount`, el tope de una compra pequeña sale de la moneda
+ * (15 dólares o su equivalente; en bolívares, el 2 % del gasto mensual): ver antMaxTicketFor.
+ */
+export async function getAntExpenses(userId: string, periodDays = 30, maxAmount?: number): Promise<AntExpensesCard | null> {
+  const accounts = await prisma.financialAccount.findMany({
+    where: { userId },
+    select: { currency: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (accounts.length === 0) return null;
+  const now = new Date();
+  const all = await loadTransactions(userId, new Date(now.getTime() - periodDays * DAY_MS));
+  const currency = primaryCurrency(
+    accounts.map((account) => account.currency),
+    all,
+  );
+  const txs = inCurrency(all, currency);
+  const limit = maxAmount ?? antMaxTicketFor(currency, summarize(txs, periodDays, now).monthlySpending);
+  const result = detectAntExpenses(txs, { periodDays, maxAmount: limit });
   return {
     kind: "ant_expenses",
-    currency: account.currency,
+    currency,
     periodDays,
-    maxAmount,
+    maxAmount: limit,
     monthlyProjection: result.monthlyProjection,
     items: result.items.slice(0, 6),
   };
 }
 
-export async function getSubscriptions(userId: string, onlySubscriptions = true): Promise<SubscriptionsCard | null> {
-  const rows = await prisma.recurringCharge.findMany({
+/**
+ * Suscripciones y cargos recurrentes en una sola moneda: la pedida (`currency`) o, si no, la que más se repite. Los
+ * montos de monedas distintas no se suman.
+ */
+export async function getSubscriptions(
+  userId: string,
+  onlySubscriptions = true,
+  currency?: string,
+): Promise<SubscriptionsCard | null> {
+  const found = await prisma.recurringCharge.findMany({
     where: {
       userId,
       status: { not: "CANCELED" },
@@ -195,6 +239,8 @@ export async function getSubscriptions(userId: string, onlySubscriptions = true)
     },
     orderBy: { amount: "desc" },
   });
+  if (found.length === 0) return null;
+  const rows = inCurrency(found, currency ?? primaryCurrency([found[0].currency], found));
   if (rows.length === 0) return null;
 
   const now = Date.now();

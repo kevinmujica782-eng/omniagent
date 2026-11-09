@@ -1,7 +1,9 @@
 // Snapshot financiero de los últimos 3 meses: lo que se envía a Claude. Puro y serializable (sin fechas Date).
 import { shortDate } from "@/lib/format";
 import {
+  ANT_MAX_TICKET_USD,
   DAY_MS,
+  antMaxTicketFor,
   detectAntExpenses,
   detectAvoidableFees,
   monthlyEquivalent,
@@ -14,7 +16,8 @@ import {
 import { SUBSCRIPTIONS_CATEGORY, SUBSCRIPTION_KIND_LABEL } from "../categories";
 
 export const ANALYSIS_DAYS = 90;
-export const ANT_MAX_TICKET = 15;
+/** Tope por compra de un gasto hormiga en dólares. Para otras monedas: `antMaxTicketFor`. */
+export const ANT_MAX_TICKET = ANT_MAX_TICKET_USD;
 
 export type SubscriptionUsage = "en_uso" | "sin_uso" | "sin_datos" | "baja_solicitada";
 
@@ -103,7 +106,8 @@ export function buildSnapshot(input: {
   const summary = summarize(inPeriod, ANALYSIS_DAYS, now);
   const windows = monthlyWindows(inPeriod, now, 3);
   const recent = inPeriod.filter((tx) => tx.postedAt.getTime() >= now.getTime() - 30 * DAY_MS);
-  const ant = detectAntExpenses(recent, { periodDays: 30, maxAmount: ANT_MAX_TICKET });
+  const maxTicket = antMaxTicketFor(input.currency, summary.monthlySpending);
+  const ant = detectAntExpenses(recent, { periodDays: 30, maxAmount: maxTicket });
 
   const subscriptions = input.recurring
     .filter((charge) => charge.category === SUBSCRIPTIONS_CATEGORY && charge.status !== "CANCELED")
@@ -168,7 +172,7 @@ export function buildSnapshot(input: {
       changePct: c.changePct,
     })),
     antExpenses: {
-      maxTicket: ANT_MAX_TICKET,
+      maxTicket,
       monthlyTotal: ant.monthlyProjection,
       merchants: ant.items.slice(0, 5).map((item) => ({
         merchant: item.merchant,

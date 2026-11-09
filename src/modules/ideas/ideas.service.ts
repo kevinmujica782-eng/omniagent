@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { Errors } from "@/lib/errors";
 import { money, shortDate } from "@/lib/format";
 import { isUuid } from "@/lib/validation";
-import { DAY_MS, monthlyEquivalent } from "@/modules/finance/analyzers";
+import { ANT_MAX_TICKET_USD, DAY_MS, monthlyEquivalent, usdScale } from "@/modules/finance/analyzers";
 import { getAntExpenses, getFinanceOverview } from "@/modules/finance/finance.service";
 import { OPEN_TASK_STATUSES } from "@/modules/procedures/procedures.service";
 import type { IdeaView } from "@/types/cards";
@@ -116,8 +116,10 @@ async function financeDrafts(userId: string, now: Date, drafts: Draft[]) {
   }
 
   // Gastos hormiga del último mes
-  const ant = await getAntExpenses(userId, 30, 15);
-  if (ant && ant.monthlyProjection >= 40 && ant.items.length > 0) {
+  // Los umbrales están pensados en dólares: en otras monedas se escalan igual que el tope de una compra pequeña.
+  const ant = await getAntExpenses(userId, 30);
+  const antScale = ant ? ant.maxAmount / ANT_MAX_TICKET_USD : 1;
+  if (ant && ant.monthlyProjection >= 40 * antScale && ant.items.length > 0) {
     const top = ant.items.slice(0, 2);
     const purchases = top.reduce((sum, item) => sum + item.count, 0);
     drafts.push({
@@ -132,8 +134,9 @@ async function financeDrafts(userId: string, now: Date, drafts: Draft[]) {
 
   // Categoría que se disparó en los últimos 30 días
   const overview = await getFinanceOverview(userId, 90);
+  const spikeScale = overview ? usdScale(overview.currency, overview.monthlySpending) : 1;
   const spike = overview?.topCategories.find(
-    (c) => c.changePct !== null && c.changePct >= 30 && c.monthly >= 150 && c.name !== "Vivienda",
+    (c) => c.changePct !== null && c.changePct >= 30 && c.monthly >= 150 * spikeScale && c.name !== "Vivienda",
   );
   if (spike && spike.changePct !== null) {
     drafts.push({

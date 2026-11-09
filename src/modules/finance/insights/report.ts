@@ -129,8 +129,18 @@ export function quotableFigures(snapshot: FinancialSnapshot) {
   };
 }
 
-// Montos con símbolo o código de moneda: "$4,852", "US$1.850", "$15.61", "120 USD", "45 dólares".
-const MONEY_IN_TEXT = /(?:US\$|\$)\s?\d[\d.,]*|\b\d[\d.,]*\s?(?:USD|dólares)\b/gi;
+// Códigos de moneda que reconoce `parseAmount`. `money()` escribe en dólares "$1,235" y en las demás monedas con el
+// código delante ("VES 1,235", "MXN 45.50"); los bancos venezolanos escriben "Bs. 1.234,56". En mayúsculas, para no
+// confundir una palabra del texto con una moneda.
+const ISO_CODES = "MXN|USD|EUR|COP|CLP|ARS|PEN|BRL|GBP|CAD|UYU|BOB|PYG|GTQ|CRC|DOP|HNL|NIO|PAB|VES|VED|VEF";
+const BOLIVAR = String.raw`(?:Bs|BS)\.?(?:\s?[SDF]\b\.?)?`;
+
+// Montos con símbolo o código de moneda: "$4,852", "US$1.850", "$15.61", "120 USD", "45 dólares", "VES 1,235",
+// "Bs. 1.234,56", "1.234,56 Bs".
+const MONEY_IN_TEXT = new RegExp(
+  String.raw`(?:US\$|\$|\b(?:${ISO_CODES})\b\s?|\b${BOLIVAR}\s?|S\/\.?\s?|[€£]\s?)\d[\d.,]*|\b\d[\d.,]*\s?(?:${ISO_CODES}|[Dd]ólares|[Bb]olívares|${BOLIVAR})(?![A-Za-z])`,
+  "g",
+);
 
 /** Montos que aparecen en un texto, con su valor. Los números sin moneda (porcentajes, días, conteos) no cuentan. */
 export function amountsInText(text: string): { raw: string; value: number }[] {
@@ -138,7 +148,7 @@ export function amountsInText(text: string): { raw: string; value: number }[] {
   for (const match of text.matchAll(MONEY_IN_TEXT)) {
     // El punto o la coma final suelen ser puntuación de la frase ("...$4,852.").
     const raw = match[0].replace(/[.,]+$/, "");
-    const parsed = parseAmount(raw.replace(/^US/i, "").replace(/\s?(USD|dólares)$/i, ""));
+    const parsed = parseAmount(raw.replace(/^US(?=\$)/, "").replace(/\s?(?:[Dd]ólares|[Bb]olívares)$/, ""));
     if (parsed && parsed.cents > 0) found.push({ raw, value: parsed.cents / 100 });
   }
   return found;

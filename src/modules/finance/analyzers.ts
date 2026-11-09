@@ -102,6 +102,85 @@ export function monthlyWindows(txs: TxLike[], now = new Date(), count = 3) {
   }));
 }
 
+/**
+ * Moneda con la que se calculan los resúmenes. Nunca se suman montos de monedas distintas ("Bs. 400" + "12 USD" no es
+ * una cifra): se usa la moneda con más movimientos y, si empatan o no hay movimientos, la de la primera cuenta.
+ */
+export function primaryCurrency(
+  accountCurrencies: readonly string[],
+  txs: readonly Pick<TxLike, "currency">[],
+  fallback = "USD",
+): string {
+  const first = accountCurrencies[0] ?? fallback;
+  const counts = new Map<string, number>();
+  for (const tx of txs) counts.set(tx.currency, (counts.get(tx.currency) ?? 0) + 1);
+  let best = first;
+  let bestCount = counts.get(first) ?? 0;
+  for (const [code, count] of counts) {
+    if (count > bestCount) {
+      best = code;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/** Solo lo que está en la moneda indicada. */
+export function inCurrency<T extends { currency: string }>(items: readonly T[], currency: string): T[] {
+  return items.filter((item) => item.currency === currency);
+}
+
+/** Tope por compra de un gasto hormiga, en dólares: lo que cuesta un café con algo, no una compra grande. */
+export const ANT_MAX_TICKET_USD = 15;
+
+/**
+ * Lo que son más o menos 15 dólares en monedas que no pierden valor de golpe. Es un orden de magnitud, no un tipo de
+ * cambio: sirve para que "compra pequeña" signifique algo parecido en pesos que en dólares.
+ */
+const ANT_MAX_TICKET_BY_CURRENCY: Readonly<Record<string, number>> = {
+  USD: ANT_MAX_TICKET_USD,
+  PAB: 15,
+  EUR: 15,
+  GBP: 12,
+  CAD: 20,
+  MXN: 300,
+  PEN: 55,
+  BRL: 80,
+  UYU: 600,
+  BOB: 100,
+  GTQ: 115,
+  DOP: 900,
+  CRC: 7_500,
+  HNL: 370,
+  NIO: 550,
+  COP: 60_000,
+  CLP: 14_000,
+  PYG: 110_000,
+};
+
+/** Parte del gasto mensual que, como mucho, cuesta una compra pequeña cuando la moneda no tiene una cifra fija. */
+const ANT_SHARE_OF_MONTHLY_SPENDING = 0.02;
+
+/**
+ * Tope de una compra pequeña en esa moneda. Las monedas que cambian de valor muy rápido (bolívar, peso argentino) o
+ * que no están en la lista no llevan una cifra fija, porque se quedaría vieja en semanas: se usa el 2 % de lo que la
+ * persona gasta al mes, redondeado a 2 cifras. Sin gastos, el tope es 0 y no se detecta nada.
+ */
+export function antMaxTicketFor(currency: string, monthlySpending: number): number {
+  const fixed = ANT_MAX_TICKET_BY_CURRENCY[currency.toUpperCase()];
+  if (fixed !== undefined) return fixed;
+  if (!(monthlySpending > 0)) return 0;
+  return Number((monthlySpending * ANT_SHARE_OF_MONTHLY_SPENDING).toPrecision(2));
+}
+
+/**
+ * Cuántas veces "cabe" un monto en dólares en esa moneda (1 en dólares). Lleva a bolívares, pesos, etc. los umbrales
+ * pensados en dólares, como "40 al mes" o "150 en una categoría".
+ */
+export function usdScale(currency: string, monthlySpending: number): number {
+  return antMaxTicketFor(currency, monthlySpending) / ANT_MAX_TICKET_USD;
+}
+
 /** Gastos hormiga: compras pequeñas y repetidas en el mismo comercio. */
 export function detectAntExpenses(txs: TxLike[], opts: { periodDays: number; maxAmount: number; minCount?: number }) {
   const minCount = opts.minCount ?? 4;

@@ -213,9 +213,11 @@ export const financeTools = [
       max_amount: z
         .number()
         .positive()
-        .max(100)
-        .default(15)
-        .describe("Monto máximo para considerar una compra como pequeña, en la moneda del usuario."),
+        .max(1_000_000_000)
+        .optional()
+        .describe(
+          "Monto máximo para considerar una compra como pequeña, en la moneda del usuario. Si no lo indicas, se usa un tope según la moneda (unos 15 dólares o su equivalente).",
+        ),
     }),
     async run({ period_days, max_amount }, ctx) {
       const card = await getAntExpenses(ctx.userId, period_days, max_amount);

@@ -51,7 +51,7 @@ export default async function FinancePage() {
     getFinanceOverview(user.userId, 90),
     getMonthlyTrend(user.userId, timeZone),
     getSubscriptions(user.userId, true),
-    getAntExpenses(user.userId, 30, 15),
+    getAntExpenses(user.userId, 30),
     listBudgets(user.userId),
     getLatestInsights(user.userId),
     searchTransactions(user.userId, { limit: 20 }),
