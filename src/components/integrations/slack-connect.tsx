@@ -52,7 +52,8 @@ export function SlackConnect({ demo = false, configured = true }: { demo?: boole
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">Slack</p>
           <p className="mt-0.5 text-sm leading-relaxed text-muted">
-            Escríbele a Omni desde Slack con <code className="rounded bg-surface-2 px-1">/omni</code>. Genera un código y
+            Escríbele a Omni desde Slack con <code className="rounded bg-surface-2 px-1">/omni</code>. Funciona en los
+            espacios de Slack que ya tienen la app de Omni; para tenerla en el de tu empresa, escríbenos. Genera un código y
             pégalo en Slack para conectar tu cuenta.
           </p>
 

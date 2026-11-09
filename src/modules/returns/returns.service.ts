@@ -21,7 +21,7 @@ import type {
   ReturnsOverviewView,
   TrackedOrderView,
 } from "@/types/cards";
-import { domainOf, findMerchantByName, foldName, isSandboxDomain } from "./merchants";
+import { domainOf, findMerchantByName, foldName, isSandboxDomain, tracksOmniOrder } from "./merchants";
 import { cleanDetails, draftClaim, draftFollowUp } from "./rules/claim";
 import { addBusinessDays, deliveryState, endOfLocalDay, MAX_FOLLOW_UPS, nextFollowUpAt, REFUND_WATCH_DAYS } from "./rules/delivery";
 import { readOrderMail, type OrderSignal } from "./rules/mail-orders";
@@ -247,9 +247,10 @@ async function importOmniOrders(ctx: Ctx, now: Date): Promise<number> {
   let created = 0;
   for (const po of orders) {
     if (known.has(po.id)) continue;
+    const merchant = findMerchantByName(po.merchant);
+    if (!tracksOmniOrder(po.paymentProvider, merchant)) continue;
     const eta = (po.details as { delivery?: { eta?: string | null } | null } | null)?.delivery?.eta ?? null;
     const etaDate = eta ? new Date(eta) : null;
-    const merchant = findMerchantByName(po.merchant);
     try {
       await prisma.trackedOrder.create({
         data: {

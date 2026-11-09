@@ -151,6 +151,15 @@ export function isSandboxDomain(domain: string | null | undefined): boolean {
   return Boolean(domain && /\.test$/i.test(domain));
 }
 
+/**
+ * ¿Devoluciones sigue esta compra hecha con OmniAgent? Las de la hoja de pago de prueba (no cobra nada) solo en las
+ * tiendas de prueba, donde la entrega y la respuesta de la tienda también son simuladas. En una tienda real, una compra
+ * simulada no es un pedido: no se sigue ni se le reclama a la tienda.
+ */
+export function tracksOmniOrder(paymentProvider: string, merchant: Pick<MerchantInfo, "sandbox"> | null): boolean {
+  return paymentProvider !== "sandbox" || merchant?.sandbox === true;
+}
+
 /** Si pagaste con tarjeta y nadie responde: la disputa con el banco, sin prometer el resultado. */
 export const CARD_DISPUTE_STEP =
   "Si pagaste con tarjeta y la tienda no lo resuelve, tu banco puede abrir una disputa (contracargo) por un pedido no recibido o distinto al que compraste. Omni te deja el resumen del caso para pedirla.";

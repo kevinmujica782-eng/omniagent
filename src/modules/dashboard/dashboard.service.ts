@@ -153,13 +153,20 @@ async function shoppingSection(userId: string, now: Date, currency: string, limi
   return { state, alerts, watching, paused, lastCheckAt: lastCheck?.lastCheckedAt ?? null, nextCheckAt: nextCheck?.nextCheckAt ?? null };
 }
 
-/** "Ahorro con Omni" del mes: compras por debajo de lo normal y suscripciones dadas de baja. */
+/**
+ * "Ahorro con Omni" del mes: solo dinero que de verdad se ahorra. Cuentan las compras del mes pagadas de verdad por
+ * debajo de lo normal (las de la hoja de pago de prueba no cobran, así que no ahorran nada) y lo que se deja de pagar
+ * al mes por las suscripciones cuya baja ya se confirmó (no las que solo se pidieron: ver followUpCancellation).
+ */
 async function savingsOf(userId: string, now: Date, timeZone: string, currency: string): Promise<SavingsGlance | null> {
   const since = monthStart(now, timeZone);
   const [orders, canceled] = await Promise.all([
-    prisma.purchaseOrder.findMany({ where: { userId, status: "PLACED", createdAt: { gte: since } }, select: { details: true, currency: true } }),
+    prisma.purchaseOrder.findMany({
+      where: { userId, status: "PLACED", paymentProvider: { not: "sandbox" }, createdAt: { gte: since } },
+      select: { details: true, currency: true },
+    }),
     prisma.recurringCharge.findMany({
-      where: { userId, status: { in: ["CANCELLATION_REQUESTED", "CANCELED"] }, updatedAt: { gte: since } },
+      where: { userId, status: "CANCELED" },
       select: { amount: true, cadence: true, currency: true },
     }),
   ]);
