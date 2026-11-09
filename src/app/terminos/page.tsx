@@ -61,15 +61,25 @@ export default function TermsPage() {
             <strong>Gratis:</strong> con los límites que ves en Cuenta.
           </li>
           <li>
-            <strong>Omni Pro:</strong> US$19.99 al mes, o el precio en tu moneda que muestre Google Play. Se renueva cada mes
-            hasta que lo canceles.
+            <strong>Omni Pro:</strong> 19.99 USDT al mes (el equivalente a US$19.99). Cada pago activa Pro por un mes.
           </li>
           <li>
-            En Android se paga con Google Play y se cancela desde Google Play (Pagos y suscripciones). En la web se paga con
-            Stripe y se cancela desde Cuenta.
+            El pago se hace con Binance Pay, en USDT. <strong>No se renueva solo:</strong> nosotros no podemos sacar dinero de
+            tu cuenta, cada pago lo envías tú. Unos días antes de que venza te avisamos en la app para que decidas si pagas
+            otro mes.
           </li>
-          <li>Si cancelas, Pro sigue activo hasta el final del periodo que ya pagaste.</li>
-          <li>Los reembolsos de Google Play siguen sus políticas. Para pagos en la web, escríbenos.</li>
+          <li>
+            Si no pagas otro mes, tu cuenta vuelve al plan Gratis. No se borra nada de lo que ya tienes; lo que supere los
+            límites del plan Gratis (por ejemplo, los productos que sigues) queda en pausa hasta que vuelvas a Pro.
+          </li>
+          <li>
+            Un pago en USDT no se puede revertir de forma automática. Si pagaste por error o algo no funcionó, escríbenos y lo
+            revisamos.
+          </li>
+          <li>
+            Si más adelante la app ofrece otro método de pago (por ejemplo, Google Play), verás su precio y sus condiciones de
+            renovación y cancelación en la pantalla de pago, antes de pagar.
+          </li>
         </ul>
       </LegalSection>
 
@@ -84,6 +94,11 @@ export default function TermsPage() {
         <p>
           Lo que subes o escribes sigue siendo tuyo. Nos das permiso para procesarlo solo para prestarte el servicio, como
           explica la política de privacidad.
+        </p>
+        <p>
+          Las páginas web que armas con Omni solo se publican cuando tú las apruebas, y las puede abrir cualquiera que tenga
+          el enlace. Tú respondes por lo que publicas: no incluyas datos privados de otras personas ni contenido que no
+          puedas usar. Podemos retirar una página que incumpla estos términos.
         </p>
       </LegalSection>
 
@@ -108,7 +123,8 @@ export default function TermsPage() {
           <Link href="/eliminar-cuenta" className={linkClass}>
             Cuenta → Eliminar cuenta
           </Link>
-          . Podemos suspender una cuenta que incumpla estos términos.
+          . Si la borras con Pro activo, el Pro termina con la cuenta. Podemos suspender una cuenta que incumpla estos
+          términos.
         </p>
       </LegalSection>
 

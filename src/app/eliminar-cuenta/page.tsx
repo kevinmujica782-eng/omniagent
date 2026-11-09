@@ -52,18 +52,21 @@ export default function DeleteAccountInfoPage() {
 
       <LegalSection title="Antes de borrarla">
         <p>
-          Si pagas Omni Pro con Google Play, cancela la suscripción en Google Play (Pagos y suscripciones), porque nosotros no
-          podemos cancelarla por ti. Si pagas en la web, la cancelamos al borrar la cuenta.
+          Al borrar la cuenta también termina tu Omni Pro, aunque te queden días pagados. Si pagaste con Binance Pay no hay
+          nada que cancelar: no se renueva solo. Si pagas con Google Play, cancela la suscripción en Google Play (Pagos y
+          suscripciones), porque nosotros no podemos cancelarla por ti. Si pagas con tarjeta en la web, la cancelamos al
+          borrar la cuenta.
         </p>
       </LegalSection>
 
       <LegalSection title="Qué se borra">
         <ul>
           <li>Tu perfil, tu acceso y tus preferencias.</li>
-          <li>Tus conversaciones con Omni.</li>
+          <li>Tus conversaciones con Omni y lo que Omni recuerda de ti.</li>
           <li>Cuentas, movimientos, estados de cuenta importados, presupuestos, metas y análisis.</li>
           <li>Correos, documentos, «Mis datos» y eventos del calendario.</li>
           <li>Productos que sigues, compras, pedidos, reclamos y devoluciones.</li>
+          <li>Tus páginas web, tus avisos y tus registros de pago con Binance Pay.</li>
           <li>La bitácora de actividad de tu cuenta.</li>
         </ul>
       </LegalSection>
@@ -71,7 +74,7 @@ export default function DeleteAccountInfoPage() {
       <LegalSection title="Qué se conserva">
         <p>
           Solo los identificadores de los avisos de pago, sin datos personales, para no procesar dos veces un mismo cobro.
-          Google Play y Stripe guardan sus propios registros de pago según la ley que les aplica.
+          Binance, Google Play y Stripe guardan sus propios registros de pago según la ley que les aplica.
         </p>
       </LegalSection>
     </LegalPage>

@@ -29,8 +29,8 @@ export default function PrivacyPage() {
     >
       <LegalSection title="Quién es responsable">
         <p>
-          El responsable de tus datos es {LEGAL_NAME ? `${LEGAL_NAME}, ` : ""}el desarrollador que publica OmniAgent en Google
-          Play. Para cualquier tema de privacidad escribe a {email}.
+          El responsable de tus datos es {LEGAL_NAME ? `${LEGAL_NAME}, ` : ""}el desarrollador de OmniAgent. Para cualquier
+          tema de privacidad escribe a {email}.
         </p>
       </LegalSection>
 
@@ -41,7 +41,8 @@ export default function PrivacyPage() {
             nuestro proveedor de cuentas; nosotros nunca la vemos.
           </li>
           <li>
-            <strong>Lo que hablas con Omni:</strong> tus mensajes y las respuestas del asistente.
+            <strong>Lo que hablas con Omni:</strong> tus mensajes y las respuestas del asistente. Omni también puede guardar en
+            su memoria cosas útiles que le cuentas; las ves y le pides que las olvide desde la app.
           </li>
           <li>
             <strong>Finanzas, si las usas:</strong> cuentas, saldos y movimientos de los bancos que conectes o de los estados
@@ -58,8 +59,24 @@ export default function PrivacyPage() {
             pedidos y tus reclamos. Nunca pedimos ni guardamos el número de una tarjeta.
           </li>
           <li>
-            <strong>Tu suscripción:</strong> si pagas Omni Pro, el pago lo procesa Google Play (en Android) o Stripe (en la
-            web). Nosotros solo recibimos el estado de la suscripción.
+            <strong>Páginas web, si las usas:</strong> el contenido de las páginas que Omni arma para ti. Una página que
+            apruebas y publicas la puede abrir cualquiera que tenga el enlace, y no aparece en buscadores.
+          </li>
+          <li>
+            <strong>Tu suscripción:</strong> si pagas Omni Pro con Binance Pay, Binance nos informa de cada pago: el monto, la
+            hora, el identificador del pago y el nombre con el que pagas. Nosotros guardamos eso y hasta cuándo está pagado tu
+            Pro. Nunca vemos tu contraseña ni tu saldo de Binance. Si pagas con otro método que la app ofrezca (como Google
+            Play), ese proveedor procesa el pago y nosotros solo recibimos el estado de la suscripción.
+          </li>
+          <li>
+            <strong>Avisos, si los activas:</strong> el código que tu navegador o tu teléfono nos da para enviarte
+            notificaciones. Las entrega el servicio de avisos de tu navegador (Google, Apple o Mozilla).
+          </li>
+          <li>
+            <strong>Voz, si la usas:</strong> el micrófono solo se activa cuando tocas el botón de voz. El dictado lo hace el
+            navegador de tu teléfono: en Chrome con los servicios de reconocimiento de voz de Google y en Safari con los de
+            Apple. Omni solo recibe el texto; no graba ni guarda tu voz. Mientras escucha, la app mide el volumen en tu propio
+            teléfono para animar el ojo de Omni, y ese audio no sale de tu dispositivo.
           </li>
           <li>
             <strong>Datos técnicos:</strong> registros de seguridad y errores (con correos, teléfonos y claves ocultos),
@@ -67,7 +84,10 @@ export default function PrivacyPage() {
             cookies solo para mantener tu sesión y recordar el tema claro u oscuro.
           </li>
         </ul>
-        <p>No usamos tu ubicación, contactos, cámara ni micrófono, y no hay publicidad ni rastreadores de terceros.</p>
+        <p>
+          No pedimos tu ubicación ni tus contactos, solo subimos las fotos y los archivos que tú eliges, y no hay publicidad
+          ni rastreadores de terceros.
+        </p>
       </LegalSection>
 
       <LegalSection title="Para qué los usamos">
@@ -81,9 +101,14 @@ export default function PrivacyPage() {
 
       <LegalSection title="Inteligencia artificial">
         <p>
-          Para responderte, enviamos a la API de Claude, de Anthropic, lo necesario para cada tarea: tu mensaje y los datos de
-          la función que estás usando. Anthropic procesa ese contenido como proveedor nuestro y, según sus condiciones para
-          la API, no lo usa para entrenar sus modelos.
+          Para responderte, enviamos a un proveedor de inteligencia artificial lo necesario para cada tarea: tu mensaje y los
+          datos de la función que estás usando (por ejemplo, las páginas de un estado de cuenta que subes para leerlo). El
+          principal es Claude, de Anthropic. Si no está disponible, Omni puede usar de respaldo a OpenAI (ChatGPT), Google
+          (Gemini) o xAI (Grok), según cuál esté activo en ese momento.
+        </p>
+        <p>
+          Anthropic procesa ese contenido como proveedor nuestro y, según sus condiciones para la API, no lo usa para
+          entrenar sus modelos. Los demás proveedores lo tratan según sus propias condiciones para el uso de su API.
         </p>
         <p>
           Las respuestas de la IA pueden equivocarse, así que revisa lo importante. Si una respuesta te parece ofensiva,
@@ -92,13 +117,24 @@ export default function PrivacyPage() {
       </LegalSection>
 
       <LegalSection title="Con quién los compartimos">
-        <p>Solo con proveedores que los tratan por cuenta nuestra:</p>
+        <p>Solo con proveedores que los tratan por cuenta nuestra o que la función que usas necesita:</p>
         <ul>
           <li><strong>Supabase:</strong> base de datos y cuentas de usuario.</li>
           <li><strong>Netlify:</strong> alojamiento de la web y de la API.</li>
-          <li><strong>Anthropic:</strong> inteligencia artificial (Claude).</li>
-          <li><strong>Google Play, RevenueCat y Stripe:</strong> pagos de la suscripción Pro.</li>
+          <li>
+            <strong>Anthropic:</strong> inteligencia artificial (Claude). De respaldo, OpenAI, Google (Gemini) o xAI (Grok).
+          </li>
+          <li><strong>Binance:</strong> pagos de Omni Pro con Binance Pay.</li>
+          <li>
+            <strong>Google Play, RevenueCat y Stripe:</strong> pagos de Pro, solo si la app ofrece ese método y lo eliges.
+          </li>
           <li><strong>Plaid:</strong> solo si conectas un banco compatible.</li>
+          <li>
+            <strong>Slack:</strong> solo si conectas Omni a Slack: lo que le escribes con /omni pasa por Slack.
+          </li>
+          <li>
+            <strong>Tu navegador o tu teléfono:</strong> el servicio de avisos y el dictado por voz, si los usas.
+          </li>
         </ul>
         <p>
           Cuando apruebas un correo o un reclamo, se envía al destinatario que ves antes de aprobar. Para vigilar precios,
@@ -117,10 +153,11 @@ export default function PrivacyPage() {
 
       <LegalSection title="Cuánto tiempo los guardamos">
         <p>
-          Mientras tengas tu cuenta. Si la borras, eliminamos en ese momento tu perfil y todo lo asociado: conversaciones,
-          finanzas, trámites, documentos, compras, devoluciones y la bitácora de actividad. Solo conservamos, sin datos
-          personales, los identificadores de los avisos de pago, para no procesar dos veces un mismo cobro. Google Play y
-          Stripe guardan sus propios registros de pago según la ley que les aplica.
+          Mientras tengas tu cuenta. Si la borras, eliminamos en ese momento tu perfil y todo lo asociado: conversaciones, lo
+          que Omni recuerda de ti, finanzas, trámites, documentos, compras, devoluciones, páginas web, avisos, tus registros
+          de pago con Binance Pay y la bitácora de actividad. Solo conservamos, sin datos personales, los identificadores de
+          los avisos de pago, para no procesar dos veces un mismo cobro. Binance, Google Play y Stripe guardan sus propios
+          registros de pago según la ley que les aplica.
         </p>
       </LegalSection>
 
